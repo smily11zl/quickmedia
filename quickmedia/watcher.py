@@ -188,7 +188,7 @@ class AssetWatcher:
             )
 
         # Thumbnail
-        if asset_type == "image":
+        if asset_type in ("image", "video"):
             scanner._thumbnailer.enqueue(asset_id)
             scanner._thumbnailer.process_queue()
 

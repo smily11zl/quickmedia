@@ -37,14 +37,17 @@ class Thumbnailer:
                 (asset_id,),
             )
 
-    def generate(self, asset_id: int, filepath: str) -> bool:
-        """Generate a thumbnail for an asset. Returns True on success."""
+    def generate(self, asset_id: int, filepath: str, asset_type: str = "image") -> bool:
+        """Generate a thumbnail. Returns True on success."""
         try:
             self.db.execute(
                 "UPDATE assets SET thumbnail_status='processing' WHERE id=?",
                 (asset_id,),
             )
-            self._make_thumbnail(asset_id, filepath)
+            if asset_type == "video":
+                self._make_video_thumbnail(asset_id, filepath)
+            else:
+                self._make_thumbnail(asset_id, filepath)
             self.db.execute(
                 "UPDATE assets SET thumbnail_status='done' WHERE id=?",
                 (asset_id,),
@@ -60,13 +63,13 @@ class Thumbnailer:
     def process_queue(self) -> int:
         """Process all pending thumbnails. Returns count processed."""
         rows = self.db.execute(
-            """SELECT a.id, a.path FROM assets a
-               WHERE a.thumbnail_status='pending' AND a.asset_type='image'
+            """SELECT a.id, a.path, a.asset_type FROM assets a
+               WHERE a.thumbnail_status='pending' AND a.asset_type IN ('image','video')
                ORDER BY a.id"""
         )
         count = 0
         for row in rows:
-            if self.generate(row["id"], row["path"]):
+            if self.generate(row["id"], row["path"], row["asset_type"]):
                 count += 1
         return count
 
@@ -87,3 +90,24 @@ class Thumbnailer:
                 img = img.resize((new_w, new_h), Image.LANCZOS)
             out_path = self._thumb_path(asset_id)
             img.save(out_path, "JPEG", quality=85)
+
+    def _make_video_thumbnail(self, asset_id: int, filepath: str) -> None:
+        """Create a thumbnail from a video's first frame."""
+        import subprocess, tempfile
+        frame_path = os.path.join(tempfile.mkdtemp(), "frame.jpg")
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", filepath, "-vframes", "1",
+             "-q:v", "2", frame_path],
+            capture_output=True, timeout=15,
+        )
+        if os.path.isfile(frame_path):
+            with Image.open(frame_path) as img:
+                img = img.convert("RGB")
+                w, h = img.size
+                scale = self.max_size / max(w, h)
+                if scale < 1.0:
+                    img = img.resize(
+                        (int(w * scale), int(h * scale)), Image.LANCZOS
+                    )
+                out_path = self._thumb_path(asset_id)
+                img.save(out_path, "JPEG", quality=85)

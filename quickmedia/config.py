@@ -14,7 +14,8 @@ DEFAULT_CONFIG = {
     "ai": {
         "ollama_url": "http://localhost:11434",
         "model": "qwen3.5:9b",
-        "timeout": 60,
+        "timeout": 300,
+        "video_frames": 1,
     },
     "watch_paths": [],
     "formats": {

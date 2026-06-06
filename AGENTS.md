@@ -14,6 +14,9 @@
 | README.md | 入口 | 项目概览 |
 | docs/v1/design.md | 快照 | v1 技术方案（schema/API/架构） |
 | docs/v1/tasks.md | 快照 | v1 开发任务拆解 |
+| docs/v2/plan.md | 快照 | v2 需求决策 + 实现计划 |
+| docs/v2/design.md | 快照 | v2 技术方案（schema/API/架构） |
+| docs/v2/tasks.md | 快照 | v2 开发任务拆解 |
 | docs/adr/ | 快照合集 | 架构决策记录 |
 
 **活文档**=持续演进，新功能直接在原文件追加。

@@ -151,3 +151,33 @@ class TestStatsAPI:
         assert data["image"] == 1
         assert data["video"] == 1
         assert data["document"] == 1
+
+
+class TestRetryAI:
+    """Retry failed AI tasks."""
+
+    def test_retry_resets_failed_to_pending(self, seeded):
+        db = Database(seeded.app.extra["db_path"])
+        # Insert a failed ai_queue entry for asset 1 (exists in seeded)
+        db.execute(
+            "INSERT INTO ai_queue (asset_id, task_type, status, attempt, error) "
+            "VALUES (1, 'vision', 'failed', 3, 'timeout')"
+        )
+        db.close()
+        r = seeded.post("/api/assets/1/retry-ai")
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+        # Verify status changed
+        db = Database(seeded.app.extra["db_path"])
+        rows = db.execute(
+            "SELECT status, attempt, error FROM ai_queue WHERE asset_id=1"
+        )
+        assert len(rows) == 1
+        assert rows[0]["status"] == "pending"
+        assert rows[0]["attempt"] == 0
+        assert rows[0]["error"] is None
+        db.close()
+
+    def test_retry_no_failed_tasks_returns_404(self, seeded):
+        r = seeded.post("/api/assets/1/retry-ai")
+        assert r.status_code == 404

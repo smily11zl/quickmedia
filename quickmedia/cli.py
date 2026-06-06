@@ -93,6 +93,10 @@ def _cmd_scan(cfg: Config, db_path: str):
             processed = scanner._thumbnailer.process_queue()
             if processed:
                 print(f"已生成 {processed} 个缩略图")
+            # Process AI queue
+            ai_processed = scanner._ai.process_queue()
+            if ai_processed:
+                print(f"已处理 {ai_processed} 个 AI 分析任务")
     finally:
         db.close()
 
@@ -300,12 +304,55 @@ def _cmd_serve(cfg: Config, db_path: str):
 
     # Start file watcher
     from quickmedia.watcher import AssetWatcher
+    from quickmedia.ai_worker import AIWorker
     watcher = AssetWatcher(db=Database(db_path), config=cfg)
     for wp in (cfg.get("watch_paths") or []):
         path = os.path.expanduser(wp.get("path", ""))
         if os.path.isdir(path):
             watcher.add_watch(path, recursive=wp.get("recursive", True))
     watcher.start()
+
+    # Start AI worker in background
+    import threading
+    print("[AIWorker] 检测 Ollama 连接...", flush=True)
+    ollama_ok = False
+    try:
+        import urllib.request, json
+        url = f"{cfg.get('ai.ollama_url')}/api/tags"
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            tags = json.loads(resp.read())
+            models = [m["name"] for m in tags.get("models", [])]
+            model = cfg.get("ai.model") or "qwen3.5:9b"
+            if model in models:
+                print(f"[AIWorker] Ollama 已连接，模型 {model} 就绪", flush=True)
+                ollama_ok = True
+            else:
+                print(f"[AIWorker] 模型 {model} 未安装，请运行: ollama pull {model}", flush=True)
+    except Exception as e:
+        print(f"[AIWorker] Ollama 不可用 ({e})，跳过 AI 分析", flush=True)
+    print("[AIWorker] 后台线程已启动", flush=True)
+    def _ai_loop():
+        import time
+        ai_db = Database(db_path)
+        ai_worker = AIWorker(db=ai_db, config=cfg)
+        print("[AIWorker] 线程循环已启动", flush=True)
+        while True:
+            try:
+                ai_worker.process_queue()
+            except Exception as e:
+                print(f"[AIWorker] loop error: {e}", flush=True)
+            time.sleep(5)
+    if ollama_ok:
+        # Reset any stuck "processing" tasks from previous interrupted runs
+        ai_db = Database(db_path)
+        stuck = ai_db.execute(
+            "UPDATE ai_queue SET status='pending', attempt=0 WHERE status='processing'"
+        )
+        ai_db.close()
+        ai_thread = threading.Thread(target=_ai_loop, daemon=True)
+        ai_thread.start()
+    else:
+        print("[AIWorker] 跳过启动，Ollama 未就绪", flush=True)
 
     print(f"\nQuickMedia Web UI: http://localhost:{port}")
     # Auto-open browser

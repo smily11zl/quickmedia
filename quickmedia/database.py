@@ -98,7 +98,32 @@ class Database:
     def _init_schema(self) -> None:
         """Create tables and indexes if they don't exist."""
         self.conn.executescript(SCHEMA_SQL)
+        # v2 schema migration
+        self._migrate_v2()
         self.conn.commit()
+
+    def _migrate_v2(self) -> None:
+        """Apply v2 schema changes."""
+        cols = self.execute("PRAGMA table_info(assets)")
+        col_names = {r["name"] for r in cols}
+        if "ocr_text" not in col_names:
+            self.conn.execute("ALTER TABLE assets ADD COLUMN ocr_text TEXT")
+        tables = self.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+        table_names = {r["name"] for r in tables}
+        if "ai_queue" not in table_names:
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS ai_queue (
+                    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                    asset_id  INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+                    task_type TEXT NOT NULL,
+                    status    TEXT DEFAULT 'pending',
+                    attempt   INTEGER DEFAULT 0,
+                    error     TEXT,
+                    created   TEXT DEFAULT (datetime('now'))
+                )
+            """)
 
     def execute(self, sql: str, params=()) -> list[sqlite3.Row]:
         """Execute a SQL query and return results as Row objects."""
@@ -150,10 +175,11 @@ class Database:
                 a.ai_description LIKE ? OR
                 a.ai_summary LIKE ? OR
                 a.notes LIKE ? OR
+                a.ocr_text LIKE ? OR
                 t.name LIKE ?
             )
             ORDER BY a.filename
-        """, (pattern,) * 6)
+        """, (pattern,) * 7)
 
     # ── tags ──────────────────────────────────────────────────────
 

@@ -43,16 +43,25 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         type: str | None = Query(None),
     ):
         _db = _get_db(app)
+        base_select = """SELECT a.id, a.filename, a.asset_type, a.size,
+                   a.width, a.height, a.duration, a.path, a.description,
+                   a.ai_description, a.thumbnail_status, a.modified_at,
+                   COALESCE(aq.status, '-') as ai_status"""
+        base_from = """FROM assets a
+                   LEFT JOIN (
+                       SELECT asset_id, status FROM ai_queue
+                       WHERE id IN (SELECT MAX(id) FROM ai_queue GROUP BY asset_id)
+                   ) aq ON a.id = aq.asset_id"""
         if type:
             total_row = _db.execute(
                 "SELECT COUNT(*) as c FROM assets WHERE status='active' AND asset_type=?",
                 (type,),
             )
             rows = _db.execute(
-                """SELECT id, filename, asset_type, size, width, height, duration,
-                   path, description, ai_description, thumbnail_status, modified_at
-                   FROM assets WHERE status='active' AND asset_type=?
-                   ORDER BY filename LIMIT ? OFFSET ?""",
+                f"""{base_select}
+                   {base_from}
+                   WHERE a.status='active' AND a.asset_type=?
+                   ORDER BY a.filename LIMIT ? OFFSET ?""",
                 (type, limit, offset),
             )
         else:
@@ -60,10 +69,10 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 "SELECT COUNT(*) as c FROM assets WHERE status='active'"
             )
             rows = _db.execute(
-                """SELECT id, filename, asset_type, size, width, height, duration,
-                   path, description, ai_description, thumbnail_status, modified_at
-                   FROM assets WHERE status='active'
-                   ORDER BY filename LIMIT ? OFFSET ?""",
+                f"""{base_select}
+                   {base_from}
+                   WHERE a.status='active'
+                   ORDER BY a.filename LIMIT ? OFFSET ?""",
                 (limit, offset),
             )
         items = [dict(r) for r in rows]
@@ -84,6 +93,12 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         result = dict(rows[0])
         tags = _db.get_asset_tags(asset_id)
         result["tags"] = [dict(t) for t in tags]
+        # AI status
+        ai_rows = _db.execute(
+            "SELECT status FROM ai_queue WHERE asset_id=? ORDER BY id DESC LIMIT 1",
+            (asset_id,),
+        )
+        result["ai_status"] = ai_rows[0]["status"] if ai_rows else "-"
         return result
 
     @app.put("/api/assets/{asset_id}")
@@ -169,6 +184,20 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
 
     # ── AI Analysis ──────────────────────────────────────────────
 
+    @app.post("/api/assets/{asset_id}/retry-ai")
+    def retry_ai(asset_id: int):
+        """Reset failed AI tasks to pending so the worker picks them up again."""
+        _db = _get_db(app)
+        cursor = _db.conn.execute(
+            "UPDATE ai_queue SET status='pending', attempt=0, error=NULL "
+            "WHERE asset_id=? AND status='failed'",
+            (asset_id,),
+        )
+        _db.conn.commit()
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="No failed AI tasks found")
+        return {"ok": True, "message": "已重置待重试"}
+
     @app.post("/api/assets/{asset_id}/analyze")
     def analyze_asset(asset_id: int):
         from quickmedia.ai import VisionAnalyzer
@@ -177,12 +206,17 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         if not rows:
             raise HTTPException(status_code=404, detail="Asset not found")
         path = rows[0]["path"]
-        analyzer = VisionAnalyzer()
+        analyzer = VisionAnalyzer(timeout=300)
         result = analyzer.analyze(path)
         if result.get("description"):
             _db.execute(
                 "UPDATE assets SET ai_description=? WHERE id=?",
                 (result["description"], asset_id),
+            )
+        if result.get("ocr_text"):
+            _db.execute(
+                "UPDATE assets SET ocr_text=? WHERE id=?",
+                (result["ocr_text"], asset_id),
             )
         if result.get("tags"):
             for tag_name in result["tags"]:
@@ -198,6 +232,8 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         return {
             "ollama_url": cfg.get("ai.ollama_url"),
             "model": cfg.get("ai.model"),
+            "video_frames": cfg.get("ai.video_frames"),
+            "timeout": cfg.get("ai.timeout"),
         }
 
     @app.put("/api/config")
@@ -207,6 +243,10 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             cfg.set("ai.ollama_url", body["ollama_url"])
         if "model" in body:
             cfg.set("ai.model", body["model"])
+        if "video_frames" in body:
+            cfg.set("ai.video_frames", int(body["video_frames"]))
+        if "timeout" in body:
+            cfg.set("ai.timeout", int(body["timeout"]))
         return {"ok": True}
 
     @app.post("/api/config/test-ollama")
@@ -221,6 +261,17 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 return {"connected": True, "models": models}
         except Exception as e:
             return {"connected": False, "error": str(e)}
+
+    # ── Finder ───────────────────────────────────────────────────
+
+    @app.post("/api/finder/open")
+    def open_finder(body: dict):
+        path = body.get("path", "")
+        if path and os.path.exists(path):
+            import subprocess
+            subprocess.run(["open", "-R", path])
+            return {"ok": True}
+        raise HTTPException(status_code=404, detail="Path not found")
 
     # ── Frontend SPA ─────────────────────────────────────────────
 

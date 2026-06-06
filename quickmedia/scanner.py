@@ -14,7 +14,7 @@ from quickmedia.database import Database
 from quickmedia.config import Config
 from quickmedia.metadata import MetadataExtractor
 from quickmedia.thumbnailer import Thumbnailer
-from quickmedia.ai import VisionAnalyzer, TextAnalyzer
+from quickmedia.ai_worker import AIWorker
 
 
 class Scanner:
@@ -29,10 +29,7 @@ class Scanner:
         if not thumb_dir:
             thumb_dir = os.path.join(config.config_dir, "thumbnails")
         self._thumbnailer = Thumbnailer(db=db, thumb_dir=thumb_dir)
-        ollama_url = config.get("ai.ollama_url") or "http://localhost:11434"
-        model = config.get("ai.model") or "qwen3.5:9b"
-        self._vision = VisionAnalyzer(ollama_url=ollama_url, model=model)
-        self._text_ai = TextAnalyzer(ollama_url=ollama_url, model=model)
+        self._ai = AIWorker(db=db, config=config)
 
     # ── extension / type helpers ──────────────────────────────────
 
@@ -287,70 +284,17 @@ class Scanner:
                         tuple(params),
                     )
 
-            # Enqueue thumbnail generation for images
-            if asset_type == "image":
+            # Enqueue thumbnail generation for images and videos
+            if asset_type in ("image", "video"):
                 self._thumbnailer.enqueue(asset_id)
 
-            # AI analysis for images (fire-and-forget, don't block scan)
+            # Enqueue AI analysis (async queue, not blocking)
             if asset_type == "image":
-                try:
-                    ai_result = self._vision.analyze(filepath)
-                    if ai_result.get("description") or ai_result.get("tags"):
-                        updates = []
-                        params = []
-                        if ai_result.get("description"):
-                            updates.append("ai_description=?")
-                            params.append(ai_result["description"])
-                        if updates:
-                            params.append(asset_id)
-                            self.db.execute(
-                                f"UPDATE assets SET {', '.join(updates)} WHERE id=?",
-                                tuple(params),
-                            )
-                        if ai_result.get("tags"):
-                            self._link_tags(asset_id, ai_result["tags"], source="auto")
-                except Exception:
-                    pass  # AI is best-effort, don't block scanning
-
-            # AI — video first-frame analysis
-            if asset_type == "video":
-                try:
-                    import tempfile, subprocess
-                    frame_path = os.path.join(
-                        tempfile.mkdtemp(), f"{asset_id}_frame.jpg"
-                    )
-                    subprocess.run(
-                        ["ffmpeg", "-y", "-i", filepath, "-vframes", "1",
-                         "-q:v", "2", frame_path],
-                        capture_output=True, timeout=15,
-                    )
-                    if os.path.isfile(frame_path):
-                        ai_result = self._vision.analyze(frame_path)
-                        if ai_result.get("description"):
-                            self.db.execute(
-                                "UPDATE assets SET ai_description=? WHERE id=?",
-                                (ai_result["description"], asset_id),
-                            )
-                        if ai_result.get("tags"):
-                            self._link_tags(asset_id, ai_result["tags"], source="auto")
-                except Exception:
-                    pass
-
-            # AI — text document analysis
-            if asset_type == "document":
-                try:
-                    text = self._read_text(filepath)
-                    if text:
-                        ai_result = self._text_ai.analyze(text)
-                        if ai_result.get("summary"):
-                            self.db.execute(
-                                "UPDATE assets SET ai_summary=? WHERE id=?",
-                                (ai_result["summary"], asset_id),
-                            )
-                        if ai_result.get("tags"):
-                            self._link_tags(asset_id, ai_result["tags"], source="auto")
-                except Exception:
-                    pass
+                self._ai.enqueue(asset_id, "vision")
+            elif asset_type == "video":
+                self._ai.enqueue(asset_id, "vision")
+            elif asset_type == "document":
+                self._ai.enqueue(asset_id, "text")
 
             result["new"] += 1
             result["total"] += 1
