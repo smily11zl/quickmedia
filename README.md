@@ -56,7 +56,7 @@ Python / FastAPI / SQLite / React / TailwindCSS / Ollama
 
 ## 详细文档
 
-- [设计文档](QUICKMEDIA_DESIGN.md)
+- [设计文档](docs/v1/design.md)
 - [UI 设计规范](DESIGN.md)
 - [启动指南](STARTUP.md)
-- [任务文档](TASKS.md)
+- [任务文档](docs/v1/tasks.md)
