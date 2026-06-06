@@ -9,6 +9,7 @@
 | PRD.md | 活文档 | 产品需求：问题、用户故事、范围 |
 | CONTEXT.md | 活文档 | 领域术语表（Asset/Tag/Scan 等定义） |
 | DESIGN.md | 活文档 | UI 设计规范（色彩/字体/圆角/组件） |
+| ROADMAP.md | 活文档 | 版本路线图：已完成 / 计划中 / 远期 |
 | STARTUP.md | 活文档 | 环境要求、依赖安装、启动命令 |
 | README.md | 入口 | 项目概览 |
 | docs/v1/design.md | 快照 | v1 技术方案（schema/API/架构） |

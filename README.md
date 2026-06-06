@@ -60,3 +60,4 @@ Python / FastAPI / SQLite / React / TailwindCSS / Ollama
 - [UI 设计规范](DESIGN.md)
 - [启动指南](STARTUP.md)
 - [任务文档](docs/v1/tasks.md)
+- [路线图](ROADMAP.md)
