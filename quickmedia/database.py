@@ -260,6 +260,8 @@ class Database:
             (asset_id, tag_id),
         )
 
+
+
     def get_asset_tags(self, asset_id: int) -> list[sqlite3.Row]:
         """Get all tags for an asset."""
         return self.execute("""
@@ -273,3 +275,53 @@ class Database:
     def close(self) -> None:
         """Close the database connection."""
         self.conn.close()
+def _cleanup_v4_tags(db: Database) -> int:
+    """Remove auto-generated time/format/type tags. Returns count removed."""
+    import re
+    removed = 0
+
+    # Time tags: "2026", "2026-06" (source='auto' only)
+    time_rows = db.execute(
+        "SELECT t.id, t.name FROM tags t "
+        "INNER JOIN asset_tags at ON t.id = at.tag_id "
+        "WHERE at.source='auto' AND ("
+        "  t.name GLOB '[0-9][0-9][0-9][0-9]' OR "
+        "  t.name GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]'"
+        ") GROUP BY t.id"
+    )
+    for row in time_rows:
+        db.conn.execute("DELETE FROM asset_tags WHERE tag_id=? AND source='auto'", (row["id"],))
+        removed += 1
+
+    # Format tags: "PNG", "MP4" (uppercase letters/numbers, source='auto')
+    fmt_rows = db.execute(
+        "SELECT t.id, t.name FROM tags t "
+        "INNER JOIN asset_tags at ON t.id = at.tag_id "
+        "WHERE at.source='auto' AND t.name GLOB '[A-Z][A-Z0-9]*' "
+        "GROUP BY t.id"
+    )
+    for row in fmt_rows:
+        db.conn.execute("DELETE FROM asset_tags WHERE tag_id=? AND source='auto'", (row["id"],))
+        removed += 1
+
+    # Type tags: "图片", "视频", "音频", "文档" (source='auto')
+    type_tags = ("图片", "视频", "音频", "文档")
+    placeholders = ",".join("?" * len(type_tags))
+    type_rows = db.execute(
+        f"SELECT t.id FROM tags t "
+        f"INNER JOIN asset_tags at ON t.id = at.tag_id "
+        f"WHERE at.source='auto' AND t.name IN ({placeholders}) "
+        f"GROUP BY t.id",
+        type_tags,
+    )
+    for row in type_rows:
+        db.conn.execute("DELETE FROM asset_tags WHERE tag_id=? AND source='auto'", (row["id"],))
+        removed += 1
+
+    # Clean orphaned tags (no asset_tags link)
+    db.conn.execute(
+        "DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM asset_tags)"
+    )
+    db.conn.commit()
+    return removed
+

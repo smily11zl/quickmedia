@@ -159,3 +159,49 @@ class TestV3Migration:
         columns = db.execute("PRAGMA table_info(assets)")
         col_names = {r["name"] for r in columns}
         assert "analyzed_at" in col_names
+
+
+class TestV4TagCleanup:
+    """v4 tag cleanup removes auto-generated time/format/type tags."""
+
+    def _seed_tags(self, db):
+        """Create sample auto tags and link them to an asset."""
+        db.execute("INSERT INTO assets (hash,inode,device,path,filename,extension,asset_type,size,status) VALUES ('x1',1,1,'/t/a.mp4','a.mp4','.mp4','video',100,'active')")
+        for name in ["2026", "2026-06", "MP4", "视频", "短片(<5min)", "猫"]:
+            tag_id = db.create_tag(name)
+            db.execute("INSERT OR IGNORE INTO asset_tags (asset_id, tag_id, source) VALUES (1,?, 'auto')", (tag_id,))
+
+    def test_cleanup_removes_time_tags(self):
+        """Time tags (year, year-month) with source=auto are removed."""
+        db = _tmp_db()
+        self._seed_tags(db)
+        from quickmedia.database import _cleanup_v4_tags
+        removed = _cleanup_v4_tags(db)
+        assert removed > 0
+        # Verify "2026" and "2026-06" are gone
+        tags = db.execute("SELECT name FROM tags ORDER BY name")
+        names = {r["name"] for r in tags}
+        assert "2026" not in names
+        assert "2026-06" not in names
+
+    def test_cleanup_removes_format_and_type_tags(self):
+        """Format tags and type tags with source=auto are removed."""
+        db = _tmp_db()
+        self._seed_tags(db)
+        from quickmedia.database import _cleanup_v4_tags
+        _cleanup_v4_tags(db)
+        tags = db.execute("SELECT name FROM tags ORDER BY name")
+        names = {r["name"] for r in tags}
+        assert "MP4" not in names
+        assert "视频" not in names
+
+    def test_cleanup_preserves_valid_tags(self):
+        """Duration tags and user tags are NOT removed."""
+        db = _tmp_db()
+        self._seed_tags(db)
+        from quickmedia.database import _cleanup_v4_tags
+        _cleanup_v4_tags(db)
+        tags = db.execute("SELECT name FROM tags ORDER BY name")
+        names = {r["name"] for r in tags}
+        assert "短片(<5min)" in names
+        assert "猫" in names

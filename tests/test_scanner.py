@@ -86,24 +86,23 @@ class TestTypeDetection:
 
 
 class TestAutoTags:
-    """Automatic tag generation during scanning."""
+    """Automatic tag generation during scanning (v4: only duration tags)."""
 
-    def test_type_tag(self):
+    def test_no_type_tag(self):
         _, db, cfg, scanner = _tmp_env()
         tags = scanner._auto_tags("test.png", "image", "/tmp/test.png", 0)
-        assert "图片" in tags
+        assert "图片" not in tags
 
-    def test_format_tag(self):
+    def test_no_format_tag(self):
         _, db, cfg, scanner = _tmp_env()
         tags = scanner._auto_tags("test.png", "image", "/tmp/test.png", 0)
-        assert "PNG" in tags
+        assert "PNG" not in tags
 
-    def test_time_period_tag(self):
+    def test_no_time_period_tag(self):
         _, db, cfg, scanner = _tmp_env()
         tags = scanner._auto_tags("test.jpg", "image", "/tmp/test.jpg", 0)
-        # Should have year and year-month tags
         has_year = any(t.startswith("202") for t in tags)
-        assert has_year
+        assert not has_year
 
     def test_video_length_tag_short(self):
         _, db, cfg, scanner = _tmp_env()

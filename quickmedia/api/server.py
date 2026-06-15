@@ -42,12 +42,61 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         offset: int = Query(0, ge=0),
         limit: int = Query(50, ge=1, le=500),
         type: str | None = Query(None),
+        formats: str | None = Query(None),
+        date_from: str | None = Query(None),
+        date_to: str | None = Query(None),
+        mdate_from: str | None = Query(None),
+        mdate_to: str | None = Query(None),
+        tags: str | None = Query(None),
+        ai_status: str | None = Query(None),
     ):
         _db = _get_db(app)
+        conditions = ["a.status='active'"]
+        params = []
+
+        if type:
+            conditions.append("a.asset_type=?")
+            params.append(type)
+
+        if formats:
+            fmt_list = [f".{f.strip().lower()}" for f in formats.split(",")]
+            placeholders = ",".join("?" * len(fmt_list))
+            conditions.append(f"a.extension IN ({placeholders})")
+            params.extend(fmt_list)
+
+        if date_from:
+            conditions.append("a.created_at >= ?")
+            params.append(date_from)
+        if date_to:
+            conditions.append("a.created_at <= ?")
+            params.append(date_to)
+        if mdate_from:
+            conditions.append("a.modified_at >= ?")
+            params.append(mdate_from)
+        if mdate_to:
+            conditions.append("a.modified_at <= ?")
+            params.append(mdate_to)
+        if ai_status:
+            status_list = ai_status.split(",")
+            placeholders = ",".join("?" * len(status_list))
+            conditions.append(f"COALESCE(aq.status, '-') IN ({placeholders})")
+            params.extend(status_list)
+        if tags:
+            tag_ids = [int(t) for t in tags.split(",")]
+            # Union: asset with ANY of the specified tags
+            tag_placeholders = ",".join("?" * len(tag_ids))
+            conditions.append(
+                f"a.id IN (SELECT DISTINCT asset_id FROM asset_tags "
+                f"WHERE tag_id IN ({tag_placeholders}))"
+            )
+            params.extend(tag_ids)
+
+        where_clause = " AND ".join(conditions)
+
         base_select = """SELECT a.id, a.filename, a.asset_type, a.size,
                    a.width, a.height, a.duration, a.path, a.description,
                    a.ai_description, a.thumbnail_status, a.modified_at,
-                   COALESCE(aq.status, '-') as ai_status"""
+                   a.extension, COALESCE(aq.status, '-') as ai_status"""
         base_from = """FROM assets a
                    LEFT JOIN (
                        SELECT asset_id,
@@ -58,32 +107,26 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                        FROM ai_queue
                        WHERE id IN (SELECT MAX(id) FROM ai_queue GROUP BY asset_id, task_type)
                        GROUP BY asset_id
-                   ) aq ON a.id = aq.asset_id"""
-        if type:
+        ) aq ON a.id = aq.asset_id"""
+
+        if ai_status or tags:
             total_row = _db.execute(
-                "SELECT COUNT(*) as c FROM assets WHERE status='active' AND asset_type=?",
-                (type,),
-            )
-            rows = _db.execute(
-                f"""{base_select}
-                   {base_from}
-                   WHERE a.status='active' AND a.asset_type=?
-                   ORDER BY a.filename LIMIT ? OFFSET ?""",
-                (type, limit, offset),
+                f"SELECT COUNT(*) as c FROM ({base_select} {base_from} WHERE {where_clause})",
+                tuple(params),
             )
         else:
             total_row = _db.execute(
-                "SELECT COUNT(*) as c FROM assets WHERE status='active'"
+                f"SELECT COUNT(*) as c FROM assets a WHERE {where_clause}",
+                tuple(params),
             )
-            rows = _db.execute(
-                f"""{base_select}
-                   {base_from}
-                   WHERE a.status='active'
-                   ORDER BY a.filename LIMIT ? OFFSET ?""",
-                (limit, offset),
-            )
+        rows = _db.execute(
+            f"""{base_select}
+               {base_from}
+               WHERE {where_clause}
+               ORDER BY a.filename LIMIT ? OFFSET ?""",
+            tuple(params) + (limit, offset),
+        )
         items = [dict(r) for r in rows]
-        # Add tags to each item
         for item in items:
             tags = _db.get_asset_tags(item["id"])
             item["tags"] = [dict(t) for t in tags]

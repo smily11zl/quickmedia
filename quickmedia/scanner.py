@@ -98,24 +98,6 @@ class Scanner:
         """Generate automatic tags for a scanned asset."""
         tags = []
 
-        # Type tag
-        type_labels = {
-            "image": "图片", "video": "视频", "audio": "音频",
-            "document": "文档", "other": "其他",
-        }
-        if label := type_labels.get(asset_type):
-            tags.append(label)
-
-        # Format tag
-        _, ext = os.path.splitext(filename)
-        if ext:
-            tags.append(ext.upper().lstrip("."))
-
-        # Time period tag (year and year-month)
-        now = datetime.now()
-        tags.append(str(now.year))
-        tags.append(now.strftime("%Y-%m"))
-
         # Video length bucket
         if asset_type == "video" and duration > 0:
             if duration < 300:

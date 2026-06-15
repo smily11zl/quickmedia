@@ -281,6 +281,12 @@ def _cmd_serve(cfg: Config, db_path: str):
         cfg.config_dir, "thumbnails"
     )
 
+    # v4: clean up old auto-generated time/format/type tags
+    from quickmedia.database import _cleanup_v4_tags
+    removed = _cleanup_v4_tags(db)
+    if removed > 0:
+        print(f"已清理 {removed} 个旧版自动标签")
+
     # Run initial scan on configured watch paths
     watch_paths = cfg.get("watch_paths") or []
     if watch_paths:

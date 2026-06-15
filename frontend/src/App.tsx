@@ -36,12 +36,20 @@ function App() {
   const [vw,sv]=useState<"grid"|"list">("grid");
   const [sb,ssb]=useState<"name"|"size"|"date">("name");
   const [ms,sm]=useState<Set<number>>(new Set());
+  const [ff,sf]=useState<Set<string>>(new Set());
+  const [af,saf]=useState<Set<string>>(new Set());
+  const [tgf,stgf]=useState<Set<number>>(new Set());
+  const [df,sdf]=useState({from:"",to:""});
+  const [mf,smf]=useState({from:"",to:""});
+  const [fop,sfop]=useState(false);
+  const [aop,saop]=useState(false);
+  const [top,stop]=useState(false);
   const dr=useRef<HTMLTextAreaElement>(null);
 
   useEffect(()=>{fetch("/api/stats").then(r=>r.json()).then(ss);},[]);
   useEffect(()=>{fetch("/api/tags").then(r=>r.json()).then(stg);},[]);
-  const fa=()=>{if(q){fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r=>r.json()).then(sa);return;}const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>sa(d.items));};
-  useEffect(()=>{fa();},[tf,q]);
+  const fa=()=>{if(q){fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r=>r.json()).then(sa);return;}const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>sa(d.items));};
+  useEffect(()=>{fa();},[tf,q,ff,af,df,mf,tgf]);
 
   let fs=as;if(gf)fs=as.filter(a=>a.tags.some(t=>t.id===gf));
   fs=[...fs].sort((a,b)=>{if(sb==="size")return b.size-a.size;if(sb==="date")return(b.modified_at||"").localeCompare(a.modified_at||"");return a.filename.localeCompare(b.filename);});
@@ -63,15 +71,64 @@ function App() {
 
   return (
     <div className="flex h-screen" style={{backgroundColor:S.c}}>
-      <aside className="w-56 flex flex-col gap-0.5 p-4 border-r overflow-y-auto" style={{borderColor:S.h}}>
+      <aside className="w-64 flex flex-col gap-0.5 p-4 border-r overflow-y-auto" style={{borderColor:S.h}}>
         <h1 style={{fontFamily:"'Tiempos Headline',Garamond,serif",fontSize:22,fontWeight:400,color:S.i}} className="mb-4">QuickMedia</h1>
         <input type="text" placeholder="搜索..." value={q} onChange={e=>sq(e.target.value)} className="w-full px-3 py-1.5 text-sm rounded-md mb-3 outline-none" style={{fontFamily:"'Inter',sans-serif",backgroundColor:S.c,border:`1px solid ${S.h}`,color:S.i}}/>
-        <div className="text-xs mb-2" style={{color:S.ms}}>类型</div>
+        <div className="text-xs mb-1" style={{color:S.ms}}>类型</div>
         {types.map(t=>(<button key={t.l} onClick={()=>{stf(t.k);sgf(null);}} className="text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",backgroundColor:tf===t.k?S.d:"transparent",color:tf===t.k?S.i:S.m,fontWeight:tf===t.k?500:400}}>{t.l}<span className="float-right opacity-50">({t.n})</span></button>))}
-        {tg.filter(t=>t.count>0).length>0&&(<>
-          <div className="text-xs mb-2 mt-4" style={{color:S.ms}}>标签</div>
-          {tg.filter(t=>t.count>0).sort((a,b)=>b.count-a.count).map(t=>(<button key={t.id} onClick={()=>{sgf(gf===t.id?null:t.id);stf(null);}} className="text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",backgroundColor:gf===t.id?S.d:"transparent",color:gf===t.id?S.i:S.m,fontWeight:gf===t.id?500:400}}>{t.name}<span className="float-right opacity-50">({t.count})</span></button>))}
-        </>)}
+        <div className="text-xs mb-1 mt-3" style={{color:S.ms}}>创建时间</div>
+        <div className="flex gap-1 items-center">
+          <input type="date" value={df.from} onChange={e=>{sdf({...df,from:e.target.value});}} className="flex-1 px-1 py-0.5 rounded border text-[11px]" style={{borderColor:S.h,color:S.i,backgroundColor:S.c}}/>
+          <span className="text-[10px]" style={{color:S.ms}}>~</span>
+          <input type="date" value={df.to} onChange={e=>{sdf({...df,to:e.target.value});}} className="flex-1 px-1 py-0.5 rounded border text-[11px]" style={{borderColor:S.h,color:S.i,backgroundColor:S.c}}/>
+        </div>
+        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>修改时间</div>
+        <div className="flex gap-1 items-center">
+          <input type="date" value={mf.from} onChange={e=>{smf({...mf,from:e.target.value});}} className="flex-1 px-1 py-0.5 rounded border text-[11px]" style={{borderColor:S.h,color:S.i,backgroundColor:S.c}}/>
+          <span className="text-[10px]" style={{color:S.ms}}>~</span>
+          <input type="date" value={mf.to} onChange={e=>{smf({...mf,to:e.target.value});}} className="flex-1 px-1 py-0.5 rounded border text-[11px]" style={{borderColor:S.h,color:S.i,backgroundColor:S.c}}/>
+        </div>
+        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>格式</div>
+        <div className="relative">
+          <button onClick={()=>sfop(!fop)} className="w-full flex items-center justify-between px-2 py-1 rounded border text-xs" style={{borderColor:ff.size>0?S.r:S.h,color:ff.size>0?S.r:S.ms,backgroundColor:S.c}}>
+            <span>{ff.size>0?`已选 ${ff.size} 项`:"点击筛选"}</span>
+            {ff.size>0&&<span onClick={e=>{e.stopPropagation();sf(new Set());}} className="ml-1 text-[10px]" style={{color:S.ms}}>✕</span>}
+          </button>
+          {fop&&<div className="fixed inset-0 z-[5]" onClick={()=>sfop(false)}/>}
+          {fop&&<div className="absolute top-full left-0 right-0 mt-1 p-2 rounded border shadow-sm z-10 flex gap-1 flex-wrap" style={{borderColor:S.h,backgroundColor:S.c}}>
+            {["png","jpg","mp4","wav","md","txt","pdf","mov","avi","gif","webp","m4a"].map(f=><button key={f} onClick={()=>{const n=new Set(ff);n.has(f)?n.delete(f):n.add(f);sf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(ff.has(f)?"font-medium":"")} style={{color:ff.has(f)?S.r:S.ms,backgroundColor:ff.has(f)?S.rb:"transparent"}}>{f.toUpperCase()}</button>)}
+          </div>}
+        </div>
+        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>AI 状态</div>
+        <div className="relative">
+          <button onClick={()=>saop(!aop)} className="w-full flex items-center justify-between px-2 py-1 rounded border text-xs" style={{borderColor:af.size>0?S.r:S.h,color:af.size>0?S.r:S.ms,backgroundColor:S.c}}>
+            <span>{af.size>0?`已选 ${af.size} 项`:"点击筛选"}</span>
+            {af.size>0&&<span onClick={e=>{e.stopPropagation();saf(new Set());}} className="ml-1 text-[10px]" style={{color:S.ms}}>✕</span>}
+          </button>
+          {aop&&<div className="fixed inset-0 z-[5]" onClick={()=>saop(false)}/>}
+          {aop&&<div className="absolute top-full left-0 right-0 mt-1 p-2 rounded border shadow-sm z-10 flex gap-1 flex-wrap" style={{borderColor:S.h,backgroundColor:S.c}}>
+            {[{k:"done",l:"已完成"},{k:"processing",l:"分析中"},{k:"pending",l:"等待"},{k:"failed",l:"失败"}].map(s=><button key={s.k} onClick={()=>{const n=new Set(af);n.has(s.k)?n.delete(s.k):n.add(s.k);saf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(af.has(s.k)?"font-medium":"")} style={{color:af.has(s.k)?S.r:S.ms,backgroundColor:af.has(s.k)?S.rb:"transparent"}}>{s.l}</button>)}
+          </div>}
+        </div>
+        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>标签</div>
+        <div className="relative">
+          <button onClick={()=>stop(!top)} className="w-full flex items-start justify-between px-2 py-1 rounded border text-xs min-h-[28px]" style={{borderColor:tgf.size>0?S.r:S.h,color:tgf.size>0?S.r:S.ms,backgroundColor:S.c}}>
+            <span className="text-left leading-relaxed flex-1">{tgf.size>0?<>{tg.filter(t=>tgf.has(t.id)).map(t=>t.name).join("，")}<span className="ml-1" style={{color:S.ms}}>({tgf.size})</span></>:"点击筛选"}</span>
+            <span className="flex items-center gap-1 ml-1 flex-shrink-0">
+              {tgf.size>0&&<span onClick={e=>{e.stopPropagation();stgf(new Set());}} className="text-[10px]" style={{color:S.ms}}>✕</span>}
+            </span>
+          </button>
+          {top&&<div className="fixed inset-0 z-[5]" onClick={()=>stop(false)}/>}
+          {top&&<div className="absolute top-full left-0 right-0 mt-1 p-2 rounded border shadow-sm z-10 max-h-64 overflow-y-auto" style={{borderColor:S.h,backgroundColor:S.c}}>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-[10px]" style={{color:S.ms}}>{tgf.size>0?`已选 ${tgf.size} 个`:"全部标签"}</span>
+              {tgf.size>0&&<button onClick={()=>{stgf(new Set());}} className="text-[10px] px-1.5 py-0.5 rounded" style={{color:S.r,backgroundColor:S.rb}}>清除全部</button>}
+            </div>
+            <div className="flex gap-1 flex-wrap">
+              {tg.filter(t=>t.count>0).sort((a,b)=>b.count-a.count).map(t=><button key={t.id} onClick={()=>{const n=new Set(tgf);n.has(t.id)?n.delete(t.id):n.add(t.id);stgf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(tgf.has(t.id)?"font-medium":"")} style={{color:tgf.has(t.id)?S.r:S.ms,backgroundColor:tgf.has(t.id)?S.rb:"transparent"}}>{t.name}</button>)}
+            </div>
+          </div>}
+        </div>
         <div className="mt-auto pt-4 flex flex-col gap-1" style={{borderTop:`1px solid ${S.h}`}}>
           <button onClick={()=>fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{alert(d.message);fa();})} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
           <button onClick={()=>{ssh(!sh);if(!sh){fetch("/api/config").then(r=>r.json()).then(c=>{scu(c.ollama_url);scm(c.model);scfn(c.video_frames||1);scto(c.timeout||300);});}}} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",backgroundColor:sh?S.d:"transparent",color:sh?S.i:S.m}}>⚙ 设置</button>

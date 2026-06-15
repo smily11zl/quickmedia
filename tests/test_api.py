@@ -223,3 +223,47 @@ class TestReanalyzeAPI:
         """Reanalyze nonexistent asset returns 404."""
         r = seeded.post("/api/assets/999/reanalyze")
         assert r.status_code == 404
+
+
+class TestAssetFilters:
+    """v4 filter parameters on GET /api/assets."""
+
+    def test_filter_by_format(self, seeded):
+        """?formats=png returns only .png assets."""
+        r = seeded.get("/api/assets?formats=png")
+        assert r.status_code == 200
+        data = r.json()
+        for item in data["items"]:
+            assert item["extension"] == ".png"
+
+    def test_filter_by_single_format(self, seeded):
+        """?formats=md returns only .md assets."""
+        r = seeded.get("/api/assets?formats=md")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["total"] == 1
+        assert data["items"][0]["filename"] == "notes.md"
+
+    def test_filter_by_ai_status(self, seeded):
+        """ai_status=failed returns assets with failed AI status."""
+        db = Database(seeded.app.extra["db_path"])
+        db.execute(
+            "INSERT INTO ai_queue (asset_id, task_type, status) VALUES (1, 'vision', 'failed')"
+        )
+        db.close()
+        r = seeded.get("/api/assets?ai_status=failed")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["total"] >= 1
+
+    def test_filter_by_tags(self, seeded):
+        """tags=ID returns assets with that tag (union)."""
+        db = Database(seeded.app.extra["db_path"])
+        # Tag asset 1 with tag "宠物" (id=1)
+        db.execute("INSERT INTO asset_tags (asset_id, tag_id, source) VALUES (1, 1, 'manual')")
+        db.close()
+        r = seeded.get("/api/assets?tags=1")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["total"] == 1
+        assert data["items"][0]["filename"] == "cat.png"
