@@ -1,142 +1,124 @@
-# QuickMedia v2 PRD
+# QuickMedia v3 PRD
 
 ## Problem Statement
 
-v1 的 AI 分析覆盖了核心场景（图片描述+标签、视频首帧、文档摘要），但存在三个缺口：
+v2 完成了视觉分析和文档分析，但素材中有大量语音信息未被利用：
 
-1. **图片中的文字无法被检索** — 截图是设计/开发工作中最常用的素材类型，但截图中包含的关键文字（按钮文案、错误信息、菜单项）无法被搜索。用户搜「WARNING」找不到那张包含警告信息的截图。
-
-2. **视频分析只有首帧** — 一段 10 分钟的视频，用户可能在第 3 分钟才进入主题，但首帧只是开场的黑色画面。单帧代表不了视频的实际内容。
-
-3. **AI 分析阻塞扫描** — v1 的 AI 分析是同步的，扫描一张图要等 AI 返回结果才能处理下一张。素材量大时，扫描体验差。
+1. **视频和音频中的语音内容无法检索** — 会议录像、采访录音、教程视频中的对话内容完全不可搜索。用户搜「预算审批」找不到那段关键会议录像。
+2. **视频缺乏综合理解** — v2 的视频分析只有画面维度（首帧 + 多帧标签），没有语音维度。一段视频讲了什么、讨论了什么，系统完全不知道。
+3. **分析结果无法刷新** — AI 模型升级或 prompt 改进后，已分析的素材没有途径重新分析。用户只能手动改数据库状态。
 
 ## Solution
 
-v2 主攻 AI 分析增强：
+v3 主攻语音识别 + 分析增强：
 
-- **OCR 文字提取** — 复用 Qwen 3.5 视觉模型的文字识别能力，在图片分析 prompt 中加入 OCR 指令。提取的文字独立存储，可被搜索。
-- **视频多帧采样** — 均匀取 5 帧（首帧、尾帧、中间 3 帧），每帧走视觉分析+OCR。标签合并去重，首帧描述作为视频封面说明。
-- **AI 异步化** — 仿照缩略图队列模式，AI 分析任务入队后台消费。扫描不阻塞，分析结果逐步到位。
-
-附带以下体验改善：
-
-- **搜索结果高亮** — 匹配关键词在列表中用珊瑚色标记
-- **Finder 按钮** — 详情面板路径旁加文件夹图标，点击打开 Finder 定位
-- **AI 重试按钮** — 失败任务的详情面板显示「重试」按钮，手动触发重新分析
-- **AI 状态显示** — 网格和列表视图显示 AI 分析的文字状态
-- **超时配置** — 设置面板可配置 Ollama 请求超时（默认 180s）
-- **缩略图缓存破坏** — URL 携带修改时间戳参数，避免浏览器缓存旧缩略图
+- **whisper 语音转录** — 使用 faster-whisper (small) 对视频和音频素材进行语音转文字。转录原文可检索，支持中英文混合识别。
+- **语音内容分析** — 基于转录文本通过 Ollama 提取主题标签和内容摘要。
+- **视频综合总结** — 语音摘要 + 画面对比描述融合，生成视频整体内容总结。
+- **重新分析功能** — 支持单个素材和批量素材的 AI 分析重新执行。
+- **素材删除** — 支持从数据库中移除素材记录，磁盘文件不受影响，下次扫描可重新入库。
+- **手动扫描** — Web UI 中一键触发扫描，检查监控路径是否有新文件并自动入库分析。
 
 ## User Stories
 
-1. As a 设计师，I want 搜索截图中包含的按钮文字或错误信息，so that 我能从几百张截图中快速定位到需要的那张。
+1. As a 会议参与者，I want 搜索会议录像中的对话关键词，so that 能快速定位到关键讨论片段。
 
-2. As a 视频编辑，I want 看到视频多帧的标签摘要（不只是首帧），so that 长视频也能获得准确的内容标签。
+2. As a 视频编辑，I want 看到视频的整体内容总结（不只画面 + 语音分别说了什么），so that 能快速判断视频是否需要深入观看。
 
-3. As a 用户，I want 扫描素材时不卡在 AI 分析上，so that 大量素材也能快速入库。
+3. As a 播客听众，I want 音频文件自动生成转录文本和内容摘要，so that 不需听完就能了解主题。
 
-4. As a 素材管理者，I want 在搜索结果中一眼看到关键词高亮，so that 我能判断搜索结果的相关性。
+4. As a 用户，I want 修改 prompt 或升级模型后能一键重新分析已有素材，so that 已有素材能获得更好的标签和描述。
 
-5. As a macOS 用户，I want 点击素材详情中的文件夹图标直接打开 Finder 定位文件，so that 不需要手动拼路径。
+5. As a 用户，I want 批量选中素材后一次性重新分析，so that 不需要逐个手动操作。
 
-6. As a 管理员，I want 在设置页配置视频采样帧数，so that 我能根据模型性能和素材数量调整分析深度。
+6. As a 素材管理者，I want 在素材详情中看到语音转录的完整文本，so that 可以直接阅读对话内容。
 
-7. As a 用户，I want AI 分析失败后能一键重试，so that 不需要手动改数据库。
+7. As a 用户，I want 无音轨的视频不会因语音分析报错，so that 无声录屏也能正常完成分析流程。
 
-8. As a 用户，I want 在网格和列表中看到每个素材的 AI 分析状态，so that 一眼就能知道哪些素材的分析有问题。
+8. As a 用户，I want 删除不需要的素材记录，so that 素材库保持整洁，且文件本身不被删除。
+
+9. As a 用户，I want 在 Web UI 中一键扫描新素材，so that 不需要重启服务就能发现新添加的文件。
 
 ## Implementation Decisions
 
-### OCR 文字提取
+### 语音转录
 
-- 在 VisionAnalyzer 的图片分析 prompt 中追加 OCR 指令
-- 响应解析新增「文字：」段提取
-- 提取的文字存入新字段 ocr_text
-- 搜索索引覆盖 ocr_text
-- 详情面板展示 OCR 文字（在 AI 描述下方）
+- 使用 faster-whisper (small) 模型，pip 安装，无需额外系统依赖
+- 视频和音频素材扫描时入队 `task_type='transcribe'`
+- transcriber 检测到无音轨时直接标记 done，不报错
+- 转录原文存入 `assets.transcript` 字段
 
-### 视频多帧采样
+### 语音内容分析
 
-- 均匀采样 N 帧（默认 5 帧，在设置页可配置）
-- 每帧走一次视觉分析（含 OCR）
-- 所有帧的标签合并去重后作为视频的 AI 标签
-- 首帧描述作为视频的 AI 描述
-- 配置键：ai.video_frames（默认 5）
+- 基于转录文本，通过 Ollama 调用 TextAnalyzer 提取主题标签和内容摘要
+- 语音标签以虚线边框展示（来源 source='auto'），与视觉标签一致
+- 语音摘要存入 `assets.ai_summary` 字段（音频和视频共用，视频原未使用此字段）
 
-### AI 异步化
+### 视频综合总结
 
-- 新增 ai_queue 表（结构仿照 thumbnail_queue）
-- 扫描时 AI 分析任务入队，后台线程串行消费
-- 状态流转：pending → processing → done / failed
-- 素材卡片显示「AI 分析中...」状态
-
-### Finder 按钮
-
-- 详情面板路径字段旁新增文件夹图标
-- 点击调用系统命令 `open -R <文件路径>`
-
-### AI 重试按钮
-
-- 新增 API 端点 `POST /api/assets/{id}/retry-ai`
-- 将 failed 状态的 ai_queue 记录重置为 pending（attempt=0, error=NULL）
-- 前端详情面板 AI 状态行，状态为 failed 时显示红色「重试」按钮
-
-### AI 状态显示
-
-- 列表 API `/api/assets` 返回 `ai_status` 字段（LEFT JOIN ai_queue）
-- 网格视图：尺寸行后面显示灰色小字状态
-- 列表视图：文件名和尺寸之间新增状态列
-
-### 超时配置
-
-- `ai.timeout` 控制每个 Ollama HTTP 请求的超时秒数（默认 180s）
-- AIWorker 读取配置传入 VisionAnalyzer / TextAnalyzer
-- Web UI 设置面板可修改，范围 30-600s
-
-### AI 重试策略
-
-- 单次失败后在当前 process_queue() 内立即重试（while 循环，最多 3 次）
-- 重试间隔 2 秒（time.sleep(2)）
-- 3 次全失败后标记为 failed，不再自动重试
-
-### 缩略图缓存破坏
-
-- 前端缩略图 URL 追加 `?t=<modified_at>` 参数
-- 每个素材的修改时间不同，确保 Chrome 不会使用错误的缓存图片
-
-### 搜索结果高亮
-
-- 列表视图匹配关键词用珊瑚色（#cc785c）高亮
-- 搜索范围：文件名、描述、AI 描述、AI 摘要、OCR 文字、标签名
+- 分析链路：转录 → 语音分析 → 画面分析 → 综合总结
+- 综合总结等待语音摘要和视觉描述都就绪后执行
+- 通过一次 Ollama 调用融合语音摘要 + 视觉描述 + 视觉标签
+- 结果存入 `assets.video_summary` 字段
 
 ### 数据库变更
 
-- assets 表新增 ocr_text 列
-- 新增 ai_queue 表（asset_id, task_type, status, attempt, error）
+- `assets` 表新增 `transcript` TEXT（语音转录原文）
+- `assets` 表新增 `video_summary` TEXT（视频综合总结）
+- `assets` 表新增 `analyzed_at` TEXT（最近一次 AI 分析完成时间）
+- `ai_queue` 新增 `task_type` 值：`'transcribe'`、`'summarize'`
+- FTS 全文索引覆盖 `transcript` 和 `video_summary`
+
+### API 变更
+
+- `GET /api/assets/{id}` — 新增返回 `transcript`、`video_summary`、`analyzed_at`
+- `POST /api/assets/{id}/reanalyze` — 触发单个素材重新分析
+- `POST /api/assets/batch-reanalyze` — 批量重新分析（接收 asset_ids 数组）
+
+### 重新分析
+
+- 重新分析时清除素材的现有 AI 分析结果，所有任务类型重新入队
+- 支持单个素材（详情面板按钮）和批量素材（网格/列表多选模式）
+- 多选模式：checkbox 勾选，顶部出现操作栏「重新分析已选」
+
+### 前端变更
+
+- 详情面板新增「语音转录」展示区（在 OCR 文字区域下方）
+- 详情面板新增「综合总结」展示区（仅视频素材）
+- 「重新分析」按钮替代/扩展当前的「重试」按钮（不仅覆盖 failed 状态）
+- 批量多选模式（网格/列表视图 checkbox + 操作栏）
+
+### 素材删除
+
+- `DELETE /api/assets/{id}` — 删除素材及所有关联数据（ai_queue, asset_tags, thumbnail_queue 等，由 CASCADE 处理）
+- 详情面板标题栏 🗑 删除按钮，带确认弹窗
+- 磁盘文件不受影响，下次扫描时如仍存在可重新入库
+
+### 手动扫描
+
+- `POST /api/scan` — 遍历所有配置的监控路径，发现新文件自动入库并入队分析
+- 侧边栏底部 🔍 扫描新素材按钮，扫描完成后显示新增数量
 
 ## Testing Decisions
 
-- 新功能通过 API endpoints 验证（最高 seam）
-- 搜索 API 测试覆盖 OCR 文字命中（英文 + 中文）
-- 素材详情 API 验证返回体含 ocr_text 字段
-- 配置 API 验证 ai.video_frames 读写
-- AI 模块单元测试覆盖 OCR prompt 构造 + 响应解析
-- 数据库测试覆盖 ai_queue 表结构和状态流转
-- 现有 92 个测试作为回归基线，新功能不破坏已有行为
+- 通过 API 端点验证（最高 seam），不测试内部实现细节
+- 音频和视频素材使用测试 fixture 数据，mock whisper 和 Ollama 调用
+- 数据库迁移测试覆盖列新增和 FTS 索引
+- 重新分析端点测试验证 ai_queue 状态重置和任务重新入队
+- 搜索测试验证 transcript 字段命中
+- 无音轨场景：transcriber 对无音轨文件返回 done，不报错
 
 ## Out of Scope
 
-- 专用 OCR 引擎（Tesseract/PaddleOCR）
-- 视频语音转录
-- 音频转录
-- 语义相似度搜索
-- 重复文件展示
-- 素材版本历史
-- 已删除素材回收站
-- 打包分发
+- 实时语音识别（流式转录）
+- 说话人分离（diarization）
+- 多语言自动检测（用户需手动配置语言偏好）
+- 语音情感分析
+- 自定义 whisper 模型选择（固定 small）
+- 重新分析时的历史版本保留
 
 ## Further Notes
 
-- v2 需求决策详见 docs/v2/plan.md
-- 术语定义见 CONTEXT.md（OCR 文字提取、视频多帧采样、AI 分析队列、搜索高亮）
+- v3 技术方案细节见 docs/v3/design.md（待创建）
+- 术语定义见 CONTEXT.md（语音转录、语音分析、视频综合总结、重新分析）
 - roadmap 见 ROADMAP.md

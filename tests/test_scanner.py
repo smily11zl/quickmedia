@@ -231,3 +231,34 @@ class TestScanRecursion:
 
         result = scanner.scan_directory(src_dir, recursive=False)
         assert result["new"] == 1  # only root.jpg
+
+
+class TestTranscribeEnqueue:
+    """Scanner enqueues transcribe tasks for audio and video."""
+
+    def test_audio_enqueues_transcribe(self):
+        """Audio files get a transcribe task enqueued."""
+        config_dir, db, cfg, scanner = _tmp_env()
+        # Mock AIWorker.enqueue to avoid real whisper loading
+        enqueued = []
+        scanner._ai.enqueue = lambda aid, tt: enqueued.append((aid, tt))
+
+        src_dir = tempfile.mkdtemp()
+        _make_file(src_dir, "podcast.wav", b"audio_data")
+        scanner.scan_directory(src_dir)
+
+        assert ("transcribe" in [t for _, t in enqueued])
+
+    def test_video_enqueues_both_vision_and_transcribe(self):
+        """Video files get both vision and transcribe tasks."""
+        config_dir, db, cfg, scanner = _tmp_env()
+        enqueued = []
+        scanner._ai.enqueue = lambda aid, tt: enqueued.append((aid, tt))
+
+        src_dir = tempfile.mkdtemp()
+        _make_file(src_dir, "meeting.mp4", b"video_data")
+        scanner.scan_directory(src_dir)
+
+        task_types = [t for _, t in enqueued]
+        assert "vision" in task_types
+        assert "transcribe" in task_types

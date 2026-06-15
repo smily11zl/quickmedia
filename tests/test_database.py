@@ -104,3 +104,58 @@ class TestStats:
         assert stats["video"] == 1
         assert stats["audio"] == 0
         assert stats["document"] == 1
+
+
+class TestV3Migration:
+    """v3 schema migration — transcript column and FTS coverage."""
+
+    def test_transcript_column_exists(self):
+        """v3 migration adds transcript column."""
+        db = _tmp_db()
+        columns = db.execute("PRAGMA table_info(assets)")
+        col_names = {r["name"] for r in columns}
+        assert "transcript" in col_names
+
+    def test_transcript_is_searchable(self):
+        """FTS search hits transcript content."""
+        db = _tmp_db()
+        db.execute("""
+            INSERT INTO assets (hash, inode, device, path, filename, extension,
+                                asset_type, size, status)
+            VALUES ('h1', 1, 1, '/tmp/a.mp4', 'meeting.mp4', '.mp4', 'video',
+                    1000, 'active')
+        """)
+        db.conn.execute("UPDATE assets SET transcript='今天我们讨论预算审批' WHERE id=1")
+        db.conn.commit()
+        results = db.search("预算审批")
+        assert len(results) == 1
+        assert results[0]["filename"] == "meeting.mp4"
+
+    def test_video_summary_column_exists(self):
+        """v3 migration adds video_summary column."""
+        db = _tmp_db()
+        columns = db.execute("PRAGMA table_info(assets)")
+        col_names = {r["name"] for r in columns}
+        assert "video_summary" in col_names
+
+    def test_video_summary_is_searchable(self):
+        """FTS search hits video_summary content."""
+        db = _tmp_db()
+        db.execute("""
+            INSERT INTO assets (hash, inode, device, path, filename, extension,
+                                asset_type, size, status)
+            VALUES ('h1', 1, 1, '/tmp/a.mp4', 'demo.mp4', '.mp4', 'video',
+                    2000, 'active')
+        """)
+        db.conn.execute("UPDATE assets SET video_summary='这是一段关于产品发布的会议录像' WHERE id=1")
+        db.conn.commit()
+        results = db.search("产品发布")
+        assert len(results) == 1
+        assert results[0]["filename"] == "demo.mp4"
+
+    def test_analyzed_at_column_exists(self):
+        """v3 migration adds analyzed_at column."""
+        db = _tmp_db()
+        columns = db.execute("PRAGMA table_info(assets)")
+        col_names = {r["name"] for r in columns}
+        assert "analyzed_at" in col_names

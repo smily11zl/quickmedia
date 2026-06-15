@@ -156,6 +156,20 @@ class TextAnalyzer:
             tags = [t.strip().strip("<>") for t in re.split(r"[，,、]", m.group(1)) if t.strip().strip("<>")]
         return {"summary": summary, "tags": tags}
 
+    def analyze_speech(self, transcript: str) -> dict:
+        """Analyze a speech transcript, returning {summary, tags}."""
+        prompt = (
+            "以下是一段语音转录文本。请总结这段语音的主要内容（150字以内），"
+            "并提取5-10个主题关键词作为标签。\n"
+            "关键词以逗号分隔，使用中文。\n\n"
+            "输出格式：\n"
+            "摘要：<摘要文本>\n"
+            "标签：<标签1>, <标签2>, ...\n\n"
+            f"语音转录：\n{transcript[:4000]}"
+        )
+        response = self._call_ollama(prompt)
+        return self._parse_response(response)
+
 
 def merge_frame_results(frames: list[dict]) -> dict:
     """Merge results from multiple video frames into one.
@@ -239,3 +253,32 @@ def extract_video_frames(
             frame_paths.append(out_path)
 
     return frame_paths
+
+
+class TranscriptionAnalyzer:
+    """Transcribe audio/video files to text using faster-whisper."""
+
+    def __init__(self, model_size: str = "small", device: str = "auto"):
+        self.model_size = model_size
+        self.device = device
+        self._model = None
+
+    def _get_model(self):
+        """Lazy-load the whisper model."""
+        if self._model is None:
+            from faster_whisper import WhisperModel
+            self._model = WhisperModel(
+                self.model_size, device=self.device, compute_type="int8"
+            )
+        return self._model
+
+    def transcribe(self, file_path: str) -> str:
+        """Transcribe audio from a file. Returns empty string on failure
+        or if no speech detected."""
+        try:
+            model = self._get_model()
+            segments, _ = model.transcribe(file_path, beam_size=5)
+            text = " ".join(s.text.strip() for s in segments)
+            return text.strip()
+        except Exception:
+            return ""

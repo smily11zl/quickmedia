@@ -20,6 +20,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     app.extra["db_path"] = db.conn.execute(
         "PRAGMA database_list"
     ).fetchall()[0][2]
+    app.extra["config_dir"] = cfg.config_dir
     app.extra["thumb_dir"] = thumb_dir
 
     # ── Frontend static files ────────────────────────────────────
@@ -49,8 +50,14 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                    COALESCE(aq.status, '-') as ai_status"""
         base_from = """FROM assets a
                    LEFT JOIN (
-                       SELECT asset_id, status FROM ai_queue
-                       WHERE id IN (SELECT MAX(id) FROM ai_queue GROUP BY asset_id)
+                       SELECT asset_id,
+                         CASE WHEN SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END) > 0
+                              THEN 'processing'
+                              ELSE MAX(status)
+                         END as status
+                       FROM ai_queue
+                       WHERE id IN (SELECT MAX(id) FROM ai_queue GROUP BY asset_id, task_type)
+                       GROUP BY asset_id
                    ) aq ON a.id = aq.asset_id"""
         if type:
             total_row = _db.execute(
@@ -93,9 +100,11 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         result = dict(rows[0])
         tags = _db.get_asset_tags(asset_id)
         result["tags"] = [dict(t) for t in tags]
-        # AI status
+        # AI status: prioritize 'processing', else the latest status
         ai_rows = _db.execute(
-            "SELECT status FROM ai_queue WHERE asset_id=? ORDER BY id DESC LIMIT 1",
+            """SELECT status FROM ai_queue WHERE asset_id=?
+               ORDER BY CASE WHEN status='processing' THEN 0 ELSE 1 END, id DESC
+               LIMIT 1""",
             (asset_id,),
         )
         result["ai_status"] = ai_rows[0]["status"] if ai_rows else "-"
@@ -115,6 +124,18 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 (body["notes"], asset_id),
             )
         return {"ok": True}
+
+    @app.delete("/api/assets/{asset_id}")
+    def delete_asset(asset_id: int):
+        """Delete an asset and all related data from the database."""
+        _db = _get_db(app)
+        rows = _db.execute("SELECT id FROM assets WHERE id=?", (asset_id,))
+        if not rows:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        # CASCADE handles ai_queue, asset_tags, thumbnail_queue
+        _db.conn.execute("DELETE FROM assets WHERE id=?", (asset_id,))
+        _db.conn.commit()
+        return {"ok": True, "message": "已删除"}
 
     # ── Thumbnails ──────────────────────────────────────────────
 
@@ -198,6 +219,67 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             raise HTTPException(status_code=404, detail="No failed AI tasks found")
         return {"ok": True, "message": "已重置待重试"}
 
+    @app.post("/api/assets/{asset_id}/reanalyze")
+    def reanalyze_asset(asset_id: int):
+        """Clear AI results and re-enqueue all analysis tasks for an asset."""
+        _db = _get_db(app)
+        rows = _db.execute("SELECT id, asset_type FROM assets WHERE id=?", (asset_id,))
+        if not rows:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        asset_type = rows[0]["asset_type"]
+        # Clear existing AI results
+        _db.conn.execute(
+            "UPDATE assets SET ai_description=NULL, ai_summary=NULL, "
+            "ocr_text=NULL, transcript=NULL, video_summary=NULL, "
+            "analyzed_at=NULL WHERE id=?",
+            (asset_id,),
+        )
+        # Reset existing queue entries
+        _db.conn.execute(
+            "DELETE FROM ai_queue WHERE asset_id=?", (asset_id,)
+        )
+        _db.conn.commit()
+        # Re-enqueue based on asset type
+        if asset_type == "image":
+            _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'vision')", (asset_id,))
+        elif asset_type == "video":
+            _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'vision')", (asset_id,))
+            _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'transcribe')", (asset_id,))
+        elif asset_type == "audio":
+            _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'transcribe')", (asset_id,))
+        elif asset_type == "document":
+            _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'text')", (asset_id,))
+        return {"ok": True, "message": "已重新入队分析任务"}
+
+    @app.post("/api/assets/batch-reanalyze")
+    def batch_reanalyze(body: dict):
+        """Re-analyze multiple assets at once."""
+        asset_ids = body.get("asset_ids", [])
+        for aid in asset_ids:
+            _db = _get_db(app)
+            rows = _db.execute("SELECT id, asset_type FROM assets WHERE id=?", (aid,))
+            if not rows:
+                continue
+            asset_type = rows[0]["asset_type"]
+            _db.conn.execute(
+                "UPDATE assets SET ai_description=NULL, ai_summary=NULL, "
+                "ocr_text=NULL, transcript=NULL, video_summary=NULL, "
+                "analyzed_at=NULL WHERE id=?",
+                (aid,),
+            )
+            _db.conn.execute("DELETE FROM ai_queue WHERE asset_id=?", (aid,))
+            _db.conn.commit()
+            if asset_type == "image":
+                _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'vision')", (aid,))
+            elif asset_type == "video":
+                _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'vision')", (aid,))
+                _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'transcribe')", (aid,))
+            elif asset_type == "audio":
+                _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'transcribe')", (aid,))
+            elif asset_type == "document":
+                _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'text')", (aid,))
+        return {"ok": True, "message": f"已重新入队 {len(asset_ids)} 个素材"}
+
     @app.post("/api/assets/{asset_id}/analyze")
     def analyze_asset(asset_id: int):
         from quickmedia.ai import VisionAnalyzer
@@ -272,6 +354,29 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             subprocess.run(["open", "-R", path])
             return {"ok": True}
         raise HTTPException(status_code=404, detail="Path not found")
+
+    # ── Scan ──────────────────────────────────────────────────────
+
+    @app.post("/api/scan")
+    def scan_watch_paths():
+        """Scan all configured watch paths for new/modified files."""
+        from quickmedia.scanner import Scanner
+        cfg = Config(config_dir=app.extra["config_dir"])
+        _db = _get_db(app)
+        scanner = Scanner(db=_db, config=cfg)
+        watch_paths = cfg.get("watch_paths") or []
+        total_new = 0
+        for wp in watch_paths:
+            path = os.path.expanduser(wp.get("path", ""))
+            if os.path.isdir(path):
+                result = scanner.scan_directory(
+                    path,
+                    recursive=wp.get("recursive", True),
+                    max_depth=wp.get("max_depth", 3),
+                )
+                total_new += result["new"]
+        _db.close()
+        return {"ok": True, "new": total_new, "message": f"新增 {total_new} 个素材"}
 
     # ── Frontend SPA ─────────────────────────────────────────────
 

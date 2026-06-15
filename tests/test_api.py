@@ -12,7 +12,6 @@ from quickmedia.config import Config
 
 @pytest.fixture
 def client():
-    """Create a test app with temp database."""
     config_dir = tempfile.mkdtemp()
     db_path = os.path.join(config_dir, "data.db")
     db = Database(db_path)
@@ -26,7 +25,6 @@ def client():
 
 @pytest.fixture
 def seeded(client, request):
-    """Client with test assets inserted."""
     db_path = client.app.extra["db_path"]
     db = Database(db_path)
     db.execute("""
@@ -40,7 +38,6 @@ def seeded(client, request):
         ('h3', 3, 3, '/tmp/notes.md', 'notes.md', '.md', 'document', 50,
          NULL, NULL, '项目笔记')
     """)
-    # Add tags
     db.create_tag("宠物")
     db.create_tag("截图")
     db.close()
@@ -49,12 +46,11 @@ def seeded(client, request):
     db.execute("DELETE FROM assets")
     db.execute("DELETE FROM tags")
     db.execute("DELETE FROM asset_tags")
+    db.execute("DELETE FROM ai_queue")
     db.close()
 
 
 class TestAssetAPI:
-    """Asset listing and detail endpoints."""
-
     def test_list_assets(self, seeded):
         r = seeded.get("/api/assets")
         assert r.status_code == 200
@@ -95,8 +91,6 @@ class TestAssetAPI:
 
 
 class TestSearchAPI:
-    """Search endpoint."""
-
     def test_search(self, seeded):
         r = seeded.get("/api/search?q=橘猫")
         assert r.status_code == 200
@@ -106,8 +100,6 @@ class TestSearchAPI:
 
 
 class TestTagAPI:
-    """Tag listing and management."""
-
     def test_list_tags(self, seeded):
         r = seeded.get("/api/tags")
         assert r.status_code == 200
@@ -117,7 +109,6 @@ class TestTagAPI:
 
     def test_add_tag_to_asset(self, seeded):
         tag_id = None
-        # Get tag id
         r0 = seeded.get("/api/tags")
         for t in r0.json():
             if t["name"] == "截图":
@@ -133,16 +124,12 @@ class TestTagAPI:
             if t["name"] == "宠物":
                 tag_id = t["id"]
                 break
-        # First add
         seeded.post(f"/api/assets/1/tags/{tag_id}")
-        # Then remove
         r = seeded.delete(f"/api/assets/1/tags/{tag_id}")
         assert r.status_code == 200
 
 
 class TestStatsAPI:
-    """Stats endpoint."""
-
     def test_stats(self, seeded):
         r = seeded.get("/api/stats")
         assert r.status_code == 200
@@ -154,11 +141,8 @@ class TestStatsAPI:
 
 
 class TestRetryAI:
-    """Retry failed AI tasks."""
-
     def test_retry_resets_failed_to_pending(self, seeded):
         db = Database(seeded.app.extra["db_path"])
-        # Insert a failed ai_queue entry for asset 1 (exists in seeded)
         db.execute(
             "INSERT INTO ai_queue (asset_id, task_type, status, attempt, error) "
             "VALUES (1, 'vision', 'failed', 3, 'timeout')"
@@ -167,7 +151,6 @@ class TestRetryAI:
         r = seeded.post("/api/assets/1/retry-ai")
         assert r.status_code == 200
         assert r.json()["ok"] is True
-        # Verify status changed
         db = Database(seeded.app.extra["db_path"])
         rows = db.execute(
             "SELECT status, attempt, error FROM ai_queue WHERE asset_id=1"
@@ -180,4 +163,63 @@ class TestRetryAI:
 
     def test_retry_no_failed_tasks_returns_404(self, seeded):
         r = seeded.post("/api/assets/1/retry-ai")
+        assert r.status_code == 404
+
+
+class TestTranscriptAPI:
+    def test_asset_detail_includes_transcript(self, seeded):
+        db = Database(seeded.app.extra["db_path"])
+        db.conn.execute("UPDATE assets SET transcript='测试转录文本' WHERE id=1")
+        db.conn.commit()
+        db.close()
+        r = seeded.get("/api/assets/1")
+        assert r.status_code == 200
+        data = r.json()
+        assert "transcript" in data
+        assert data["transcript"] == "测试转录文本"
+
+    def test_transcript_is_nullable(self, seeded):
+        r = seeded.get("/api/assets/2")
+        assert r.status_code == 200
+        data = r.json()
+        assert "transcript" in data
+        assert data["transcript"] is None
+
+
+class TestReanalyzeAPI:
+    """Re-analyze endpoints for single and batch re-analysis."""
+
+    def test_reanalyze_re_enqueues_tasks(self, seeded):
+        """POST /api/assets/{id}/reanalyze clears results and re-enqueues."""
+        db = Database(seeded.app.extra["db_path"])
+        db.conn.execute("UPDATE assets SET ai_description='old desc' WHERE id=1")
+        db.execute(
+            "INSERT INTO ai_queue (asset_id, task_type, status) VALUES (1, 'vision', 'done')"
+        )
+        db.close()
+
+        r = seeded.post("/api/assets/1/reanalyze")
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+        db = Database(seeded.app.extra["db_path"])
+        rows = db.execute("SELECT ai_description FROM assets WHERE id=1")
+        assert rows[0]["ai_description"] is None
+
+        queue_rows = db.execute(
+            "SELECT task_type, status FROM ai_queue WHERE asset_id=1 AND status='pending'"
+        )
+        assert len(queue_rows) >= 1
+        db.close()
+
+    def test_batch_reanalyze(self, seeded):
+        """POST /api/assets/batch-reanalyze handles multiple assets."""
+        r = seeded.post("/api/assets/batch-reanalyze",
+                        json={"asset_ids": [1, 2]})
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+
+    def test_reanalyze_nonexistent_asset(self, seeded):
+        """Reanalyze nonexistent asset returns 404."""
+        r = seeded.post("/api/assets/999/reanalyze")
         assert r.status_code == 404

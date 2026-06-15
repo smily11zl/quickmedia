@@ -293,6 +293,9 @@ class Scanner:
                 self._ai.enqueue(asset_id, "vision")
             elif asset_type == "video":
                 self._ai.enqueue(asset_id, "vision")
+                self._ai.enqueue(asset_id, "transcribe")
+            elif asset_type == "audio":
+                self._ai.enqueue(asset_id, "transcribe")
             elif asset_type == "document":
                 self._ai.enqueue(asset_id, "text")
 

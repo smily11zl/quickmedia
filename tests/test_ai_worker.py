@@ -124,3 +124,91 @@ class TestAIQueue:
         assert rows[0]["status"] == "failed"
         assert rows[0]["attempt"] == 3
         assert "always fails" in (rows[0]["error"] or "")
+
+
+class TestTranscribeTask:
+    """AIWorker handles task_type='transcribe'."""
+
+    def test_transcribe_stores_transcript(self):
+        """Transcribe task runs, stores transcript, and runs speech analysis."""
+        db, cfg = _tmp_env()
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "audio.m4a")
+        import hashlib
+        h = hashlib.sha256(b"").hexdigest()
+        with open(path, "w") as f: f.write("dummy")
+        st = os.stat(path)
+        cursor = db.conn.execute(
+            """INSERT INTO assets (hash, inode, device, path, filename, extension,
+               asset_type, size, status) VALUES (?,?,?,?,?,?,?,?,'active')""",
+            (h, st.st_ino, st.st_dev, path, "audio.m4a", ".m4a", "audio", st.st_size),
+        )
+        db.conn.commit()
+        asset_id = cursor.lastrowid
+
+        worker = AIWorker(db=db, config=cfg)
+        # Mock both transcriber and text analyzer
+        worker._transcriber.transcribe = lambda p: "今天我们讨论预算审批"
+        worker._text.analyze_speech = lambda t: {
+            "summary": "讨论预算相关事项",
+            "tags": ["会议", "预算", "审批"],
+        }
+        worker.enqueue(asset_id, "transcribe")
+        worker.process_queue()
+
+        # Verify transcript stored
+        asset_rows = db.execute(
+            "SELECT transcript, ai_summary FROM assets WHERE id=?", (asset_id,)
+        )
+        assert "预算审批" in (asset_rows[0]["transcript"] or "")
+        assert "预算" in (asset_rows[0]["ai_summary"] or "")
+
+        # Verify speech tags linked
+        tags = db.get_asset_tags(asset_id)
+        tag_names = {t["name"] for t in tags}
+        assert "会议" in tag_names
+
+    def test_transcribe_triggers_video_summary(self):
+        """For video assets, transcribe+speech analysis triggers combined summary
+        when vision analysis is also done."""
+        db, cfg = _tmp_env()
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "meeting.mp4")
+        import hashlib
+        h = hashlib.sha256(b"").hexdigest()
+        with open(path, "w") as f: f.write("dummy")
+        st = os.stat(path)
+        cursor = db.conn.execute(
+            """INSERT INTO assets (hash, inode, device, path, filename, extension,
+               asset_type, size, width, height, ai_description, status)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,'active')""",
+            (h, st.st_ino, st.st_dev, path, "meeting.mp4", ".mp4", "video",
+             st.st_size, 1920, 1080, "会议室场景，多人讨论"),
+        )
+        db.conn.commit()
+        asset_id = cursor.lastrowid
+
+        worker = AIWorker(db=db, config=cfg)
+        worker._transcriber.transcribe = lambda p: "今天我们讨论Q3预算"
+        worker._text.analyze_speech = lambda t: {
+            "summary": "讨论Q3预算分配",
+            "tags": ["会议", "预算"],
+        }
+        # Mock the combined summary generation
+        worker._try_generate_video_summary = lambda aid: (
+            db.execute(
+                "UPDATE assets SET video_summary='综合：会议室讨论Q3预算分配' WHERE id=?",
+                (aid,)
+            )
+        )
+        worker.enqueue(asset_id, "transcribe")
+        worker.process_queue()
+
+        # Verify combined summary generated
+        asset_rows = db.execute(
+            "SELECT transcript, ai_summary, video_summary FROM assets WHERE id=?",
+            (asset_id,),
+        )
+        assert "Q3预算" in (asset_rows[0]["transcript"] or "")
+        assert "Q3预算分配" in (asset_rows[0]["ai_summary"] or "")
+        assert "综合" in (asset_rows[0]["video_summary"] or "")

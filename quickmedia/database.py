@@ -45,6 +45,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS assets_fts USING fts5(
     ai_description,
     ai_summary,
     notes,
+    transcript,
+    video_summary,
     content='assets',
     content_rowid='id'
 );
@@ -100,6 +102,8 @@ class Database:
         self.conn.executescript(SCHEMA_SQL)
         # v2 schema migration
         self._migrate_v2()
+        # v3 schema migration
+        self._migrate_v3()
         self.conn.commit()
 
     def _migrate_v2(self) -> None:
@@ -124,6 +128,38 @@ class Database:
                     created   TEXT DEFAULT (datetime('now'))
                 )
             """)
+
+    def _migrate_v3(self) -> None:
+        """Apply v3 schema changes: transcript, video_summary columns and FTS rebuild."""
+        cols = self.execute("PRAGMA table_info(assets)")
+        col_names = {r["name"] for r in cols}
+        needs_rebuild = False
+        if "transcript" not in col_names:
+            self.conn.execute("ALTER TABLE assets ADD COLUMN transcript TEXT")
+            needs_rebuild = True
+        if "video_summary" not in col_names:
+            self.conn.execute("ALTER TABLE assets ADD COLUMN video_summary TEXT")
+            needs_rebuild = True
+        if "analyzed_at" not in col_names:
+            self.conn.execute("ALTER TABLE assets ADD COLUMN analyzed_at TEXT")
+        if needs_rebuild:
+            self.conn.execute("DROP TABLE IF EXISTS assets_fts")
+            self.conn.execute("""
+                CREATE VIRTUAL TABLE assets_fts USING fts5(
+                    filename,
+                    description,
+                    ai_description,
+                    ai_summary,
+                    notes,
+                    transcript,
+                    video_summary,
+                    content='assets',
+                    content_rowid='id'
+                )
+            """)
+            self.conn.execute(
+                "INSERT INTO assets_fts(assets_fts) VALUES('rebuild')"
+            )
 
     def execute(self, sql: str, params=()) -> list[sqlite3.Row]:
         """Execute a SQL query and return results as Row objects."""
@@ -176,10 +212,12 @@ class Database:
                 a.ai_summary LIKE ? OR
                 a.notes LIKE ? OR
                 a.ocr_text LIKE ? OR
+                a.transcript LIKE ? OR
+                a.video_summary LIKE ? OR
                 t.name LIKE ?
             )
             ORDER BY a.filename
-        """, (pattern,) * 7)
+        """, (pattern,) * 9)
 
     # ── tags ──────────────────────────────────────────────────────
 

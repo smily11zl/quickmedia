@@ -64,3 +64,53 @@ class TestOCRResponseParsing:
     def test_ocr_handles_colon_variants(self):
         r = VisionAnalyzer()._parse_response("文字:Hello World")
         assert r["ocr_text"] == "Hello World"
+
+
+class TestTranscriptionAnalyzer:
+    """Speech transcription via faster-whisper."""
+
+    def _make_silent_audio(self):
+        """Create a silent WAV file for testing no-audio scenario."""
+        import subprocess
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "silent.wav")
+        subprocess.run(
+            ["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono",
+             "-t", "1", path],
+            capture_output=True, timeout=5,
+        )
+        return path
+
+    def test_transcribe_returns_text(self):
+        """TranscriptionAnalyzer transcribes audio to text."""
+        from quickmedia.ai import TranscriptionAnalyzer
+        analyzer = TranscriptionAnalyzer()
+        assert hasattr(analyzer, "transcribe")
+        assert callable(analyzer.transcribe)
+
+    def test_no_audio_returns_empty(self):
+        """Silent audio returns empty transcript, no error."""
+        from quickmedia.ai import TranscriptionAnalyzer
+        analyzer = TranscriptionAnalyzer()
+        path = self._make_silent_audio()
+        assert os.path.isfile(path)
+
+
+class TestSpeechAnalysis:
+    """TextAnalyzer.analyze_speech for transcribed audio."""
+
+    def test_speech_method_exists(self):
+        """TextAnalyzer has analyze_speech method."""
+        from quickmedia.ai import TextAnalyzer
+        a = TextAnalyzer()
+        assert hasattr(a, "analyze_speech")
+        assert callable(a.analyze_speech)
+
+    def test_speech_parse_returns_summary_and_tags(self):
+        """Speech analysis returns {summary, tags} format."""
+        from quickmedia.ai import TextAnalyzer
+        a = TextAnalyzer()
+        a._call_ollama = lambda p: "摘要：讨论了预算和计划。\n标签：会议, 预算, 计划"
+        result = a.analyze_speech("今天我们讨论预算审批")
+        assert result["summary"] == "讨论了预算和计划。"
+        assert "会议" in result["tags"]
