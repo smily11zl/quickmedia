@@ -96,7 +96,11 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         base_select = """SELECT a.id, a.filename, a.asset_type, a.size,
                    a.width, a.height, a.duration, a.path, a.description,
                    a.ai_description, a.thumbnail_status, a.modified_at,
-                   a.extension, COALESCE(aq.status, '-') as ai_status"""
+                   a.extension,
+                   CASE WHEN aq.status IS NOT NULL THEN aq.status
+                        WHEN a.ai_description IS NOT NULL OR a.ai_summary IS NOT NULL THEN 'done'
+                        ELSE 'pending'
+                   END as ai_status"""
         base_from = """FROM assets a
                    LEFT JOIN (
                        SELECT asset_id,
@@ -150,7 +154,9 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                LIMIT 1""",
             (asset_id,),
         )
-        result["ai_status"] = ai_rows[0]["status"] if ai_rows else "-"
+        result["ai_status"] = ai_rows[0]["status"] if ai_rows else (
+            "done" if (result.get("ai_description") or result.get("ai_summary")) else "pending"
+        )
         return result
 
     @app.put("/api/assets/{asset_id}")
@@ -277,6 +283,11 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             "analyzed_at=NULL WHERE id=?",
             (asset_id,),
         )
+        # Clear old auto-generated tags
+        _db.conn.execute(
+            "DELETE FROM asset_tags WHERE asset_id=? AND source='auto'",
+            (asset_id,),
+        )
         # Reset existing queue entries
         _db.conn.execute(
             "DELETE FROM ai_queue WHERE asset_id=?", (asset_id,)
@@ -386,6 +397,25 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 return {"connected": True, "models": models}
         except Exception as e:
             return {"connected": False, "error": str(e)}
+
+    # ── Prompts ──────────────────────────────────────────────────
+
+    @app.get("/api/prompts")
+    def get_prompts():
+        from quickmedia.prompt_config import PromptConfig
+        pc = PromptConfig(config_dir=app.extra["config_dir"])
+        return pc.get_config()
+
+    @app.put("/api/prompts")
+    def update_prompts(body: dict):
+        from quickmedia.prompt_config import PromptConfig
+        pc = PromptConfig(config_dir=app.extra["config_dir"])
+        analysis_type = body.get("type", "")
+        custom = body.get("custom", "")
+        if analysis_type not in ("vision", "text", "speech", "video_summary"):
+            raise HTTPException(status_code=400, detail="Invalid analysis type")
+        pc.update_custom(analysis_type, custom)
+        return {"ok": True}
 
     # ── Finder ───────────────────────────────────────────────────
 

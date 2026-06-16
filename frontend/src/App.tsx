@@ -44,6 +44,14 @@ function App() {
   const [fop,sfop]=useState(false);
   const [aop,saop]=useState(false);
   const [top,stop]=useState(false);
+  const [pt,sp]=useState<"vision"|"text"|"speech"|"video_summary">("vision");
+  const [pd,spd]=useState<any>(null);
+  const [pe,spe]=useState("");
+  const [ps,sps]=useState("");
+  const [bh,sbh]=useState(false);
+  const [brh,sbrh]=useState(false);
+  const [oh,soh]=useState(false);
+  const [shv,sshv]=useState(false);
   const dr=useRef<HTMLTextAreaElement>(null);
 
   useEffect(()=>{fetch("/api/stats").then(r=>r.json()).then(ss);},[]);
@@ -59,11 +67,14 @@ function App() {
   const adT=()=>{if(!sel||!nt.trim())return;fetch(`/api/assets/${sel.id}/tags/by-name`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:nt.trim()})}).then(r=>r.json()).then(t=>{sl({...sel,tags:[...sel.tags,{id:t.id,name:t.name,source:"manual"}]});sn("");fetch("/api/tags").then(r=>r.json()).then(stg);fa();});};
   const rmT=(tid:number)=>{if(!sel)return;fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"DELETE"}).then(()=>{sl({...sel,tags:sel.tags.filter(t=>t.id!==tid)});fetch("/api/tags").then(r=>r.json()).then(stg);});};
   const cfT=(tid:number)=>{if(!sel)return;fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"DELETE"}).then(()=>fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"POST"})).then(()=>{sl({...sel,tags:sel.tags.map(t=>t.id===tid?{...t,source:"manual"}:t)});});};
-  const svS=()=>{fetch("/api/config",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ollama_url:cu,model:cm,video_frames:cfn,timeout:cto})}).then(()=>ssh(false));};
+  const svS=()=>{fetch("/api/config",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ollama_url:cu,model:cm,video_frames:cfn,timeout:cto})}).then(r=>{if(r.ok){sos("设置已保存");sps("");setTimeout(()=>{sos("");ssh(false);},1500);}else{sos("保存失败");setTimeout(()=>sos(""),3000);}}).catch(()=>{sos("保存失败");setTimeout(()=>sos(""),3000);});};
   const tO=()=>{fetch("/api/config/test-ollama",{method:"POST"}).then(r=>r.json()).then(d=>{sos(d.connected?`已连接: ${d.models.join(", ")}`:`失败: ${d.error}`);});};
   const tgA=(id:number)=>{const n=new Set(ms);n.has(id)?n.delete(id):n.add(id);sm(n);};
   const bRe=()=>{fetch("/api/assets/batch-reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({asset_ids:[...ms]})}).then(()=>{sm(new Set());fa();});};
   const delA=(id:number)=>{fetch(`/api/assets/${id}`,{method:"DELETE"}).then(()=>{sl(null);fa();});};
+  const ldP=()=>{fetch("/api/prompts").then(r=>r.json()).then(d=>{spd(d);spe(d[pt]?.custom||d[pt]?.default||"");});};
+  const svP=()=>{const def=pd?.[pt]?.default||"";const v=pe===def?"":pe;fetch("/api/prompts",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:pt,custom:v})}).then(r=>{if(r.ok){sps("已保存");setTimeout(()=>sps(""),2000);ldP();}else{sps("保存失败");setTimeout(()=>sps(""),3000);}}).catch(()=>{sps("保存失败");setTimeout(()=>sps(""),3000);});};
+  const reP=()=>{fetch("/api/prompts",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:pt,custom:""})}).then(r=>{if(r.ok){sps("已恢复默认");setTimeout(()=>sps(""),2000);ldP();}else{sps("恢复失败");setTimeout(()=>sps(""),3000);}}).catch(()=>{sps("恢复失败");setTimeout(()=>sps(""),3000);});};
 
   const types=[{k:null,l:"全部素材",n:st.total},{k:"image",l:"图片",n:st.image},{k:"video",l:"视频",n:st.video},{k:"audio",l:"音频",n:st.audio},{k:"document",l:"文档",n:st.document}];
 
@@ -131,7 +142,7 @@ function App() {
         </div>
         <div className="mt-auto pt-4 flex flex-col gap-1" style={{borderTop:`1px solid ${S.h}`}}>
           <button onClick={()=>fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{alert(d.message);fa();})} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
-          <button onClick={()=>{ssh(!sh);if(!sh){fetch("/api/config").then(r=>r.json()).then(c=>{scu(c.ollama_url);scm(c.model);scfn(c.video_frames||1);scto(c.timeout||300);});}}} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",backgroundColor:sh?S.d:"transparent",color:sh?S.i:S.m}}>⚙ 设置</button>
+          <button onClick={()=>{ssh(!sh);if(!sh){fetch("/api/config").then(r=>r.json()).then(c=>{scu(c.ollama_url);scm(c.model);scfn(c.video_frames||1);scto(c.timeout||300);});ldP();}}} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",backgroundColor:sh?S.d:"transparent",color:sh?S.i:S.m}}>⚙ 设置</button>
         </div>
       </aside>
       {sh&&(<aside className="w-72 border-r overflow-y-auto p-4 flex flex-col gap-3" style={{borderColor:S.h,backgroundColor:S.c}}>
@@ -140,8 +151,25 @@ function App() {
         <div><label className="text-[11px]" style={{color:S.ms}}>模型</label><input type="text" value={cm} onChange={e=>scm(e.target.value)} className="w-full text-xs px-2 py-1 rounded-md outline-none mt-0.5" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/></div>
         <div><label className="text-[11px]" style={{color:S.ms}}>视频采样帧数</label><input type="number" min={1} max={20} value={cfn} onChange={e=>scfn(parseInt(e.target.value)||1)} className="w-full text-xs px-2 py-1 rounded-md outline-none mt-0.5" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/></div>
         <div><label className="text-[11px]" style={{color:S.ms}}>请求超时 (秒)</label><input type="number" min={30} max={600} value={cto} onChange={e=>scto(parseInt(e.target.value)||300)} className="w-full text-xs px-2 py-1 rounded-md outline-none mt-0.5" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/></div>
-        <div className="flex gap-2"><button onClick={tO} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.d,color:S.b}}>检测连接</button><button onClick={svS} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.r,color:S.w}}>保存</button></div>
-        {os&&<p className="text-xs" style={{color:os.startsWith("已连接")?S.m:S.r}}>{os}</p>}
+        <div className="flex gap-2 items-center"><button onClick={tO} onMouseEnter={()=>soh(true)} onMouseLeave={()=>soh(false)} onMouseDown={e=>e.currentTarget.style.filter="brightness(0.9)"} onMouseUp={e=>e.currentTarget.style.filter=oh?"brightness(1.08)":"brightness(1)"} className="text-xs px-3 py-1 rounded-md transition-all duration-150" style={{backgroundColor:S.d,color:S.b,filter:oh?"brightness(1.08)":"brightness(1)",cursor:"pointer"}}>检测连接</button><button onClick={svS} onMouseEnter={()=>sshv(true)} onMouseLeave={()=>sshv(false)} onMouseDown={e=>e.currentTarget.style.filter="brightness(0.85)"} onMouseUp={e=>e.currentTarget.style.filter=shv?"brightness(1.1)":"brightness(1)"} className="text-xs px-3 py-1 rounded-md transition-all duration-150" style={{backgroundColor:S.r,color:S.w,filter:shv?"brightness(1.1)":"brightness(1)",cursor:"pointer"}}>保存</button></div>
+        {os&&<p className="text-xs" style={{color:os.includes("失败")||os.startsWith("失败")?S.r:os.startsWith("已连接")||os==="设置已保存"?S.m:S.r}}>{os}</p>}
+        <div className="mt-4 pt-3" style={{borderTop:`1px solid ${S.h}`}}>
+          <h3 className="text-xs font-medium mb-2" style={{color:S.i}}>🤖 AI 分析提示词</h3>
+          <div className="flex gap-1 mb-3">
+            {(["vision","text","speech","video_summary"] as const).map(t=><button key={t} onClick={()=>{sp(t);spe(pd?.[t]?.custom||pd?.[t]?.default||"");}} className="text-[10px] px-2 py-1 rounded" style={{backgroundColor:pt===t?S.r:"transparent",color:pt===t?S.w:S.ms}}>{t==="vision"?"图片":t==="text"?"文档":t==="speech"?"语音":"视频"}</button>)}
+          </div>
+          {pd?.[pt]?.presets&&pd[pt].presets.length>0&&<div className="flex gap-1 flex-wrap mb-2">
+            {pd[pt].presets.map((p:any)=><button key={p.name} onClick={()=>{spe(p.content);dr.current?.focus();}} className="text-[10px] px-2 py-0.5 rounded border" style={{borderColor:S.h,color:S.m,backgroundColor:S.c}}>{p.name}</button>)}
+            <button onClick={()=>{spe(pd[pt]?.default||"");dr.current?.focus();}} className="text-[10px] px-2 py-0.5 rounded border" style={{borderColor:S.h,color:S.ms,backgroundColor:S.c}}>默认</button>
+          </div>}
+          <textarea ref={dr} value={pe} onChange={e=>spe(e.target.value)} rows={5} className="w-full text-[10px] p-2 rounded-md resize-y outline-none mb-2" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c,fontFamily:"monospace"}} placeholder="自定义提示词..."/>
+          {pd?.[pt]?.system_format&&<div className="text-[9px] p-2 rounded-md mb-2 leading-relaxed" style={{color:S.ms,backgroundColor:S.s,fontFamily:"monospace"}}><span className="text-[10px] font-medium" style={{color:S.i}}>输出格式（系统固定）</span><br/>{pd[pt].system_format}</div>}
+          <div className="flex gap-2 items-center">
+            <button onClick={svP} onMouseEnter={()=>sbh(true)} onMouseLeave={()=>sbh(false)} onMouseDown={e=>e.currentTarget.style.filter="brightness(0.85)"} onMouseUp={e=>e.currentTarget.style.filter=bh?"brightness(1.1)":"brightness(1)"} className="text-xs px-3 py-1 rounded-md transition-all duration-150" style={{backgroundColor:S.r,color:S.w,filter:bh?"brightness(1.1)":"brightness(1)",cursor:"pointer"}}>保存自定义</button>
+            <button onClick={reP} onMouseEnter={()=>sbrh(true)} onMouseLeave={()=>sbrh(false)} onMouseDown={e=>e.currentTarget.style.filter="brightness(0.85)"} onMouseUp={e=>e.currentTarget.style.filter=brh?"brightness(1.05)":"brightness(1)"} className="text-xs px-3 py-1 rounded-md transition-all duration-150" style={{backgroundColor:S.s,color:S.m,filter:brh?"brightness(1.05)":"brightness(1)",cursor:"pointer"}}>恢复默认</button>
+            {ps&&<span className="text-[10px]" style={{color:ps.includes("失败")?S.r:S.m}}>{ps}</span>}
+          </div>
+        </div>
       </aside>)}
       <main className="flex-1 overflow-y-auto p-6">
         {ms.size>0&&<div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{backgroundColor:S.d}}><span className="text-xs" style={{color:S.b}}>已选 {ms.size} 个</span><button onClick={bRe} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>重新分析已选</button><button onClick={()=>sm(new Set())} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>取消选择</button></div>}

@@ -53,6 +53,28 @@
 
 ---
 
+## v5 — 自定义 AI Prompt ✅
+
+让用户自定义 AI 分析维度，不同场景使用不同分析指令。核心设计：用户只编辑分析内容，输出格式由系统固定追加（JSON），确保解析可靠。
+
+### 核心功能
+
+- **Prompt 模板编辑** — 设置面板中编辑各分析类型的分析指令（图片/文档/语音/视频），格式尾巴系统固定追加
+- **模板预设** — 提供预设模板（vision: 摄影/设计/宠物/人物，text: 技术文档/笔记日记/学习总结，speech: 会议记录/采访对话/学习总结）
+- **JSON 输出** — 统一要求 LLM 以 JSON 格式输出，解析稳定可靠
+- **Ollama 优化** — `think: false` 关闭思考过程，响应速度提升 20x+
+- **重新分析** — 清除旧描述和 auto 标签后重新入队，手动标签保留
+- **AI 状态增强** — 无队列记录时检查 ai_description/ai_summary 判断是否已完成，未分析素材显示"待分析"
+
+### 涉及文件
+
+- `quickmedia/prompt_config.py` — PromptConfig 类，管理 prompts.yaml 读写
+- `quickmedia/ai.py` — VisionAnalyzer / TextAnalyzer JSON 解析 + Ollama 优化
+- `quickmedia/api/server.py` — GET/PUT /api/prompts，重新分析清旧标签，AI 状态逻辑
+- `docs/v5/` — plan.md / design.md / tasks.md
+
+---
+
 ## 待定
 
 ### 素材管理
@@ -93,10 +115,7 @@
 
 ### 🔴 高优先级 —「装上就会用，用了离不开」
 
-**1. 自定义 AI Prompt**
-不同用户需要完全不同的分析维度：摄影师要光圈/构图，设计师要色彩/风格，普通人要「有奶奶的照片」。固定 prompt 对任何人都不是最优解。让用户写一句「识别照片里的人，用人名打标签」，使用价值翻倍。
-
-**2. AI 语义搜索**
+**1. AI 语义搜索**
 精确匹配搜不到「蓝色系」「开会」对应「blue」「meeting」的结果。语义搜索让自然语言直接找到素材，是 AI 能力最直观的体现。
 
 **3. 智能聚类 + 素材聚类**

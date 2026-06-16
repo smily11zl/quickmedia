@@ -162,3 +162,38 @@ AI 生成的标签以虚线边框展示。用户点击确认后变为实线，�
 ### 重新分析（Re-Analysis）
 
 手动触发素材的 AI 分析重新执行。支持单个素材重新分析和批量重新分析（网格/列表视图多选模式）。重新分析时所有分析任务（视觉/语音/文本）重新入队。素材记录最近一次分析完成时间（analyzed_at 字段）。
+
+### AI Prompt 配置（AI Prompt Configuration）
+
+AI 分析使用的 prompt 模板通过 `~/.asset-manager/prompts.yaml` 配置。包含四个分析类型（vision / text / speech / video_summary），每个类型结构：
+
+- `system_format` — 系统固定追加的 JSON 格式指令，不可通过 UI 编辑
+- `default` — 默认 prompt 模板（编号示例格式，用户可参考修改）
+- `custom` — 用户当前的自定义 prompt，非空时优先于 default
+- `presets` — 预定义的 prompt 模板列表，用户可选作自定义起点
+
+**Prompt 生效逻辑：**
+```
+custom 非空 → custom + system_format
+custom 为空 → default + system_format
+```
+
+**配置持久化：**
+- `prompts.yaml` 首次启动时从 `DEFAULT_PROMPTS` 自动生成
+- 后续启动时更新系统字段（default / system_format / presets），保留用户字段（custom）
+- custom 为空字符串时视为未设置，等效于用 default
+
+**JSON 解析：**
+- 所有分析类型的 system_format 要求 LLM 输出 JSON
+- 解析器提取 markdown 代码块或 `{...}` 中的 JSON
+- 解析失败时返回空结果（无 regex 回退）
+
+**Ollama 调用：**
+- `think: false` 放在请求顶层关闭思考过程，返回无 `thinking` 字段，速度提升 20x+
+- 当前使用 `think: true`（思考过程开启），输出更稳定但较慢
+- `[Ollama prompt]` 和 `[Ollama]` 日志打印每次调用的完整请求/响应
+
+**重新分析：**
+- 清除旧的 ai_description / ocr_text / ai_summary / transcript / video_summary
+- 删除旧 auto 标签后重新入队，手动标签不受影响
+- AI 状态优先取 ai_queue 状态，无队列时检查 ai_description/ai_summary 判断是否已完成

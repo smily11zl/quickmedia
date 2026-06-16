@@ -8,6 +8,7 @@ import os
 from quickmedia.database import Database
 from quickmedia.config import Config
 from quickmedia.ai import VisionAnalyzer, TextAnalyzer, TranscriptionAnalyzer, extract_video_frames, merge_frame_results
+from quickmedia.prompt_config import PromptConfig
 
 
 class AIWorker:
@@ -21,8 +22,9 @@ class AIWorker:
         ollama_url = config.get("ai.ollama_url") or "http://localhost:11434"
         model = config.get("ai.model") or "qwen3.5:9b"
         timeout = config.get("ai.timeout") or 300
-        self._vision = VisionAnalyzer(ollama_url=ollama_url, model=model, timeout=timeout)
-        self._text = TextAnalyzer(ollama_url=ollama_url, model=model, timeout=timeout)
+        self._prompt_config = PromptConfig(config.config_dir) if hasattr(config, 'config_dir') else None
+        self._vision = VisionAnalyzer(ollama_url=ollama_url, model=model, timeout=timeout, prompt_config=self._prompt_config)
+        self._text = TextAnalyzer(ollama_url=ollama_url, model=model, timeout=timeout, prompt_config=self._prompt_config)
         self._transcriber = TranscriptionAnalyzer()
 
     def enqueue(self, asset_id: int, task_type: str) -> None:
@@ -192,8 +194,12 @@ class AIWorker:
         if not asset["ai_description"] or not asset["ai_summary"]:
             return  # both analyses must be complete
         # Generate combined summary via Ollama
+        if self._prompt_config:
+            base = self._prompt_config.get_prompt("video_summary")
+        else:
+            base = "请将以下两段关于同一视频的描述融合为一段综合总结（200字以内）："
         prompt = (
-            "请将以下两段关于同一视频的描述融合为一段综合总结（200字以内）：\n\n"
+            f"{base}\n\n"
             f"画面内容：{asset['ai_description']}\n\n"
             f"语音内容：{asset['ai_summary']}\n\n"
             "综合总结："

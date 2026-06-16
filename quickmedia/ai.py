@@ -22,11 +22,13 @@ class VisionAnalyzer:
         model: str = "qwen3.5:9b",
         max_dimension: int = 672,
         timeout: int = 300,
+        prompt_config = None,
     ):
         self.ollama_url = ollama_url.rstrip("/")
         self.model = model
         self.max_dimension = max_dimension
         self.timeout = timeout
+        self._prompt_config = prompt_config
 
     def analyze(self, image_path: str) -> dict:
         """Analyze an image, returning {description, tags}."""
@@ -53,15 +55,18 @@ class VisionAnalyzer:
         return base64.b64encode(buf.getvalue()).decode("utf-8")
 
     def _build_prompt(self) -> str:
+        if self._prompt_config:
+            return self._prompt_config.get_prompt("vision")
         return (
             "请描述这张图片的场景、整体风格和色调（50字以内）。"
-            "然后列出图片中出现的具体元素（人物、动物、物体、建筑、文字等），"
-            "以逗号分隔的标签形式输出，标签使用中文。"
-            "如果图片中有文字，请识别并以逗号分隔输出。\n\n"
-            "输出格式：\n"
-            "描述：<描述文本>\n"
-            "标签：<标签1>, <标签2>, <标签3>, ...\n"
-            "文字：<文字1>, <文字2>, ..."
+            "然后列出图片中出现的具体人物、动物、物体、建筑、文字等关键元素。\n\n"
+            "标签示例：\n"
+            "标签1\n"
+            "标签2\n"
+            "标签3\n\n"
+            "请严格按以下JSON格式输出（只输出JSON，不要有其他文字）：\n"
+            '{"description": "图片描述", "tags": ["标签1", "标签2", "标签3"], "text": "文字内容"}\n'
+            "如果没有识别到文字，text 为空字符串。"
         )
 
     def _call_ollama(self, prompt: str, image_b64: str) -> str:
@@ -75,59 +80,80 @@ class VisionAnalyzer:
                 "images": [image_b64],
             }],
             "stream": False,
+            "think": True
         }).encode("utf-8")
 
+        print(f"[Ollama prompt] {prompt}", flush=True)
         req = urllib.request.Request(url, data=body)
         req.add_header("Content-Type", "application/json")
 
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return data.get("message", {}).get("content", "")
+            content = data.get("message", {}).get("content", "")
+            print(f"[Ollama] {content}", flush=True)
+            return content
+
+    @staticmethod
+    def _extract_json(text: str) -> str | None:
+        """Extract JSON object from LLM output that may contain markdown or extra text."""
+        # Try ```json ... ``` block first
+        m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if m:
+            return m.group(1)
+        # Try to find first { and last }
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            return text[start:end + 1]
+        return None
+
+    @staticmethod
+    def _parse_json_response(text: str) -> dict | None:
+        """Try to parse LLM output as JSON. Returns None if parsing fails."""
+        json_str = VisionAnalyzer._extract_json(text)
+        if json_str is None:
+            return None
+        try:
+            data = json.loads(json_str)
+            if isinstance(data, dict) and "description" in data:
+                return {
+                    "description": str(data.get("description", "")),
+                    "tags": data.get("tags", []) if isinstance(data.get("tags"), list) else [],
+                    "ocr_text": str(data.get("text", "")),
+                }
+        except (json.JSONDecodeError, TypeError, KeyError):
+            pass
+        return None
 
     def _parse_response(self, text: str) -> dict:
-        """Parse the model's response into {description, tags, ocr_text}."""
-        desc = ""
-        tags = []
-        ocr_text = ""
-
-        desc_match = re.search(r"描述[：:]\s*(.+?)(?:\n|标签|$)", text)
-        if desc_match:
-            desc = desc_match.group(1).strip()
-
-        tags_match = re.search(r"标签[：:]\s*(.+)", text)
-        if tags_match:
-            tags_str = tags_match.group(1).strip()
-            tags = [
-                t.strip().strip("<>")
-                for t in re.split(r"[，,、]", tags_str)
-                if t.strip().strip("<>")
-            ]
-
-        ocr_match = re.search(r"文字[：:]\s*(.+)", text)
-        if ocr_match:
-            ocr_text = ocr_match.group(1).strip()
-
-        return {"description": desc, "tags": tags, "ocr_text": ocr_text}
+        """Parse the model's JSON response into {description, tags, ocr_text}."""
+        result = self._parse_json_response(text)
+        if result is not None:
+            return result
+        return {"description": "", "tags": [], "ocr_text": ""}
 
 
 class TextAnalyzer:
     """Analyze text documents using Ollama text models."""
 
-    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = "qwen3.5:9b", timeout: int = 300):
+    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = "qwen3.5:9b", timeout: int = 300, prompt_config = None):
         self.ollama_url = ollama_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self._prompt_config = prompt_config
 
     def analyze(self, text: str) -> dict:
         """Analyze text, returning {summary, tags}."""
-        prompt = (
-            "总结以下文档内容（200字以内），并提取5-10个主题关键词作为标签。\n"
-            "关键词以逗号分隔，使用中文。\n\n"
-            "输出格式：\n"
-            "摘要：<摘要文本>\n"
-            "标签：<标签1>, <标签2>, ...\n\n"
-            f"文档内容：\n{text[:4000]}"
-        )
+        if self._prompt_config:
+            prompt = self._prompt_config.get_prompt("text") + f"\n\n文档内容：\n{text[:4000]}"
+        else:
+            prompt = (
+                "总结以下文档内容（200字以内），并提取5-10个主题关键词。\n\n"
+                "请严格按以下JSON格式输出（只输出JSON，不要有其他文字）：\n"
+                '{"summary": "文档摘要", "tags": ["标签1", "标签2", "标签3"]}\n'
+                "如果没有标签，tags 为空数组。\n\n"
+                f"文档内容：\n{text[:4000]}"
+            )
         response = self._call_ollama(prompt)
         return self._parse_response(response)
 
@@ -138,35 +164,47 @@ class TextAnalyzer:
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
+            "think": True
         }).encode("utf-8")
+        print(f"[Ollama prompt] {prompt}", flush=True)
         req = urllib.request.Request(url, data=body)
         req.add_header("Content-Type", "application/json")
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            return data.get("message", {}).get("content", "")
+            content = data.get("message", {}).get("content", "")
+            print(f"[Ollama] {content}", flush=True)
+            return content
 
-    def _parse_response(self, text: str) -> dict:
-        summary = ""
-        tags = []
-        m = re.search(r"摘要[：:]\s*(.+?)(?:\n|标签|$)", text)
-        if m:
-            summary = m.group(1).strip()
-        m = re.search(r"标签[：:]\s*(.+)", text)
-        if m:
-            tags = [t.strip().strip("<>") for t in re.split(r"[，,、]", m.group(1)) if t.strip().strip("<>")]
-        return {"summary": summary, "tags": tags}
+    @staticmethod
+    def _parse_response(text: str) -> dict:
+        """Parse text/speech JSON output into {summary, tags}."""
+        from quickmedia.ai import VisionAnalyzer
+        json_str = VisionAnalyzer._extract_json(text)
+        if json_str:
+            try:
+                data = json.loads(json_str)
+                if isinstance(data, dict) and "summary" in data:
+                    return {
+                        "summary": str(data.get("summary", "")),
+                        "tags": data.get("tags", []) if isinstance(data.get("tags"), list) else [],
+                    }
+            except (json.JSONDecodeError, TypeError, KeyError):
+                pass
+        return {"summary": "", "tags": []}
 
     def analyze_speech(self, transcript: str) -> dict:
         """Analyze a speech transcript, returning {summary, tags}."""
-        prompt = (
-            "以下是一段语音转录文本。请总结这段语音的主要内容（150字以内），"
-            "并提取5-10个主题关键词作为标签。\n"
-            "关键词以逗号分隔，使用中文。\n\n"
-            "输出格式：\n"
-            "摘要：<摘要文本>\n"
-            "标签：<标签1>, <标签2>, ...\n\n"
-            f"语音转录：\n{transcript[:4000]}"
-        )
+        if self._prompt_config:
+            prompt = self._prompt_config.get_prompt("speech") + f"\n\n语音转录：\n{transcript[:4000]}"
+        else:
+            prompt = (
+                "以下是一段语音转录文本。请总结这段语音的主要内容（150字以内），"
+                "并提取5-10个主题关键词。\n\n"
+                "请严格按以下JSON格式输出（只输出JSON，不要有其他文字）：\n"
+                '{"summary": "语音摘要", "tags": ["标签1", "标签2", "标签3"]}\n'
+                "如果没有标签，tags 为空数组。\n\n"
+                f"语音转录：\n{transcript[:4000]}"
+            )
         response = self._call_ollama(prompt)
         return self._parse_response(response)
 

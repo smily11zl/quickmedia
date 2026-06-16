@@ -98,5 +98,46 @@ whisper 语音转录、语音内容分析、视频综合总结、重新分析。
 
 详见 [docs/v4/plan.md](docs/v4/plan.md)、[docs/v4/design.md](docs/v4/design.md)、[docs/v4/tasks.md](docs/v4/tasks.md)。
 
+---
+
+## v5 — 自定义 AI Prompt
+
+### Problem Statement
+
+当前 AI 分析的 prompt 硬编码在代码中，所有用户使用同一套分析维度。摄影师想要构图/色彩分析，宠物主人想要品种识别，设计师想要版式/色彩方案——不同场景需要不同的分析指令。
+
+### Solution
+
+将 AI prompt 从代码中分离为配置文件，用户可自定义分析指令。系统固定追加格式尾巴确保解析不受影响。
+
+### Key Features
+
+- 独立配置文件 `prompts.yaml`，4 个分析类型 × 14 个预设模板（vision:4, text:3, speech:3, video:1+default）
+- 双层 prompt：用户自定义优先，系统默认兜底
+- JSON 统一输出格式，解析稳定
+- 设置面板 AI 分析 Tab 页：模板选择 + 自定义编辑 + 保存/恢复默认
+- 修改后即时生效（每次分析实时读取配置）
+- Ollama `think` 参数控制思考过程开关
+
+### Implementation Decisions
+
+- 配置位置：`~/.asset-manager/prompts.yaml`
+- 配置结构：扁平式（custom/presets 与 system_format/default 同级）
+- Prompt 读取：每次分析实时读取，不缓存
+- 预设模板硬编码在 `DEFAULT_PROMPTS` 中，启动时自动同步至 prompts.yaml
+- 输出格式：JSON（解析器提取 markdown 代码块或 `{...}`）
+- 重新分析：清除旧描述和 auto 标签后重新入队
+- AI 状态：检查 ai_description/ai_summary 判断是否已完成，无数据显示"待分析"
+
+### Testing Decisions
+
+- PromptConfig 类加载和 fallback 逻辑
+- API 读写端点
+- 各分析方法从配置读取而非硬编码
+
+### Tasks
+
+详见 [docs/v5/tasks.md](docs/v5/tasks.md)。
+
 
 ---

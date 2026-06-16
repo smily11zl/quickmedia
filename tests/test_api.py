@@ -267,3 +267,36 @@ class TestAssetFilters:
         data = r.json()
         assert data["total"] == 1
         assert data["items"][0]["filename"] == "cat.png"
+
+
+class TestPromptsAPI:
+    """v5 prompts configuration endpoints."""
+
+    def test_get_prompts_returns_all_types(self, client):
+        """GET /api/prompts returns all analysis types."""
+        r = client.get("/api/prompts")
+        assert r.status_code == 200
+        data = r.json()
+        for key in ("vision", "text", "speech", "video_summary"):
+            assert key in data
+            assert "presets" in data[key]
+            assert "custom" in data[key]
+
+    def test_update_prompts_custom(self, client):
+        """PUT /api/prompts updates custom prompt."""
+        r = client.put("/api/prompts", json={
+            "type": "vision",
+            "custom": "请分析图片的构图和色彩"
+        })
+        assert r.status_code == 200
+        # Verify the update persisted
+        r2 = client.get("/api/prompts")
+        assert r2.json()["vision"]["custom"] == "请分析图片的构图和色彩"
+
+    def test_update_invalid_type_returns_400(self, client):
+        """PUT with invalid type returns 400."""
+        r = client.put("/api/prompts", json={
+            "type": "invalid",
+            "custom": "test"
+        })
+        assert r.status_code == 400
