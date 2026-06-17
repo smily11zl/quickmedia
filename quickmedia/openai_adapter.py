@@ -32,10 +32,17 @@ class OpenAIAdapter:
                     "image_url": {"url": f"data:image/jpeg;base64,{img}"},
                 })
         body = {"model": self.model, "messages": [{"role": "user", "content": content}]}
+        # DeepSeek V4 models have thinking ON by default — explicitly disable
+        if self.provider_name == "deepseek":
+            body["thinking"] = {"type": "disabled"}
         print(f"[{self.provider_name}] model={self.model}", flush=True)
         print(f"[{self.provider_name} prompt] {prompt}", flush=True)
         data = self._request("POST", "/chat/completions", body)
-        content_text = data["choices"][0]["message"]["content"]
+        msg = data.get("choices", [{}])[0].get("message", {})
+        content_text = msg.get("content", "")
+        # Log reasoning_content if present (some providers output thinking separately)
+        if msg.get("reasoning_content"):
+            print(f"[{self.provider_name}] reasoning: {msg['reasoning_content'][:200]}", flush=True)
         print(f"[{self.provider_name}] {content_text}", flush=True)
         return content_text
 

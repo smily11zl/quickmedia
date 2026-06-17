@@ -2,6 +2,13 @@
 
 > Hermes Agent 进入本目录时自动加载。面向 AI 开发者。
 
+## 开发环境
+
+- **Python 虚拟环境**：`.venv/bin/python`（`~/Documents/quickmedia/.venv/`）
+- **测试命令**：`.venv/bin/python -m pytest tests/ -q`
+- **前端构建**：`cd frontend && npm run build`
+- **启动服务**：`.venv/bin/quickmedia serve 8088`
+
 ## 文档地图
 
 | 文件 | 类型 | 说明 |

@@ -346,17 +346,14 @@ def _cmd_serve(cfg: Config, db_path: str):
             except Exception as e:
                 print(f"[AIWorker] loop error: {e}", flush=True)
             time.sleep(5)
-    if ollama_ok:
-        # Reset any stuck "processing" tasks from previous interrupted runs
-        ai_db = Database(db_path)
-        stuck = ai_db.execute(
-            "UPDATE ai_queue SET status='pending', attempt=0 WHERE status='processing'"
-        )
-        ai_db.close()
-        ai_thread = threading.Thread(target=_ai_loop, daemon=True)
-        ai_thread.start()
-    else:
-        print("[AIWorker] 跳过启动，Ollama 未就绪", flush=True)
+    # Reset any stuck "processing" tasks from previous interrupted runs
+    ai_db = Database(db_path)
+    ai_db.execute(
+        "UPDATE ai_queue SET status='pending', attempt=0 WHERE status='processing'"
+    )
+    ai_db.close()
+    ai_thread = threading.Thread(target=_ai_loop, daemon=True)
+    ai_thread.start()
 
     print(f"\nQuickMedia Web UI: http://localhost:{port}")
     # Auto-open browser

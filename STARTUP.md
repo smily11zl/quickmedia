@@ -13,14 +13,12 @@
 
 ### Python 依赖
 
-```bash
-pip install pyyaml pillow fastapi uvicorn watchdog
-```
-
-或使用项目提供的虚拟环境（推荐）：
+项目自带 `pyproject.toml`，推荐使用虚拟环境安装：
 
 ```bash
-~/.hermes/hermes-agent/.venv/bin/pip install pyyaml pillow fastapi uvicorn watchdog
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[all]"
 ```
 
 ### 系统依赖
@@ -48,14 +46,14 @@ npm run build
 ```bash
 cd /Users/zengle/Documents/quickmedia
 
-# 方式一：系统 Python
-python3 -m quickmedia serve
+# 方式一：使用项目虚拟环境
+.venv/bin/quickmedia serve
 
-# 方式二：Hermes 虚拟环境
-~/.hermes/hermes-agent/.venv/bin/python -m quickmedia serve
+# 方式二：直接调用
+.venv/bin/python -m quickmedia serve
 
 # 指定端口
-~/.hermes/hermes-agent/.venv/bin/python -m quickmedia serve 8088
+.venv/bin/quickmedia serve 8088
 ```
 
 启动后自动：

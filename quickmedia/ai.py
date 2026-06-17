@@ -100,6 +100,8 @@ class VisionAnalyzer:
     @staticmethod
     def _extract_json(text: str) -> str | None:
         """Extract JSON object from LLM output that may contain markdown or extra text."""
+        # Strip <think>...</think> blocks (MiniMax, DeepSeek-R1, etc.)
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
         # Try ```json ... ``` block first
         m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
         if m:

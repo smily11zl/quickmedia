@@ -15,3 +15,9 @@ build/
 # env
 .venv/
 venv/
+
+# package
+*.egg-info/
+
+# tools
+.kilo/
