@@ -203,7 +203,7 @@ custom 为空 → default + system_format
 AI 模型的服务来源。通过不同协议适配器调用：
 
 - **Ollama** — 本地模型，`/api/chat` 协议，支持图片 base64
-- **OpenAI 兼容** — 远端模型，`/v1/chat/completions` 协议，一套适配器覆盖 OpenAI / DeepSeek / OpenRouter
+- **OpenAI 兼容** — 远端模型，`/v1/chat/completions` 协议，一套适配器覆盖 OpenAI / DeepSeek / OpenRouter / MiniMax
 - **Anthropic**（未来）— `/v1/messages` 协议，独立适配器
 - Provider 配置（名称/URL/Key）在模型管理页面管理，Key 存 `.env`，URL 存 `config.yaml`
 - Provider 添加/删除即时保存，任务模型绑定手动保存

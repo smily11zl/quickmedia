@@ -48,6 +48,22 @@ deepseek:
     - name: deepseek-v4-pro
       capabilities: [text]
 
+minimax:
+  url: https://api.minimaxi.com/v1
+  models:
+    - name: MiniMax-M3
+      capabilities: [vision, text]
+    - name: MiniMax-M2.7
+      capabilities: [vision, text]
+    - name: MiniMax-M2.5
+      capabilities: [vision, text]
+    - name: MiniMax-M2.1
+      capabilities: [vision, text]
+    - name: MiniMax-M2
+      capabilities: [vision, text]
+    - name: MiniMax-M1
+      capabilities: [text]
+
 openai:
   url: https://api.openai.com/v1
   models:

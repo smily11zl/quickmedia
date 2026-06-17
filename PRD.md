@@ -183,4 +183,28 @@ whisper 语音转录、语音内容分析、视频综合总结、重新分析。
 
 ### Tasks
 
-详见 [docs/v6/tasks.md](docs/v6/tasks.md)。---
+详见 [docs/v6/tasks.md](docs/v6/tasks.md)。
+
+---
+
+## v7 — MiniMax 支持 + 设置弹窗重构
+
+### Problem Statement
+
+缺少 MiniMax 国产模型支持。设置面板为侧边栏内嵌，占用空间且交互分散。
+
+### Solution
+
+| 需求 | 方案 |
+|------|------|
+| MiniMax | models.yaml 加 provider 条目，零代码改动 |
+| 设置弹窗 | 模态弹窗替代侧边栏，基础配置/模型管理/AI 提示词三 Tab |
+
+### Key Design Decisions
+
+- 关闭弹窗直接丢弃未保存内容
+- 保存按钮浅色初始，有修改后激活
+- Provider 删除前确认弹窗
+- MiniMax 走现有 OpenAI 适配器
+
+详见 [docs/v7/tasks.md](docs/v7/tasks.md)。---

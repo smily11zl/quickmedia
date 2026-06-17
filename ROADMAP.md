@@ -90,6 +90,26 @@
 
 ---
 
+## v7 — MiniMax 支持 + 设置弹窗重构 ✅
+
+### 核心功能
+
+- **MiniMax 原厂支持** — 新增 minimax provider，6 个模型（M3/M2.7/M2.5/M2.1/M2/M1）
+- **设置弹窗重构** — 模态弹窗替代侧边栏面板，基础配置/模型管理/AI 提示词三个 Tab
+- **保存按钮激活** — 有修改才变亮，无修改保持浅色
+- **Provider 删除确认** — 删除前弹窗确认
+
+### 涉及文件
+
+| 文件 | 新增/修改 |
+|------|----------|
+| `quickmedia/models.yaml` | 修改 |
+| `frontend/src/SettingsModal.tsx` | 新增 |
+| `frontend/src/App.tsx` | 修改 |
+| `frontend/src/ModelManager.tsx` | 修改 |
+
+---
+
 ## 待定
 
 ### 素材管理

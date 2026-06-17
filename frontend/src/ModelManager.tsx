@@ -36,6 +36,7 @@ const BUILTIN_PROVIDERS: ProviderInfo[] = [
   {name: "openrouter", url: "https://openrouter.ai/api/v1"},
   {name: "deepseek", url: "https://api.deepseek.com/v1"},
   {name: "openai", url: "https://api.openai.com/v1"},
+  {name: "minimax", url: "https://api.minimaxi.com/v1"},
 ];
 
 function saveProviders(providers: Record<string, ProviderData>, taskModels: Record<string, TaskBinding>): Promise<boolean> {
@@ -44,7 +45,7 @@ function saveProviders(providers: Record<string, ProviderData>, taskModels: Reco
     .then(r => r.ok === true);
 }
 
-export default function ModelManager({ onClose }: { onClose: () => void }) {
+export default function ModelManager({ onClose, standalone = true }: { onClose: () => void; standalone?: boolean }) {
   const [tab, setTab] = useState<"providers" | "tasks">("providers");
   const [selProvider, setSelProvider] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -56,11 +57,13 @@ export default function ModelManager({ onClose }: { onClose: () => void }) {
   const [openModelPicker, setOpenModelPicker] = useState<string | null>(null);
   const [editProviders, setEditProviders] = useState<Record<string, ProviderData>>({});
   const [editTaskModels, setEditTaskModels] = useState<Record<string, TaskBinding>>({});
+  const [initTaskModels, setInitTaskModels] = useState<Record<string, TaskBinding>>({});
 
   useEffect(() => {
     fetch("/api/providers").then(r => r.json()).then(d => {
       setEditProviders({...(d.providers || {})});
       setEditTaskModels({...(d.task_models || {})});
+      setInitTaskModels({...(d.task_models || {})});
       const m: Record<string, {name:string;capabilities:string[]}[]> = {};
       Object.keys(d.providers || {}).forEach((p: string) => {
         fetch(`/api/providers/${p}/models`).then(r => r.json()).then(r2 => {
@@ -91,6 +94,7 @@ export default function ModelManager({ onClose }: { onClose: () => void }) {
   };
 
   const removeProvider = (name: string) => {
+    if (!confirm(`确定删除 provider "${name}"？`)) return;
     const updated = {...editProviders};
     delete updated[name];
     setEditProviders(updated);
@@ -123,6 +127,7 @@ export default function ModelManager({ onClose }: { onClose: () => void }) {
   const saveTasks = () => {
     saveProviders(editProviders, editTaskModels).then(ok => {
       setMsg(ok ? "已保存" : "保存失败");
+      if (ok) setInitTaskModels({...editTaskModels});
       setTimeout(() => setMsg(""), ok ? 2000 : 3000);
     });
   };
@@ -142,12 +147,16 @@ export default function ModelManager({ onClose }: { onClose: () => void }) {
     return caps.map(c => labels[c]||c).join("/") || "通用";
   };
 
+  const tasksDirty = JSON.stringify(editTaskModels) !== JSON.stringify(initTaskModels);
+
   return (
-    <div className="w-96 border-l overflow-y-auto p-4 flex flex-col gap-4" style={{borderColor: S.h, backgroundColor: S.c}}>
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium" style={{color: S.i}}>模型管理</h2>
-        <button onClick={onClose} className="text-xs px-2 py-1 rounded" style={{color: S.ms, backgroundColor: S.s}}>✕ 关闭</button>
-      </div>
+    <div className={`w-full p-4 flex flex-col gap-4 ${standalone ? 'overflow-y-auto' : ''}`} style={{borderColor: S.h, backgroundColor: S.c}}>
+      {standalone && (
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium" style={{color: S.i}}>模型管理</h2>
+          <button onClick={onClose} className="text-xs px-2 py-1 rounded" style={{color: S.ms, backgroundColor: S.s}}>✕ 关闭</button>
+        </div>
+      )}
 
       <div className="flex gap-1 p-0.5 rounded-md" style={{backgroundColor: S.s}}>
         <button onClick={() => setTab("providers")} className="flex-1 text-xs py-1 rounded" style={{backgroundColor: tab === "providers" ? S.c : "transparent", color: tab === "providers" ? S.i : S.ms}}>Provider 管理</button>
@@ -156,8 +165,22 @@ export default function ModelManager({ onClose }: { onClose: () => void }) {
 
       {tab === "providers" && (
         <div className="flex flex-col gap-3">
-          {Object.keys(editProviders).length > 0 ? (
-            <div className="flex flex-col gap-2">
+          {availableProviders.length > 0 && (
+            <div className="p-2 rounded-md border" style={{borderColor: S.h, backgroundColor: S.s}}>
+              <h3 className="text-[11px] font-medium mb-2" style={{color: S.ms}}>添加 Provider</h3>
+              <div className="flex gap-1.5">
+                <select value={selProvider} onChange={e => setSelProvider(e.target.value)} className="text-[10px] px-2 py-1.5 rounded flex-1 outline-none" style={{border: `1px solid ${S.h}`, color: S.i, backgroundColor: S.c}}>
+                  <option value="">选择 provider</option>
+                  {availableProviders.map(p => <option key={p.name} value={p.name}>{p.name} — {p.url}</option>)}
+                </select>
+                <input placeholder="API Key" value={apiKey} onChange={e => setApiKey(e.target.value)} className="text-[10px] px-2 py-1 rounded flex-1 outline-none" style={{border: `1px solid ${S.h}`, color: S.i, backgroundColor: S.c}} />
+                <button onClick={() => addProvider()} className="text-[10px] px-3 py-1 rounded" style={{backgroundColor: S.d, color: S.b}}>添加</button>
+              </div>
+            </div>
+          )}
+
+          {Object.keys(editProviders).length > 0 && (
+            <div className="grid grid-cols-2 gap-2">
               {Object.entries(editProviders).map(([name, p]) => (
                 <div key={name} className="p-2 rounded-md border" style={{borderColor: S.h, backgroundColor: S.s}}>
                   <div className="flex items-center justify-between">
@@ -185,22 +208,6 @@ export default function ModelManager({ onClose }: { onClose: () => void }) {
                 </div>
               ))}
             </div>
-          ) : (
-            <p className="text-[10px]" style={{color: S.ms}}>暂无 provider，请添加</p>
-          )}
-
-          {availableProviders.length > 0 && (
-            <div className="p-2 rounded-md border" style={{borderColor: S.h, backgroundColor: S.s}}>
-              <h3 className="text-[11px] font-medium mb-2" style={{color: S.ms}}>添加 Provider</h3>
-              <div className="flex flex-col gap-1.5">
-                <select value={selProvider} onChange={e => setSelProvider(e.target.value)} className="text-[10px] px-2 py-1.5 rounded outline-none" style={{border: `1px solid ${S.h}`, color: S.i, backgroundColor: S.c}}>
-                  <option value="">选择 provider</option>
-                  {availableProviders.map(p => <option key={p.name} value={p.name}>{p.name} — {p.url}</option>)}
-                </select>
-                <input placeholder="API Key" value={apiKey} onChange={e => setApiKey(e.target.value)} className="text-[10px] px-2 py-1 rounded outline-none" style={{border: `1px solid ${S.h}`, color: S.i, backgroundColor: S.c}} />
-                <button onClick={addProvider} className="text-[10px] px-3 py-1 rounded mt-1" style={{backgroundColor: S.d, color: S.b}}>添加</button>
-              </div>
-            </div>
           )}
           {msg && <span className="text-[10px]" style={{color: msg.includes("失败") ? "#c64545" : S.m}}>{msg}</span>}
         </div>
@@ -211,7 +218,7 @@ export default function ModelManager({ onClose }: { onClose: () => void }) {
           {Object.keys(editProviders).length === 0 && (
             <p className="text-[10px]" style={{color: S.ms}}>请先在 Provider 管理中添加 provider</p>
           )}
-          <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {Object.entries(TASK_LABELS).map(([taskType, label]) => {
               const binding = editTaskModels[taskType] || {provider: "", model: ""};
               const models_ = providerModels(binding.provider);
@@ -248,7 +255,7 @@ export default function ModelManager({ onClose }: { onClose: () => void }) {
             })}
           </div>
           <div className="flex gap-2 items-center">
-            <button onClick={saveTasks} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor: S.r, color: S.w, cursor: "pointer"}}>保存配置</button>
+            <button onClick={saveTasks} className="text-xs px-3 py-1.5 rounded-md" style={{backgroundColor: tasksDirty ? S.r : S.d, color: tasksDirty ? S.w : S.ms, cursor: tasksDirty ? "pointer" : "default"}}>保存配置</button>
             {msg && <span className="text-[10px]" style={{color: msg.includes("失败") ? "#c64545" : S.m}}>{msg}</span>}
           </div>
         </div>

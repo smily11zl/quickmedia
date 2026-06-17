@@ -334,6 +334,23 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'text')", (aid,))
         return {"ok": True, "message": f"已重新入队 {len(asset_ids)} 个素材"}
 
+    @app.get("/api/assets/{asset_id}/preview")
+    def preview_asset(asset_id: int):
+        _db = _get_db(app)
+        rows = _db.execute("SELECT asset_type, path FROM assets WHERE id=?", (asset_id,))
+        if not rows:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        asset_type = rows[0]["asset_type"]
+        path = rows[0]["path"]
+        if asset_type not in ("document",):
+            return {"text": ""}
+        try:
+            with open(path, "r", errors="replace") as f:
+                text = f.read()[:200]
+            return {"text": text.strip()}
+        except Exception:
+            return {"text": ""}
+
     @app.post("/api/assets/{asset_id}/analyze")
     def analyze_asset(asset_id: int):
         from quickmedia.ai import VisionAnalyzer
