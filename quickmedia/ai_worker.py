@@ -7,7 +7,7 @@ tasks in the background without blocking file scanning.
 import os
 from quickmedia.database import Database
 from quickmedia.config import Config
-from quickmedia.ai import VisionAnalyzer, TextAnalyzer, TranscriptionAnalyzer, extract_video_frames, merge_frame_results
+from quickmedia.ai import VisionAnalyzer, TextAnalyzer, TranscriptionAnalyzer, OllamaAdapter, merge_frame_results, extract_video_frames
 from quickmedia.prompt_config import PromptConfig
 
 
@@ -19,13 +19,60 @@ class AIWorker:
     def __init__(self, db: Database, config: Config):
         self.db = db
         self.config = config
-        ollama_url = config.get("ai.ollama_url") or "http://localhost:11434"
-        model = config.get("ai.model") or "qwen3.5:9b"
         timeout = config.get("ai.timeout") or 300
+        self._timeout = timeout
         self._prompt_config = PromptConfig(config.config_dir) if hasattr(config, 'config_dir') else None
-        self._vision = VisionAnalyzer(ollama_url=ollama_url, model=model, timeout=timeout, prompt_config=self._prompt_config)
-        self._text = TextAnalyzer(ollama_url=ollama_url, model=model, timeout=timeout, prompt_config=self._prompt_config)
         self._transcriber = TranscriptionAnalyzer()
+
+        # Load provider registry
+        import os as _os
+        self._config_dir = config.config_dir if hasattr(config, 'config_dir') else _os.path.expanduser("~/.asset-manager")
+        self._env = {}
+        env_path = _os.path.join(self._config_dir, ".env")
+        if _os.path.isfile(env_path):
+            with open(env_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        self._env[k] = v
+        from quickmedia.providers import ProviderRegistry
+        models_path = _os.path.join(self._config_dir, "models.yaml")
+        self._registry = ProviderRegistry(config, models_path)
+
+    def _get_adapter(self, task_type: str):
+        """Create an adapter for the given task type based on task_models config."""
+        # Re-read config from disk to pick up live changes
+        self.config._load()
+        from quickmedia.providers import ProviderRegistry
+        self._registry = ProviderRegistry(self.config, os.path.join(self._config_dir, "models.yaml"))
+        # Also refresh .env
+        env_path = os.path.join(self._config_dir, ".env")
+        if os.path.isfile(env_path):
+            self._env = {}
+            with open(env_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        self._env[k] = v
+        binding = self._registry.get_task_binding(task_type)
+        if not binding:
+            # Fall back to ollama provider config
+            ollama_url = self.config.get("providers.ollama.url") or "http://localhost:11434"
+            ollama_model = self.config.get("task_models.vision.model") or "qwen3.5:9b"
+            return OllamaAdapter(ollama_url, ollama_model, self._timeout)
+        provider_name = binding["provider"]
+        model = binding["model"]
+        provider = self._registry.get_provider(provider_name) or {}
+        url = provider.get("url", "")
+        api_key = self._env.get(f"{provider_name.upper()}_API_KEY", "")
+        if provider_name == "ollama":
+            api_key = api_key or "ollama"
+            return OllamaAdapter(url.rstrip("/"), model, self._timeout)
+        else:
+            from quickmedia.openai_adapter import OpenAIAdapter
+            return OpenAIAdapter(base_url=url, api_key=api_key, model=model, timeout=self._timeout, provider_name=provider_name)
 
     def enqueue(self, asset_id: int, task_type: str) -> None:
         """Add an AI analysis task to the queue (idempotent)."""
@@ -114,7 +161,9 @@ class AIWorker:
         return count
 
     def _process_vision(self, asset_id: int, path: str) -> None:
-        result = self._vision.analyze(path)
+        adapter = self._get_adapter("vision")
+        analyzer = VisionAnalyzer(adapter=adapter, prompt_config=self._prompt_config)
+        result = analyzer.analyze(path)
         name = self.db.execute("SELECT filename FROM assets WHERE id=?", (asset_id,))[0]["filename"]
         print(f"[AIWorker] vision result for {name}: desc={bool(result.get('description'))}, tags={len(result.get('tags',[]))}, ocr={bool(result.get('ocr_text'))}", flush=True)
         if result.get("description"):
@@ -138,8 +187,10 @@ class AIWorker:
         frames = extract_video_frames(path, frame_dir, num_frames)
         if frames:
             frame_results = []
+            adapter = self._get_adapter("vision")
             for fp in frames:
-                frame_results.append(self._vision.analyze(fp))
+                analyzer = VisionAnalyzer(adapter=adapter, prompt_config=self._prompt_config)
+                frame_results.append(analyzer.analyze(fp))
             merged = merge_frame_results(frame_results)
             if merged.get("description"):
                 self.db.execute(
@@ -169,7 +220,9 @@ class AIWorker:
             )[0]["filename"]
             print(f"[AIWorker] 转录完成: {name} ({len(transcript)}字)", flush=True)
             # Run speech analysis on transcript
-            result = self._text.analyze_speech(transcript)
+            adapter = self._get_adapter("speech")
+            analyzer = TextAnalyzer(adapter=adapter, prompt_config=self._prompt_config)
+            result = analyzer.analyze_speech(transcript)
             if result.get("summary"):
                 self.db.execute(
                     "UPDATE assets SET ai_summary=? WHERE id=?",
@@ -193,6 +246,8 @@ class AIWorker:
             return
         if not asset["ai_description"] or not asset["ai_summary"]:
             return  # both analyses must be complete
+
+        adapter = self._get_adapter("video_summary")
         # Generate combined summary via Ollama
         if self._prompt_config:
             base = self._prompt_config.get_prompt("video_summary")
@@ -204,7 +259,7 @@ class AIWorker:
             f"语音内容：{asset['ai_summary']}\n\n"
             "综合总结："
         )
-        response = self._text._call_ollama(prompt)
+        response = adapter.chat(prompt)
         if response:
             self.db.execute(
                 "UPDATE assets SET video_summary=? WHERE id=?",
@@ -218,7 +273,9 @@ class AIWorker:
     def _process_text(self, asset_id: int, path: str) -> None:
         text = self._read_text(path)
         if text:
-            result = self._text.analyze(text)
+            adapter = self._get_adapter("text")
+            analyzer = TextAnalyzer(adapter=adapter, prompt_config=self._prompt_config)
+            result = analyzer.analyze(text)
             if result.get("summary"):
                 self.db.execute(
                     "UPDATE assets SET ai_summary=? WHERE id=?",

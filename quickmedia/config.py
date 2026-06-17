@@ -17,6 +17,17 @@ DEFAULT_CONFIG = {
         "timeout": 300,
         "video_frames": 1,
     },
+    "providers": {
+        "ollama": {
+            "url": "http://localhost:11434",
+        },
+    },
+    "task_models": {
+        "vision": {"provider": "ollama", "model": "qwen3.5:9b"},
+        "text": {"provider": "ollama", "model": "qwen3.5:9b"},
+        "speech": {"provider": "ollama", "model": "qwen3.5:9b"},
+        "video_summary": {"provider": "ollama", "model": "qwen3.5:9b"},
+    },
     "watch_paths": [],
     "formats": {
         "image": ["jpg", "jpeg", "png", "gif", "webp", "heic", "svg"],
@@ -52,7 +63,9 @@ class Config:
         self._filepath = os.path.join(config_dir, config_filename)
         self._data: dict = self._deep_copy(DEFAULT_CONFIG)
         self._load()
+        self._migrate_if_needed()
         self._resolve_paths()
+        self._ensure_models_yaml()
 
     def _resolve_paths(self) -> None:
         """Fill in computed paths that depend on config_dir."""
@@ -134,3 +147,51 @@ class Config:
                 Config._deep_merge(base[key], value)
             else:
                 base[key] = value
+
+    def _migrate_if_needed(self) -> None:
+        """Migrate old ai.* config to providers + task_models if needed."""
+        if self._data.get("providers") or not self._data.get("ai", {}).get("ollama_url"):
+            return
+        ollama_url = self._data["ai"]["ollama_url"]
+        model = self._data["ai"].get("model", "qwen3.5:9b")
+        self._data.setdefault("providers", {})
+        self._data["providers"]["ollama"] = {"url": ollama_url}
+        self._data["task_models"] = {
+            task: {"provider": "ollama", "model": model}
+            for task in ("vision", "text", "speech", "video_summary")
+        }
+        self._save()
+
+    def _ensure_models_yaml(self) -> None:
+        """Copy models.yaml from package to user dir on first startup; merge on upgrade."""
+        import shutil
+        package_models = os.path.join(os.path.dirname(__file__), "models.yaml")
+        user_models = os.path.join(self.config_dir, "models.yaml")
+        if not os.path.isfile(package_models):
+            return
+        if not os.path.isfile(user_models):
+            shutil.copy2(package_models, user_models)
+            return
+        with open(package_models, "r") as f:
+            pkg = yaml.safe_load(f)
+        with open(user_models, "r") as f:
+            usr = yaml.safe_load(f)
+        changed = False
+        for provider_name, pkg_data in (pkg or {}).items():
+            pkg_models = pkg_data.get("models", []) if isinstance(pkg_data, dict) else []
+            if provider_name not in usr:
+                usr[provider_name] = pkg_data
+                changed = True
+            elif isinstance(usr[provider_name], dict) and "models" in usr[provider_name]:
+                usr_names = {m["name"] for m in usr[provider_name].get("models", [])}
+                for m in pkg_models:
+                    if m["name"] not in usr_names:
+                        usr[provider_name]["models"].append(m)
+                        changed = True
+            else:
+                # Old flat format — replace with new structure
+                usr[provider_name] = pkg_data
+                changed = True
+        if changed:
+            with open(user_models, "w") as f:
+                yaml.dump(usr, f, allow_unicode=True, sort_keys=False)

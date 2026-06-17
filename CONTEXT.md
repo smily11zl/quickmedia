@@ -197,3 +197,33 @@ custom 为空 → default + system_format
 - 清除旧的 ai_description / ocr_text / ai_summary / transcript / video_summary
 - 删除旧 auto 标签后重新入队，手动标签不受影响
 - AI 状态优先取 ai_queue 状态，无队列时检查 ai_description/ai_summary 判断是否已完成
+
+### Provider（模型提供方）
+
+AI 模型的服务来源。通过不同协议适配器调用：
+
+- **Ollama** — 本地模型，`/api/chat` 协议，支持图片 base64
+- **OpenAI 兼容** — 远端模型，`/v1/chat/completions` 协议，一套适配器覆盖 OpenAI / DeepSeek / OpenRouter
+- **Anthropic**（未来）— `/v1/messages` 协议，独立适配器
+- Provider 配置（名称/URL/Key）在模型管理页面管理，Key 存 `.env`，URL 存 `config.yaml`
+- Provider 添加/删除即时保存，任务模型绑定手动保存
+- AIWorker 每个任务重新读取磁盘配置，修改绑定无需重启
+- 日志格式 `[provider] model=xxx` → `[provider prompt] ...` → `[provider] response`
+
+### 模型目录（models.yaml）
+
+`quickmedia/models.yaml` 为出厂模型目录，首次启动复制到 `~/.asset-manager/`，后续升级合并。按 provider 组织，每个 provider 包含 URL 和模型列表（名称+能力标注）。当前 5 个 provider 共 26 个模型。
+
+Provider 配置在 `config.yaml` 的 `providers` 字段（URL + 模型列表），API Key 存在 `~/.asset-manager/.env`。按协议分类而非按公司分类。
+
+### Task Model Binding（任务模型绑定）
+
+将分析任务类型（vision / text / speech / video_summary）绑定到具体 provider + model。配置在 `config.yaml` 的 `task_models` 字段。
+
+### Model Capabilities（模型能力）
+
+标注模型支持的分析类型，用于设置面板下拉筛选可选模型。定义在 `quickmedia/models.yaml`（随项目发布），capabilities 包括：vision / text / speech。首次启动自动复制到 `~/.asset-manager/models.yaml`，升级时合并新增。
+
+### think 参数
+
+Ollama 请求顶层的布尔参数，控制是否输出思考过程。`think: false` 关闭后响应速度提升 20x+，无 `thinking` 字段。当前使用 `think: true`，输出更稳定。

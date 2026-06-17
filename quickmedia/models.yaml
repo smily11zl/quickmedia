@@ -1,0 +1,57 @@
+ollama:
+  url: http://localhost:11434/v1
+  models:
+    - name: qwen3.5:9b
+      capabilities: [vision, text, speech]
+
+openrouter:
+  url: https://openrouter.ai/api/v1
+  models:
+    - name: openai/gpt-4o
+      capabilities: [vision, text]
+    - name: openai/gpt-4o-mini
+      capabilities: [vision, text]
+    - name: anthropic/claude-sonnet-4
+      capabilities: [vision, text]
+    - name: anthropic/claude-haiku-4
+      capabilities: [text]
+    - name: google/gemini-2.5-flash
+      capabilities: [vision, text]
+    - name: google/gemini-2.5-pro
+      capabilities: [vision, text]
+    - name: deepseek/deepseek-chat
+      capabilities: [text]
+    - name: deepseek/deepseek-v4-pro
+      capabilities: [text]
+    - name: deepseek/deepseek-r1
+      capabilities: [text]
+    - name: qwen/qwen3.5-plus-02-15
+      capabilities: [vision, text]
+    - name: qwen/qwen3.5-max
+      capabilities: [vision, text]
+    - name: qwen/qwen3.5-coder
+      capabilities: [text]
+    - name: qwen/qwen3.7-plus
+      capabilities: [vision, text]
+    - name: qwen/qwen3.7-max
+      capabilities: [vision, text]
+
+deepseek:
+  url: https://api.deepseek.com/v1
+  models:
+    - name: deepseek-chat
+      capabilities: [text, speech]
+    - name: deepseek-reasoner
+      capabilities: [text]
+    - name: deepseek-v4-flash
+      capabilities: [text, speech]
+    - name: deepseek-v4-pro
+      capabilities: [text]
+
+openai:
+  url: https://api.openai.com/v1
+  models:
+    - name: gpt-4o
+      capabilities: [vision, text]
+    - name: gpt-4o-mini
+      capabilities: [vision, text]

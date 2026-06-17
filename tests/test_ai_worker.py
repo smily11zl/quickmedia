@@ -70,7 +70,11 @@ class TestAIQueue:
         asset_id = _create_asset(db, path)
         worker = AIWorker(db=db, config=cfg)
         # Mock VisionAnalyzer to avoid real Ollama calls
-        worker._vision.analyze = lambda p: {"description": "a red square", "tags": ["红色", "方块"]}
+        from quickmedia.ai import OllamaAdapter
+        class _MockAdp:
+            def chat(self, prompt, images=None):
+                return '{"description": "a red square", "tags": ["红色", "方块"], "text": ""}'
+        worker._get_adapter = lambda t: _MockAdp()
         worker.enqueue(asset_id, "vision")
         worker.process_queue()
 
@@ -88,14 +92,17 @@ class TestAIQueue:
         path = os.path.join(d, "img.png")
         asset_id = _create_asset(db, path)
         worker = AIWorker(db=db, config=cfg)
-        # Simulate 2 timeouts then success on 3rd try
-        call_count = [0]
-        def flaky_analyze(p):
-            call_count[0] += 1
-            if call_count[0] < 3:
-                raise TimeoutError("timed out")
-            return {"description": "finally worked", "tags": ["ok"]}
-        worker._vision.analyze = flaky_analyze
+        call_count = 0
+        def flaky_chat(prompt, images=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise TimeoutError("slow")
+            return '{"description": "ok", "tags": ["test"], "text": ""}'
+        class _MockFlaky:
+            def chat(self, prompt, images=None):
+                return flaky_chat(prompt, images)
+        worker._get_adapter = lambda t: _MockFlaky()
         worker.enqueue(asset_id, "vision")
         worker.process_queue()
 
@@ -113,7 +120,10 @@ class TestAIQueue:
         path = os.path.join(d, "img.png")
         asset_id = _create_asset(db, path)
         worker = AIWorker(db=db, config=cfg)
-        worker._vision.analyze = lambda p: (_ for _ in ()).throw(TimeoutError("always fails"))
+        class _FailAdp:
+            def chat(self, prompt, images=None):
+                raise TimeoutError("always fails")
+        worker._get_adapter = lambda t: _FailAdp()
         worker.enqueue(asset_id, "vision")
         worker.process_queue()
 
@@ -149,10 +159,10 @@ class TestTranscribeTask:
         worker = AIWorker(db=db, config=cfg)
         # Mock both transcriber and text analyzer
         worker._transcriber.transcribe = lambda p: "今天我们讨论预算审批"
-        worker._text.analyze_speech = lambda t: {
-            "summary": "讨论预算相关事项",
-            "tags": ["会议", "预算", "审批"],
-        }
+        class _SpkAdp2:
+            def chat(self, prompt, images=None):
+                return '{"summary": "讨论预算相关事项", "tags": ["会议", "预算", "审批"]}'
+        worker._get_adapter = lambda t: _SpkAdp2()
         worker.enqueue(asset_id, "transcribe")
         worker.process_queue()
 
@@ -190,10 +200,10 @@ class TestTranscribeTask:
 
         worker = AIWorker(db=db, config=cfg)
         worker._transcriber.transcribe = lambda p: "今天我们讨论Q3预算"
-        worker._text.analyze_speech = lambda t: {
-            "summary": "讨论Q3预算分配",
-            "tags": ["会议", "预算"],
-        }
+        class _SpkAdp:
+            def chat(self, prompt, images=None):
+                return '{"summary": "讨论Q3预算分配", "tags": ["会议", "预算"]}'
+        worker._get_adapter = lambda t: _SpkAdp()
         # Mock the combined summary generation
         worker._try_generate_video_summary = lambda aid: (
             db.execute(

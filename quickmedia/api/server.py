@@ -365,20 +365,26 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     @app.get("/api/config")
     def get_config():
         cfg = Config()
+        # Read ollama info from provider system
+        ollama_url = cfg.get("providers.ollama.url") or cfg.get("ai.ollama_url") or "http://localhost:11434"
+        ollama_model = cfg.get("task_models.vision.model") or cfg.get("ai.model") or "qwen3.5:9b"
         return {
-            "ollama_url": cfg.get("ai.ollama_url"),
-            "model": cfg.get("ai.model"),
+            "ollama_url": ollama_url,
+            "model": ollama_model,
             "video_frames": cfg.get("ai.video_frames"),
             "timeout": cfg.get("ai.timeout"),
+            "providers": cfg.get("providers") or {},
+            "task_models": cfg.get("task_models") or {},
         }
 
     @app.put("/api/config")
     def update_config(body: dict):
         cfg = Config()
         if "ollama_url" in body:
-            cfg.set("ai.ollama_url", body["ollama_url"])
+            cfg.set("providers.ollama.url", body["ollama_url"])
         if "model" in body:
-            cfg.set("ai.model", body["model"])
+            for task in ("vision", "text", "speech", "video_summary"):
+                cfg.set(f"task_models.{task}.model", body["model"])
         if "video_frames" in body:
             cfg.set("ai.video_frames", int(body["video_frames"]))
         if "timeout" in body:
@@ -387,16 +393,13 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
 
     @app.post("/api/config/test-ollama")
     def test_ollama():
-        try:
-            import urllib.request, json
-            cfg = Config()
-            url = f"{cfg.get('ai.ollama_url')}/api/tags"
-            with urllib.request.urlopen(url, timeout=5) as resp:
-                data = json.loads(resp.read())
-                models = [m["name"] for m in data.get("models", [])]
-                return {"connected": True, "models": models}
-        except Exception as e:
-            return {"connected": False, "error": str(e)}
+        cfg = Config()
+        url = cfg.get("providers.ollama.url") or cfg.get("ai.ollama_url") or "http://localhost:11434"
+        url = url.rstrip("/") + "/v1"
+        from quickmedia.openai_adapter import OpenAIAdapter
+        adapter = OpenAIAdapter(base_url=url, api_key="ollama", model="test", timeout=5)
+        ok = adapter.test()
+        return {"connected": ok, "error": "" if ok else "Connection failed"}
 
     # ── Prompts ──────────────────────────────────────────────────
 
@@ -416,6 +419,109 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             raise HTTPException(status_code=400, detail="Invalid analysis type")
         pc.update_custom(analysis_type, custom)
         return {"ok": True}
+
+    # ── Providers ─────────────────────────────────────────────────
+
+    @app.get("/api/providers")
+    def get_providers():
+        cfg = Config(config_dir=app.extra["config_dir"])
+        providers = cfg.get("providers") or {}
+        # Merge API keys from .env
+        env_path = os.path.join(app.extra["config_dir"], ".env")
+        if os.path.isfile(env_path):
+            with open(env_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        # Match provider name: OPENROUTER_API_KEY -> openrouter
+                        if k.endswith("_API_KEY"):
+                            pname = k[:-8].lower()
+                            if pname in providers:
+                                providers[pname] = dict(providers[pname])
+                                providers[pname]["api_key"] = v
+        return {
+            "providers": providers,
+            "task_models": cfg.get("task_models") or {},
+        }
+
+    @app.get("/api/providers/{provider_name}/models")
+    def get_provider_models(provider_name: str):
+        from quickmedia.providers import ProviderRegistry
+        user_models = os.path.join(app.extra["config_dir"], "models.yaml")
+        cfg = Config(config_dir=app.extra["config_dir"])
+        registry = ProviderRegistry(cfg, user_models)
+        models = registry.get_models(provider_name)
+        return {"models": [{"name": m["name"], "capabilities": m.get("capabilities", [])} for m in models]}
+
+    @app.put("/api/providers")
+    def update_providers(body: dict):
+        cfg = Config(config_dir=app.extra["config_dir"])
+        providers = body.get("providers", {})
+        task_models = body.get("task_models", {})
+
+        # Save provider URLs to config.yaml, strip api_key
+        config_providers = {}
+        for name, p in providers.items():
+            config_providers[name] = {"url": p.get("url", "")}
+
+        # Save API keys to .env
+        env_lines = []
+        for name, p in providers.items():
+            if p.get("api_key"):
+                env_lines.append(f"{name.upper()}_API_KEY={p['api_key']}")
+
+        # Write non-key settings to config.yaml
+        cfg.set("providers", config_providers)
+        cfg.set("task_models", task_models)
+
+        # Write API keys to .env
+        env_path = os.path.join(app.extra["config_dir"], ".env")
+        existing = {}
+        if os.path.isfile(env_path):
+            with open(env_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        existing[k] = v
+        for line in env_lines:
+            k, v = line.split("=", 1)
+            existing[k] = v
+        with open(env_path, "w") as f:
+            for k, v in existing.items():
+                f.write(f"{k}={v}\n")
+
+        return {"ok": True}
+
+    @app.post("/api/providers/test")
+    def test_provider(body: dict):
+        provider_name = body.get("provider", "")
+        url = body.get("url", "")
+        if not url:
+            raise HTTPException(status_code=400, detail="URL is required")
+        # Read API key from .env for this provider
+        api_key = ""
+        env_path = os.path.join(app.extra["config_dir"], ".env")
+        if os.path.isfile(env_path):
+            with open(env_path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line and not line.startswith("#"):
+                        k, v = line.split("=", 1)
+                        if k == f"{provider_name.upper()}_API_KEY":
+                            api_key = v
+                            break
+        if provider_name == "ollama":
+            api_key = api_key or "ollama"
+            url = url.rstrip("/") + "/v1"
+        from quickmedia.openai_adapter import OpenAIAdapter
+        adapter = OpenAIAdapter(base_url=url, api_key=api_key, model="test", timeout=10)
+        try:
+            ok = adapter.test()
+            return {"ok": ok, "error": "" if ok else "Connection failed"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     # ── Finder ───────────────────────────────────────────────────
 

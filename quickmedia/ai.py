@@ -13,21 +13,49 @@ import urllib.request
 from PIL import Image
 
 
+class OllamaAdapter:
+    """Adapter for Ollama's native /api/chat API with image support."""
+
+    def __init__(self, base_url: str, model: str, timeout: int = 300):
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.timeout = timeout
+
+    def chat(self, prompt: str, images: list[str] = None) -> str:
+        """Send to Ollama /api/chat. Returns text content."""
+        import json as _json, urllib.request as _req
+        body = _json.dumps({
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt, "images": images or []}],
+            "stream": False,
+            "think": True,
+        }).encode("utf-8")
+        url = f"{self.base_url}/api/chat"
+        r = _req.Request(url, data=body)
+        r.add_header("Content-Type", "application/json")
+        print(f"[Ollama] model={self.model}", flush=True)
+        print(f"[Ollama prompt] {prompt}", flush=True)
+        with _req.urlopen(r, timeout=self.timeout) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+            content = data.get("message", {}).get("content", "")
+            print(f"[Ollama] {content}", flush=True)
+            return content
+
+
 class VisionAnalyzer:
-    """Analyze images using Ollama vision models."""
+    """Analyze images using AI vision models."""
 
     def __init__(
         self,
+        adapter=None,
         ollama_url: str = "http://localhost:11434",
         model: str = "qwen3.5:9b",
         max_dimension: int = 672,
         timeout: int = 300,
         prompt_config = None,
     ):
-        self.ollama_url = ollama_url.rstrip("/")
-        self.model = model
+        self.adapter = adapter or OllamaAdapter(ollama_url, model, timeout)
         self.max_dimension = max_dimension
-        self.timeout = timeout
         self._prompt_config = prompt_config
 
     def analyze(self, image_path: str) -> dict:
@@ -35,7 +63,7 @@ class VisionAnalyzer:
         img = self._prepare_image(image_path)
         img_b64 = self._encode_image(img)
         prompt = self._build_prompt()
-        response = self._call_ollama(prompt, img_b64)
+        response = self.adapter.chat(prompt, [img_b64])
         return self._parse_response(response)
 
     def _prepare_image(self, image_path: str) -> Image.Image:
@@ -68,30 +96,6 @@ class VisionAnalyzer:
             '{"description": "图片描述", "tags": ["标签1", "标签2", "标签3"], "text": "文字内容"}\n'
             "如果没有识别到文字，text 为空字符串。"
         )
-
-    def _call_ollama(self, prompt: str, image_b64: str) -> str:
-        """Send a request to Ollama's chat API and return the text response."""
-        url = f"{self.ollama_url}/api/chat"
-        body = json.dumps({
-            "model": self.model,
-            "messages": [{
-                "role": "user",
-                "content": prompt,
-                "images": [image_b64],
-            }],
-            "stream": False,
-            "think": True
-        }).encode("utf-8")
-
-        print(f"[Ollama prompt] {prompt}", flush=True)
-        req = urllib.request.Request(url, data=body)
-        req.add_header("Content-Type", "application/json")
-
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            content = data.get("message", {}).get("content", "")
-            print(f"[Ollama] {content}", flush=True)
-            return content
 
     @staticmethod
     def _extract_json(text: str) -> str | None:
@@ -134,12 +138,10 @@ class VisionAnalyzer:
 
 
 class TextAnalyzer:
-    """Analyze text documents using Ollama text models."""
+    """Analyze text documents using AI text models."""
 
-    def __init__(self, ollama_url: str = "http://localhost:11434", model: str = "qwen3.5:9b", timeout: int = 300, prompt_config = None):
-        self.ollama_url = ollama_url.rstrip("/")
-        self.model = model
-        self.timeout = timeout
+    def __init__(self, adapter=None, ollama_url: str = "http://localhost:11434", model: str = "qwen3.5:9b", timeout: int = 300, prompt_config = None):
+        self.adapter = adapter or OllamaAdapter(ollama_url, model, timeout)
         self._prompt_config = prompt_config
 
     def analyze(self, text: str) -> dict:
@@ -154,26 +156,8 @@ class TextAnalyzer:
                 "如果没有标签，tags 为空数组。\n\n"
                 f"文档内容：\n{text[:4000]}"
             )
-        response = self._call_ollama(prompt)
+        response = self.adapter.chat(prompt)
         return self._parse_response(response)
-
-    def _call_ollama(self, prompt: str) -> str:
-        import json, urllib.request
-        url = f"{self.ollama_url}/api/chat"
-        body = json.dumps({
-            "model": self.model,
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": False,
-            "think": True
-        }).encode("utf-8")
-        print(f"[Ollama prompt] {prompt}", flush=True)
-        req = urllib.request.Request(url, data=body)
-        req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            content = data.get("message", {}).get("content", "")
-            print(f"[Ollama] {content}", flush=True)
-            return content
 
     @staticmethod
     def _parse_response(text: str) -> dict:
@@ -205,7 +189,7 @@ class TextAnalyzer:
                 "如果没有标签，tags 为空数组。\n\n"
                 f"语音转录：\n{transcript[:4000]}"
             )
-        response = self._call_ollama(prompt)
+        response = self.adapter.chat(prompt)
         return self._parse_response(response)
 
 

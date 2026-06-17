@@ -323,17 +323,15 @@ def _cmd_serve(cfg: Config, db_path: str):
     print("[AIWorker] 检测 Ollama 连接...", flush=True)
     ollama_ok = False
     try:
-        import urllib.request, json
-        url = f"{cfg.get('ai.ollama_url')}/api/tags"
-        with urllib.request.urlopen(url, timeout=5) as resp:
-            tags = json.loads(resp.read())
-            models = [m["name"] for m in tags.get("models", [])]
-            model = cfg.get("ai.model") or "qwen3.5:9b"
-            if model in models:
-                print(f"[AIWorker] Ollama 已连接，模型 {model} 就绪", flush=True)
-                ollama_ok = True
-            else:
-                print(f"[AIWorker] 模型 {model} 未安装，请运行: ollama pull {model}", flush=True)
+        url = (cfg.get("providers.ollama.url") or cfg.get("ai.ollama_url") or "http://localhost:11434").rstrip("/")
+        from quickmedia.openai_adapter import OpenAIAdapter
+        adapter = OpenAIAdapter(base_url=url + "/v1", api_key="ollama", model="test", timeout=5)
+        ollama_ok = adapter.test()
+        if ollama_ok:
+            model = cfg.get("task_models.vision.model") or cfg.get("ai.model") or "qwen3.5:9b"
+            print(f"[AIWorker] Ollama 已连接，模型 {model} 就绪", flush=True)
+        else:
+            print(f"[AIWorker] Ollama 连接失败", flush=True)
     except Exception as e:
         print(f"[AIWorker] Ollama 不可用 ({e})，跳过 AI 分析", flush=True)
     print("[AIWorker] 后台线程已启动", flush=True)

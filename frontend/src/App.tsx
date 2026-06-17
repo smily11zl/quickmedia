@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import ModelManager from "./ModelManager";
 
 interface Asset {
   id: number; filename: string; asset_type: string; size: number;
@@ -12,7 +13,7 @@ interface Asset {
 interface Stats { total: number; image: number; video: number; audio: number; document: number; }
 interface TagInfo { id: number; name: string; count: number; }
 
-const f=(b:number)=>{for(const u of["B","KB","MB","GB"]){if(b<1024)return`${b}${u}`;b=Math.floor(b/1024);}return`${b}TB`;};
+const f=(b:number)=>{for(const u of["B","KB","MB","GB"]){if(b<1024)return `${b}${u}`;b=Math.floor(b/1024);}return `${b}TB`;};
 const S={c:"#faf9f5",h:"#e6dfd8",d:"#efe9de",s:"#f5f0e8",i:"#141413",b:"#3d3d3a",m:"#6c6a64",ms:"#8e8b82",r:"#cc785c",rb:"rgba(204,120,92,0.08)",w:"#fff"};
 const aiT=(s?:string)=>{if(!s||s==="-")return null;const m:{[k:string]:string}={done:"已完成",processing:"分析中...",pending:"等待分析",failed:"失败"};return <span className="text-[10px]" style={{color:S.ms}}>{m[s]||s}</span>;};
 
@@ -28,8 +29,6 @@ function App() {
   const [dv,sd]=useState("");
   const [nt,sn]=useState("");
   const [sh,ssh]=useState(false);
-  const [cu,scu]=useState("");
-  const [cm,scm]=useState("");
   const [os,sos]=useState("");
   const [cfn,scfn]=useState(1);
   const [cto,scto]=useState(300);
@@ -50,8 +49,7 @@ function App() {
   const [ps,sps]=useState("");
   const [bh,sbh]=useState(false);
   const [brh,sbrh]=useState(false);
-  const [oh,soh]=useState(false);
-  const [shv,sshv]=useState(false);
+  const [mm,smm]=useState(false);
   const dr=useRef<HTMLTextAreaElement>(null);
 
   useEffect(()=>{fetch("/api/stats").then(r=>r.json()).then(ss);},[]);
@@ -67,8 +65,7 @@ function App() {
   const adT=()=>{if(!sel||!nt.trim())return;fetch(`/api/assets/${sel.id}/tags/by-name`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:nt.trim()})}).then(r=>r.json()).then(t=>{sl({...sel,tags:[...sel.tags,{id:t.id,name:t.name,source:"manual"}]});sn("");fetch("/api/tags").then(r=>r.json()).then(stg);fa();});};
   const rmT=(tid:number)=>{if(!sel)return;fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"DELETE"}).then(()=>{sl({...sel,tags:sel.tags.filter(t=>t.id!==tid)});fetch("/api/tags").then(r=>r.json()).then(stg);});};
   const cfT=(tid:number)=>{if(!sel)return;fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"DELETE"}).then(()=>fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"POST"})).then(()=>{sl({...sel,tags:sel.tags.map(t=>t.id===tid?{...t,source:"manual"}:t)});});};
-  const svS=()=>{fetch("/api/config",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ollama_url:cu,model:cm,video_frames:cfn,timeout:cto})}).then(r=>{if(r.ok){sos("设置已保存");sps("");setTimeout(()=>{sos("");ssh(false);},1500);}else{sos("保存失败");setTimeout(()=>sos(""),3000);}}).catch(()=>{sos("保存失败");setTimeout(()=>sos(""),3000);});};
-  const tO=()=>{fetch("/api/config/test-ollama",{method:"POST"}).then(r=>r.json()).then(d=>{sos(d.connected?`已连接: ${d.models.join(", ")}`:`失败: ${d.error}`);});};
+  const svS=()=>{fetch("/api/config",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({video_frames:cfn,timeout:cto})}).then(r=>{if(r.ok){sos("设置已保存");setTimeout(()=>{sos("");ssh(false);},1500);}else{sos("保存失败");setTimeout(()=>sos(""),3000);}}).catch(()=>{sos("保存失败");setTimeout(()=>sos(""),3000);});};
   const tgA=(id:number)=>{const n=new Set(ms);n.has(id)?n.delete(id):n.add(id);sm(n);};
   const bRe=()=>{fetch("/api/assets/batch-reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({asset_ids:[...ms]})}).then(()=>{sm(new Set());fa();});};
   const delA=(id:number)=>{fetch(`/api/assets/${id}`,{method:"DELETE"}).then(()=>{sl(null);fa();});};
@@ -142,17 +139,16 @@ function App() {
         </div>
         <div className="mt-auto pt-4 flex flex-col gap-1" style={{borderTop:`1px solid ${S.h}`}}>
           <button onClick={()=>fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{alert(d.message);fa();})} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
-          <button onClick={()=>{ssh(!sh);if(!sh){fetch("/api/config").then(r=>r.json()).then(c=>{scu(c.ollama_url);scm(c.model);scfn(c.video_frames||1);scto(c.timeout||300);});ldP();}}} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",backgroundColor:sh?S.d:"transparent",color:sh?S.i:S.m}}>⚙ 设置</button>
+          <button onClick={()=>{ssh(!sh);if(!sh){fetch("/api/config").then(r=>r.json()).then(c=>{scfn(c.video_frames||1);scto(c.timeout||300);});ldP();}}} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",backgroundColor:sh?S.d:"transparent",color:sh?S.i:S.m}}>⚙ 设置</button>
         </div>
       </aside>
       {sh&&(<aside className="w-72 border-r overflow-y-auto p-4 flex flex-col gap-3" style={{borderColor:S.h,backgroundColor:S.c}}>
         <h2 className="text-sm font-medium" style={{color:S.i}}>设置</h2>
-        <div><label className="text-[11px]" style={{color:S.ms}}>Ollama URL</label><input type="text" value={cu} onChange={e=>scu(e.target.value)} className="w-full text-xs px-2 py-1 rounded-md outline-none mt-0.5" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/></div>
-        <div><label className="text-[11px]" style={{color:S.ms}}>模型</label><input type="text" value={cm} onChange={e=>scm(e.target.value)} className="w-full text-xs px-2 py-1 rounded-md outline-none mt-0.5" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/></div>
         <div><label className="text-[11px]" style={{color:S.ms}}>视频采样帧数</label><input type="number" min={1} max={20} value={cfn} onChange={e=>scfn(parseInt(e.target.value)||1)} className="w-full text-xs px-2 py-1 rounded-md outline-none mt-0.5" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/></div>
         <div><label className="text-[11px]" style={{color:S.ms}}>请求超时 (秒)</label><input type="number" min={30} max={600} value={cto} onChange={e=>scto(parseInt(e.target.value)||300)} className="w-full text-xs px-2 py-1 rounded-md outline-none mt-0.5" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/></div>
-        <div className="flex gap-2 items-center"><button onClick={tO} onMouseEnter={()=>soh(true)} onMouseLeave={()=>soh(false)} onMouseDown={e=>e.currentTarget.style.filter="brightness(0.9)"} onMouseUp={e=>e.currentTarget.style.filter=oh?"brightness(1.08)":"brightness(1)"} className="text-xs px-3 py-1 rounded-md transition-all duration-150" style={{backgroundColor:S.d,color:S.b,filter:oh?"brightness(1.08)":"brightness(1)",cursor:"pointer"}}>检测连接</button><button onClick={svS} onMouseEnter={()=>sshv(true)} onMouseLeave={()=>sshv(false)} onMouseDown={e=>e.currentTarget.style.filter="brightness(0.85)"} onMouseUp={e=>e.currentTarget.style.filter=shv?"brightness(1.1)":"brightness(1)"} className="text-xs px-3 py-1 rounded-md transition-all duration-150" style={{backgroundColor:S.r,color:S.w,filter:shv?"brightness(1.1)":"brightness(1)",cursor:"pointer"}}>保存</button></div>
+        <button onClick={svS} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.r,color:S.w,cursor:"pointer"}}>保存</button>
         {os&&<p className="text-xs" style={{color:os.includes("失败")||os.startsWith("失败")?S.r:os.startsWith("已连接")||os==="设置已保存"?S.m:S.r}}>{os}</p>}
+        <button onClick={()=>smm(true)} className="w-full text-center text-xs px-3 py-1 rounded-md mt-2 transition-all duration-150" style={{backgroundColor:S.d,color:S.b,cursor:"pointer"}}>🔧 模型管理</button>
         <div className="mt-4 pt-3" style={{borderTop:`1px solid ${S.h}`}}>
           <h3 className="text-xs font-medium mb-2" style={{color:S.i}}>🤖 AI 分析提示词</h3>
           <div className="flex gap-1 mb-3">
@@ -235,6 +231,7 @@ function App() {
           <div className="flex gap-2"><input type="text" placeholder="新标签..." value={nt} onChange={e=>sn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&adT()} className="flex-1 text-xs px-2 py-1 rounded-md outline-none" style={{fontFamily:"'Inter',sans-serif",border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/><button onClick={adT} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>添加</button></div>
         </div>
       </aside>}
+      {mm && <ModelManager onClose={() => smm(false)} />}
     </div>
   );
 }
