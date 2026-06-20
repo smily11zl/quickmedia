@@ -208,3 +208,25 @@ whisper 语音转录、语音内容分析、视频综合总结、重新分析。
 - MiniMax 走现有 OpenAI 适配器
 
 详见 [docs/v7/tasks.md](docs/v7/tasks.md)。---
+
+---
+
+## v8 — 向量化 + 语义搜索
+
+### Problem Statement
+
+搜索仅支持关键词精确匹配，搜"蓝色风格"找不到蓝色调图片，搜"会议相关"找不到会议录音。素材越多，精确匹配的局限性越大。
+
+### Solution
+
+通过 embedding 向量化实现语义理解，用户用自然语言描述即可找到相关素材。同时支持相似素材推荐。
+
+### Key Design Decisions
+
+- 向量存储：ChromaDB，内嵌模式零配置
+- embedding 作为第 5 种 AI 分析类型，AI 分析完成后自动入队
+- 搜索：综合 / 语义 / 匹配 三种模式
+- 相似素材：详情页叠加层展示
+- 入库和搜索必须同一模型，切换需重建全量向量
+
+详见 [docs/v8/tasks.md](docs/v8/tasks.md)。

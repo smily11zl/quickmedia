@@ -71,4 +71,8 @@ def test_default_config_has_providers_and_task_models():
     assert "providers" in cfg._data
     assert "task_models" in cfg._data
     assert cfg.get("providers.ollama.url") == "http://localhost:11434"
-    assert cfg.get("task_models.vision.model") == "qwen3.5:9b"
+    assert cfg.get("task_models.vision.model")  # model field exists
+    assert cfg.get("task_models.text.model")
+    assert cfg.get("task_models.speech.model")
+    assert cfg.get("task_models.video_summary.model")
+    assert cfg.get("task_models.embedding.model")

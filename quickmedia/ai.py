@@ -306,3 +306,14 @@ class TranscriptionAnalyzer:
             return text.strip()
         except Exception:
             return ""
+
+
+class EmbeddingAnalyzer:
+    """Generate embeddings for text content."""
+
+    def __init__(self, adapter):
+        self.adapter = adapter
+
+    def embed(self, text: str) -> list[float]:
+        """Generate embedding vector for given text."""
+        return self.adapter.embed(text)

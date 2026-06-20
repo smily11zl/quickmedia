@@ -27,6 +27,7 @@ DEFAULT_CONFIG = {
         "text": {"provider": "ollama", "model": "qwen3.5:9b"},
         "speech": {"provider": "ollama", "model": "qwen3.5:9b"},
         "video_summary": {"provider": "ollama", "model": "qwen3.5:9b"},
+        "embedding": {"provider": "ollama", "model": "qwen3-embedding:8b"},
     },
     "watch_paths": [],
     "formats": {
@@ -40,6 +41,7 @@ DEFAULT_CONFIG = {
         "thumbnail_size": 256,
         "db_path": None,  # resolved at runtime
         "thumbnails_path": None,  # resolved at runtime
+        "chroma_db_path": None,  # resolved at runtime
     },
     "web": {
         "default_port": 8088,
@@ -64,6 +66,7 @@ class Config:
         self._data: dict = self._deep_copy(DEFAULT_CONFIG)
         self._load()
         self._migrate_if_needed()
+        self._fill_missing_task_models()
         self._resolve_paths()
         self._ensure_models_yaml()
 
@@ -160,7 +163,18 @@ class Config:
             task: {"provider": "ollama", "model": model}
             for task in ("vision", "text", "speech", "video_summary")
         }
-        self._save()
+
+    def _fill_missing_task_models(self) -> None:
+        """Fill in any missing task types from DEFAULT_CONFIG. Saves if changed."""
+        defaults = DEFAULT_CONFIG.get("task_models") or {}
+        current = self._data.setdefault("task_models", {})
+        changed = False
+        for task, binding in defaults.items():
+            if task not in current:
+                current[task] = dict(binding)
+                changed = True
+        if changed:
+            self._save()
 
     def _ensure_models_yaml(self) -> None:
         """Copy models.yaml from package to user dir on first startup; merge on upgrade."""

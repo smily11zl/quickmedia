@@ -7,8 +7,9 @@ tasks in the background without blocking file scanning.
 import os
 from quickmedia.database import Database
 from quickmedia.config import Config
-from quickmedia.ai import VisionAnalyzer, TextAnalyzer, TranscriptionAnalyzer, OllamaAdapter, merge_frame_results, extract_video_frames
+from quickmedia.ai import VisionAnalyzer, TextAnalyzer, TranscriptionAnalyzer, OllamaAdapter, EmbeddingAnalyzer, merge_frame_results, extract_video_frames
 from quickmedia.prompt_config import PromptConfig
+from quickmedia.embedding import _build_field_text, ChromaStore, EmbeddingAdapter, OpenAiEmbeddingAdapter
 
 
 class AIWorker:
@@ -133,6 +134,8 @@ class AIWorker:
                         self._process_text(row["asset_id"], row["path"])
                     elif task_type == "transcribe":
                         self._process_transcribe(row["asset_id"], row["path"])
+                    elif task_type == "embedding":
+                        self._process_embedding(row["asset_id"])
                     self.db.execute(
                         "UPDATE ai_queue SET status='done', attempt=? WHERE id=?",
                         (attempt, row["id"]),
@@ -144,6 +147,9 @@ class AIWorker:
                         (datetime.now().isoformat(), row["asset_id"]),
                     )
                     print(f"[AIWorker] 完成: {name}", flush=True)
+                    # Enqueue embedding if result is sufficient for vectorization
+                    if task_type in ("vision", "text", "transcribe", "video_summary"):
+                        self._enqueue_embedding(row["asset_id"])
                     break  # success
                 except Exception as e:
                     attempt += 1
@@ -323,3 +329,65 @@ class AIWorker:
                     "INSERT INTO asset_tags (asset_id, tag_id, source) VALUES (?,?,?)",
                     (asset_id, tag_id, source),
                 )
+
+    def _enqueue_embedding(self, asset_id: int) -> None:
+        """Enqueue an embedding task if not already queued for this asset."""
+        existing = self.db.execute(
+            "SELECT 1 FROM ai_queue WHERE asset_id=? AND task_type='embedding'",
+            (asset_id,),
+        )
+        if not existing:
+            self.db.execute(
+                "INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'embedding')",
+                (asset_id,),
+            )
+
+    def _load_api_key(self, provider_name: str) -> str:
+        """Load API key for a provider from env dict."""
+        key = self._env.get(f"{provider_name.upper()}_API_KEY", "")
+        if provider_name == "ollama":
+            return key or "ollama"
+        return key
+
+    def _process_embedding(self, asset_id: int) -> None:
+        """Generate and store embedding for a single asset."""
+        from quickmedia.providers import ProviderRegistry
+
+        # Get asset data
+        rows = self.db.execute("SELECT * FROM assets WHERE id=?", (asset_id,))
+        if not rows:
+            raise ValueError(f"Asset {asset_id} not found")
+        asset = dict(rows[0])
+        tags = self.db.get_asset_tags(asset_id)
+        asset["tags"] = [dict(t) for t in tags]
+
+        # Get embedding adapter
+        binding = self._registry.get_task_binding("embedding")
+        if not binding:
+            return  # no embedding model configured
+
+        url = self._registry.get_provider_url(binding["provider"])
+        if not url:
+            return
+
+        if binding["provider"] == "ollama":
+            adapter = EmbeddingAdapter(base_url=url, model=binding["model"])
+        else:
+            api_key = self._load_api_key(binding["provider"])
+            adapter = OpenAiEmbeddingAdapter(base_url=url, api_key=api_key, model=binding["model"])
+
+        analyzer = EmbeddingAnalyzer(adapter=adapter)
+
+        # Embed per field
+        fields = {"description": 0.5, "tags": 0.3, "text": 0.2}
+        vectors = {}
+        for field in fields:
+            field_text = _build_field_text(asset, field)
+            if field_text:
+                print(f"[Embedding] {field}: {field_text[:200]}", flush=True)
+                vectors[field] = analyzer.embed(field_text)
+
+        chroma_path = os.path.join(self._config_dir, "chroma_db")
+        store = ChromaStore(persist_path=chroma_path)
+        store.add_fields(asset_id, vectors)
+        print(f"[Embedding] 完成: {asset['filename']}", flush=True)

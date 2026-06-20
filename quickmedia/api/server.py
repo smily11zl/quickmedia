@@ -198,13 +198,120 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     # ── Search ──────────────────────────────────────────────────
 
     @app.get("/api/search")
-    def search(q: str = Query(..., min_length=1)):
+    def search(q: str = Query(..., min_length=1), mode: str = "keyword"):
         _db = _get_db(app)
-        results = _db.search(q)
-        items = [dict(r) for r in results]
+
+        # Tokenize query for keyword search
+        try:
+            import jieba
+            tokens = [t for t in jieba.cut_for_search(q) if t.strip()]
+        except ImportError:
+            tokens = [q]
+        if not tokens:
+            tokens = [q]
+
+        keyword_results = _db.search_tokens(tokens) if len(tokens) > 1 else _db.search(q)
+        items = [dict(r) for r in keyword_results]
         for item in items:
             tags = _db.get_asset_tags(item["id"])
             item["tags"] = [dict(t) for t in tags]
+
+        # For semantic/combined modes, also query embeddings
+        if mode in ("semantic", "combined"):
+            try:
+                from quickmedia.embedding import ChromaStore
+                from quickmedia.ai_worker import EmbeddingAdapter
+                cfg = Config(config_dir=app.extra["config_dir"])
+                chroma_path = os.path.join(app.extra["config_dir"], "chroma_db")
+                if os.path.isdir(chroma_path):
+                    store = ChromaStore(persist_path=chroma_path)
+                    # Get embedding adapter from task binding
+                    from quickmedia.providers import ProviderRegistry
+                    user_models = os.path.join(app.extra["config_dir"], "models.yaml")
+                    registry = ProviderRegistry(cfg, user_models)
+                    binding = registry.get_task_binding("embedding")
+                    if binding:
+                        url = registry.get_provider_url(binding["provider"]) or ""
+                        # Create adapter and embed query
+                        if binding["provider"] == "ollama":
+                            adapter = EmbeddingAdapter(base_url=url, model=binding.get("model", "qwen3-embedding:8b"))
+                        else:
+                            # Load API key for non-ollama providers
+                            env_path = os.path.join(app.extra["config_dir"], ".env")
+                            api_key = ""
+                            if os.path.isfile(env_path):
+                                with open(env_path, "r") as f:
+                                    for line in f:
+                                        if f"{binding['provider'].upper()}_API_KEY" in line:
+                                            api_key = line.split("=", 1)[1].strip()
+                                            break
+                            from quickmedia.embedding import OpenAiEmbeddingAdapter
+                            adapter = OpenAiEmbeddingAdapter(base_url=url, api_key=api_key, model=binding.get("model", ""))
+                        query_vector = adapter.embed(q)
+                        similar = store.query_weighted(query_vector, n_results=50)
+                        similar = similar[:20]
+                        print(f"[Semantic search] query='{q}' provider={binding['provider']} model={binding['model']} results={len(similar)}", flush=True)
+                        for s in similar:
+                            rows = _db.execute("SELECT filename FROM assets WHERE id=?", (s["asset_id"],))
+                            name = rows[0]["filename"] if rows else "unknown"
+                            field_dists = {}
+                            for fld in ("description", "tags", "text"):
+                                f_results = store._raw_query(query_vector, 50, field_filter=fld)
+                                for fi in f_results:
+                                    if fi["asset_id"] == s["asset_id"]:
+                                        field_dists[fld] = fi["distance"]
+                                        break
+                            fstr = " ".join(f"{k}={field_dists.get(k, '—')}" for k in ("description","tags","text"))
+                            print(f"  {s['distance']:.4f}  {name}  | {fstr}", flush=True)
+
+                        # RRF fusion: merge keyword + vector results by rank
+                        # Build rank maps (1-indexed)
+                        kw_rank = {item["id"]: i + 1 for i, item in enumerate(items)}
+                        vec_rank = {s["asset_id"]: i + 1 for i, s in enumerate(similar)}
+
+                        all_ids = set(kw_rank.keys()) | set(vec_rank.keys())
+                        rrf_scores = {}
+                        for aid in all_ids:
+                            score = 0.0
+                            if aid in kw_rank:
+                                score += 1.0 / (60 + kw_rank[aid])
+                            if aid in vec_rank:
+                                score += 1.0 / (60 + vec_rank[aid])
+                            rrf_scores[aid] = score
+
+                        # Build merged items sorted by RRF score
+                        merged_items = []
+                        seen = set()
+                        for aid, score in sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True):
+                            rows = _db.execute("SELECT * FROM assets WHERE id=?", (aid,))
+                            if rows:
+                                item = dict(rows[0])
+                                tags = _db.get_asset_tags(aid)
+                                item["tags"] = [dict(t) for t in tags]
+                                item["_rrf_score"] = score
+                                merged_items.append(item)
+                                seen.add(aid)
+
+                        if mode == "semantic":
+                            items = [it for it in merged_items if it["id"] in vec_rank]
+                        else:  # combined
+                            items = merged_items
+
+                        # Log RRF fusion results
+                        print(f"[RRF fusion] tokens={tokens} total={len(items)}", flush=True)
+                        for item in items[:10]:
+                            source = ""
+                            if item["id"] in kw_rank:
+                                source += f"KW#{kw_rank[item['id']]}"
+                            if item["id"] in vec_rank:
+                                source += f" +VEC#{vec_rank[item['id']]}" if source else f"VEC#{vec_rank[item['id']]}"
+                            rows = _db.execute("SELECT filename FROM assets WHERE id=?", (item["id"],))
+                            name = rows[0]["filename"] if rows else "?"
+                            print(f"  {item['_rrf_score']:.4f}  {name}  [{source}]", flush=True)
+            except Exception as e:
+                # Semantic search failure should not break the request
+                print(f"Semantic search error: {e}", flush=True)
+
         return items
 
     # ── Tags ────────────────────────────────────────────────────
@@ -283,6 +390,12 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             "analyzed_at=NULL WHERE id=?",
             (asset_id,),
         )
+        # Clear old ChromaDB embeddings
+        chroma_path = os.path.join(app.extra["config_dir"], "chroma_db")
+        if os.path.isdir(chroma_path):
+            from quickmedia.embedding import ChromaStore
+            store = ChromaStore(persist_path=chroma_path)
+            store.delete(asset_id)
         # Clear old auto-generated tags
         _db.conn.execute(
             "DELETE FROM asset_tags WHERE asset_id=? AND source='auto'",
@@ -350,6 +463,43 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             return {"text": text.strip()}
         except Exception:
             return {"text": ""}
+
+    @app.get("/api/assets/{asset_id}/similar")
+    def similar_assets(asset_id: int, limit: int = 10):
+        _db = _get_db(app)
+        rows = _db.execute("SELECT id FROM assets WHERE id=?", (asset_id,))
+        if not rows:
+            raise HTTPException(status_code=404, detail="Asset not found")
+        cfg = Config(config_dir=app.extra["config_dir"])
+        chroma_path = os.path.join(app.extra["config_dir"], "chroma_db")
+        if not os.path.isdir(chroma_path):
+            return []
+        from quickmedia.embedding import ChromaStore
+        store = ChromaStore(persist_path=chroma_path)
+        vector = store.get_vector(asset_id, "description")
+        if not vector:
+            return []
+        similar = store.query(vector, n_results=limit + 1)
+        # Filter by relative distance to best match
+        if similar:
+            best = similar[0].get("distance", 0)
+            similar = [s for s in similar if s.get("distance", 1.0) < best * 1.2 and s["asset_id"] != asset_id]
+        similar = similar[:limit]
+        items = []
+        # Log similar results
+        name_rows = _db.execute("SELECT filename FROM assets WHERE id=?", (asset_id,))
+        src_name = name_rows[0]["filename"] if name_rows else str(asset_id)
+        print(f"[Semantic search] similar={src_name} results={len(similar)}", flush=True)
+        for s in similar:
+            r = _db.execute("SELECT * FROM assets WHERE id=?", (s["asset_id"],))
+            if r:
+                item = dict(r[0])
+                tags = _db.get_asset_tags(item["id"])
+                item["tags"] = [dict(t) for t in tags]
+                item["_distance"] = s["distance"]
+                items.append(item)
+                print(f"  {s['distance']:.4f}  {item['filename']}", flush=True)
+        return items
 
     @app.post("/api/assets/{asset_id}/analyze")
     def analyze_asset(asset_id: int):
@@ -540,7 +690,23 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-    # ── Finder ───────────────────────────────────────────────────
+    # ── AI Queue ────────────────────────────────────────────────
+
+    @app.get("/api/queue/status")
+    def queue_status():
+        _db = _get_db(app)
+        pending = _db.execute(
+            "SELECT COUNT(*) as n FROM ai_queue WHERE status='pending'"
+        )[0]["n"]
+        processing = _db.execute(
+            "SELECT aq.id, aq.asset_id, a.filename FROM ai_queue aq "
+            "JOIN assets a ON aq.asset_id = a.id "
+            "WHERE aq.status='processing' LIMIT 1"
+        )
+        return {
+            "pending": pending,
+            "processing_name": processing[0]["filename"] if processing else None,
+        }
 
     @app.post("/api/finder/open")
     def open_finder(body: dict):

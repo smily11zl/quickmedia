@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import ModelManager from "./ModelManager";
 import SettingsModal from "./SettingsModal";
+import SimilarPanel from "./SimilarPanel";
 
 interface Asset {
   id: number; filename: string; asset_type: string; size: number;
@@ -10,6 +11,7 @@ interface Asset {
   ai_status?: string;
   thumbnail_status: string; modified_at?: string;
   tags: { id: number; name: string; source: string }[];
+  _distance?: number;
 }
 interface Stats { total: number; image: number; video: number; audio: number; document: number; }
 interface TagInfo { id: number; name: string; count: number; }
@@ -32,12 +34,15 @@ function App() {
   const [tf,stf]=useState<string|null>(null);
   const [gf,sgf]=useState<number|null>(null);
   const [q,sq]=useState("");
+  const [smode,ssmode]=useState<"keyword"|"semantic"|"combined">("combined");
+  const [slc,sslc]=useState(false);
+  const [cp,scp]=useState<number|null>(null);
   const [sel,sl]=useState<Asset|null>(null);
   const [ed,se]=useState(false);
   const [dv,sd]=useState("");
   const [nt,sn]=useState("");
-  const [so,sso]=useState(false); // settings open
-  const [mm,smm]=useState(false); // model manager open
+  const [so,sso]=useState(false);
+  const [mm,smm]=useState(false);
   const [vw,sv]=useState<"grid"|"list">("grid");
   const [sb,ssb]=useState<"name"|"size"|"date">("name");
   const [ms,sm]=useState<Set<number>>(new Set());
@@ -49,15 +54,30 @@ function App() {
   const [fop,sfop]=useState(false);
   const [aop,saop]=useState(false);
   const [top,stop]=useState(false);
+  const [qStat,setQStat]=useState<{pending:number;processing_name:string|null}>({pending:0,processing_name:null});
   const dr=useRef<HTMLTextAreaElement>(null);
 
   useEffect(()=>{fetch("/api/stats").then(r=>r.json()).then(ss);},[]);
   useEffect(()=>{fetch("/api/tags").then(r=>r.json()).then(stg);},[]);
-  const fa=()=>{if(q){fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r=>r.json()).then(sa);return;}const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>sa(d.items));};
-  useEffect(()=>{fa();},[tf,q,ff,af,df,mf,tgf]);
+  useEffect(()=>{fetch("/api/queue/status").then(r=>r.json()).then(setQStat);const i=setInterval(()=>fetch("/api/queue/status").then(r=>r.json()).then(setQStat),5000);return ()=>clearInterval(i);},[]);
+
+  const doSearch=()=>{
+    if(!q.trim()){sq("");fa();return;}
+    sslc(true);
+    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(sa).finally(()=>sslc(false));
+  };
+  const fa=()=>{const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>sa(d.items));};
+  useEffect(()=>{fa();},[tf,ff,af,df,mf,tgf]);
+
+  // Poll selected asset if it's being processed
+  useEffect(()=>{
+    if(!sel||(sel.ai_status!=="processing"&&sel.ai_status!=="pending")) return;
+    const i=setInterval(()=>{fetch(`/api/assets/${sel.id}`).then(r=>r.json()).then(a=>{sl(a);sd(a.description||"");se(false);});},5000);
+    return ()=>clearInterval(i);
+  },[sel?.id,sel?.ai_status]);
 
   let fs=as;if(gf)fs=as.filter(a=>a.tags.some(t=>t.id===gf));
-  fs=[...fs].sort((a,b)=>{if(sb==="size")return b.size-a.size;if(sb==="date")return(b.modified_at||"").localeCompare(a.modified_at||"");return a.filename.localeCompare(b.filename);});
+  if(smode==="keyword")fs=[...fs].sort((a,b)=>{if(sb==="size")return b.size-a.size;if(sb==="date")return(b.modified_at||"").localeCompare(a.modified_at||"");return a.filename.localeCompare(b.filename);});
 
   const selA=(id:number)=>{fetch(`/api/assets/${id}`).then(r=>r.json()).then(a=>{sl(a);sd(a.description||"");se(false);});};
   const svD=()=>{if(!sel)return;fetch(`/api/assets/${sel.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({description:dv})}).then(()=>{sl({...sel,description:dv});se(false);});};
@@ -75,7 +95,20 @@ function App() {
     <div className="flex h-screen" style={{backgroundColor:S.c}}>
       <aside className="w-64 flex flex-col gap-0.5 p-4 border-r overflow-y-auto" style={{borderColor:S.h}}>
         <h1 style={{fontFamily:"'Tiempos Headline',Garamond,serif",fontSize:22,fontWeight:400,color:S.i}} className="mb-4">QuickMedia</h1>
-        <input type="text" placeholder="搜索..." value={q} onChange={e=>sq(e.target.value)} className="w-full px-3 py-1.5 text-sm rounded-md mb-3 outline-none" style={{fontFamily:"'Inter',sans-serif",backgroundColor:S.c,border:`1px solid ${S.h}`,color:S.i}}/>
+        <div className="flex flex-col gap-1 mb-3">
+          <div className="relative w-full">
+            <input type="text" placeholder="搜索..." value={q} onChange={e=>sq(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()} className="w-full px-3 py-1.5 text-sm rounded-md outline-none pr-6" style={{fontFamily:"'Inter',sans-serif",backgroundColor:S.c,border:`1px solid ${S.h}`,color:S.i}}/>
+            {q&&<button onClick={()=>{sq("");fa();}} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{color:S.ms}}>✕</button>}
+          </div>
+          <div className="flex gap-1">
+            <select value={smode} onChange={e=>ssmode(e.target.value as any)} className="flex-1 text-[11px] px-1 py-1.5 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
+              <option value="combined">综合</option>
+              <option value="semantic">语义</option>
+              <option value="keyword">匹配</option>
+            </select>
+            <button onClick={doSearch} className="text-[11px] px-3 py-1 rounded-md" style={{backgroundColor:S.r,color:S.w}}>搜索</button>
+          </div>
+        </div>
         <div className="text-xs mb-1" style={{color:S.ms}}>类型</div>
         {types.map(t=>(<button key={t.l} onClick={()=>{stf(t.k);sgf(null);}} className="text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",backgroundColor:tf===t.k?S.d:"transparent",color:tf===t.k?S.i:S.m,fontWeight:tf===t.k?500:400}}>{t.l}<span className="float-right opacity-50">({t.n})</span></button>))}
         <div className="text-xs mb-1 mt-3" style={{color:S.ms}}>创建时间</div>
@@ -136,6 +169,7 @@ function App() {
           <button onClick={()=>sso(true)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>⚙ 设置</button>
         </div>
       </aside>
+      {slc && <div className="fixed inset-0 z-40 flex items-center justify-center" style={{backgroundColor: "rgba(250,249,245,0.7)"}}><div className="text-center"><div className="animate-spin text-2xl mb-2">⏳</div><p className="text-sm" style={{color: "#6c6a64"}}>搜索中...</p></div></div>}
       <main className="flex-1 overflow-y-auto p-6">
         {ms.size>0&&<div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{backgroundColor:S.d}}><span className="text-xs" style={{color:S.b}}>已选 {ms.size} 个</span><button onClick={bRe} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>重新分析已选</button><button onClick={()=>sm(new Set())} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>取消选择</button></div>}
         <div className="flex gap-2 mb-4 items-center">
@@ -143,9 +177,11 @@ function App() {
             <button onClick={()=>sv("grid")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="grid"?S.c:"transparent",color:S.i}}>▦ 网格</button>
             <button onClick={()=>sv("list")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="list"?S.c:"transparent",color:S.i}}>☰ 列表</button>
           </div>
-          <select value={sb} onChange={e=>ssb(e.target.value as any)} className="text-xs px-2 py-1 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
+          <select value={sb} onChange={e=>ssb(e.target.value as any)} disabled={!!(q && smode!=="keyword")} className="text-xs px-2 py-1 rounded-md outline-none" style={!!(q && smode!=="keyword")?{border:"1px solid #e8e4dd",color:"#bcb8b2",backgroundColor:"#f5f2ed",cursor:"not-allowed",opacity:0.6}:{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
             <option value="name">按名称</option><option value="size">按大小</option><option value="date">按时间</option>
           </select>
+          {qStat.processing_name && <span className="text-[10px]" style={{color: '#e8a55a'}}>分析中: {qStat.processing_name}</span>}
+          {qStat.pending > 0 && <span className="text-[10px]" style={{color: S.ms}}>{qStat.pending} 个待分析</span>}
           <span className="text-xs ml-auto" style={{color:S.ms}}>{fs.length} 个素材</span>
         </div>
         {vw==="grid"?(
@@ -189,6 +225,7 @@ function App() {
           {sel.modified_at&&<div><span style={{color:S.ms}}>修改时间</span><p style={{color:S.b}}>{sel.modified_at.slice(0,10)}</p></div>}
         </div>
         {sel.ai_status&&sel.ai_status!=="-"&&<div className="text-xs flex items-center gap-2"><span style={{color:S.ms}}>AI 状态: </span><span style={{color:sel.ai_status==="done"?"#5db872":sel.ai_status==="processing"?"#e8a55a":sel.ai_status==="failed"?"#c64545":S.m}}>{sel.ai_status==="done"?"已完成":sel.ai_status==="processing"?"分析中...":sel.ai_status==="pending"?"等待分析":sel.ai_status}</span>{sel.ai_status==="failed"?<button onClick={()=>fetch(`/api/assets/${sel.id}/retry-ai`,{method:"POST"}).then(()=>selA(sel.id)).then(()=>fa())} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.r,color:S.w}}>重试</button>:<button onClick={()=>fetch(`/api/assets/${sel.id}/reanalyze`,{method:"POST"}).then(()=>{selA(sel.id);fa();})} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.d,color:S.b}}>重新分析</button>}</div>}
+        {sel.ai_description && <div><button onClick={() => scp(sel.id)} className="text-xs px-2 py-1 rounded-md" style={{backgroundColor: S.rb, color: S.r}}>🔍 找相似内容</button></div>}
         {sel.ai_description&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>AI 描述</div><p className="text-xs" style={{color:S.b}}>{sel.ai_description}</p></div>}
         {sel.ocr_text&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>OCR 文字</div><p className="text-xs" style={{color:S.b}}>{sel.ocr_text}</p></div>}
         {sel.transcript&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>语音转录</div><p className="text-xs max-h-32 overflow-y-auto whitespace-pre-wrap" style={{color:S.b}}>{sel.transcript}</p></div>}
@@ -205,6 +242,7 @@ function App() {
       </aside>}
       {so && <SettingsModal onClose={() => sso(false)} />}
       {mm && <ModelManager onClose={() => smm(false)} />}
+      {cp && <SimilarPanel assetId={cp} onClose={() => scp(null)} />}
     </div>
   );
 }

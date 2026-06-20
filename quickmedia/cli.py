@@ -363,6 +363,6 @@ def _cmd_serve(cfg: Config, db_path: str):
     except Exception:
         pass
     try:
-        uvicorn.run(app, host="0.0.0.0", port=port)
+        uvicorn.run(app, host="0.0.0.0", port=port, log_config=None)
     finally:
         watcher.stop()

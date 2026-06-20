@@ -15,7 +15,7 @@ export default function SettingsModal({ onClose }: Props) {
   const [initCto, setInitCto] = useState(300);
   const [os, setOs] = useState("");
 
-  const [pt, setPt] = useState<"vision"|"text"|"speech"|"video_summary">("vision");
+  const [pt, setPt] = useState<"vision"|"text"|"speech"|"video_summary"|"embedding">("vision");
   const [pd, setPd] = useState<any>(null);
   const [pe, setPe] = useState("");
   const [initPe, setInitPe] = useState("");
@@ -110,10 +110,10 @@ export default function SettingsModal({ onClose }: Props) {
           {tab === "prompts" && (
             <div className="flex flex-col gap-3">
               <div className="flex gap-1">
-                {(["vision","text","speech","video_summary"] as const).map(t => (
+                {(["vision","text","speech","video_summary","embedding"] as const).map(t => (
                   <button key={t} onClick={() => { setPt(t); const v = pd?.[t]?.custom || pd?.[t]?.default || ""; setPe(v); setInitPe(v); }}
                     className="text-[10px] px-2 py-1 rounded" style={{backgroundColor: pt===t ? S.r : "transparent", color: pt===t ? S.w : S.ms}}>
-                    {t==="vision"?"图片":t==="text"?"文档":t==="speech"?"语音":"视频"}
+                    {t==="vision"?"图片":t==="text"?"文档":t==="speech"?"语音":t==="video_summary"?"视频":"向量化"}
                   </button>
                 ))}
               </div>

@@ -201,6 +201,42 @@ class Database:
         requires additional configuration).
         """
         pattern = f"%{query}%"
+        return self._search_like(pattern)
+
+    def search_tokens(self, tokens: list[str]) -> list[sqlite3.Row]:
+        """Search using multiple tokens with OR logic. Each token is matched via LIKE."""
+        if not tokens:
+            return []
+        # Build OR'd LIKE clauses for each token across all text columns
+        columns = ["a.filename", "a.description", "a.ai_description",
+                   "a.ai_summary", "a.ocr_text", "a.transcript", "a.video_summary",
+                   "a.notes", "t.name"]
+        conditions = []
+        params = []
+        for token in tokens:
+            pat = f"%{token}%"
+            for col in columns:
+                conditions.append(f"{col} LIKE ?")
+                params.append(pat)
+        where = " OR ".join(conditions)
+        # Rank by token match count (proxy BM25)
+        score_parts = []
+        for token in tokens:
+            pat = f"%{token}%"
+            col_parts = []
+            for col in columns:
+                col_parts.append(f"CASE WHEN {col} LIKE '{pat}' THEN 1 ELSE 0 END")
+            score_parts.append(f"({' + '.join(col_parts)})")
+        score_expr = " + ".join(score_parts)
+        return self.execute(f"""
+            SELECT DISTINCT a.*, ({score_expr}) as _match_score FROM assets a
+            LEFT JOIN asset_tags at2 ON a.id = at2.asset_id
+            LEFT JOIN tags t ON at2.tag_id = t.id
+            WHERE a.status = 'active' AND ({where})
+            ORDER BY _match_score DESC, a.filename
+        """, params)
+
+    def _search_like(self, pattern: str) -> list[sqlite3.Row]:
         return self.execute("""
             SELECT DISTINCT a.* FROM assets a
             LEFT JOIN asset_tags at2 ON a.id = at2.asset_id

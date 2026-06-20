@@ -3,6 +3,8 @@ ollama:
   models:
     - name: qwen3.5:9b
       capabilities: [vision, text, speech]
+    - name: qwen3-embedding:8b
+      capabilities: [embedding]
 
 openrouter:
   url: https://openrouter.ai/api/v1
@@ -35,6 +37,8 @@ openrouter:
       capabilities: [vision, text]
     - name: qwen/qwen3.7-max
       capabilities: [vision, text]
+    - name: qwen/qwen3-embedding-8b
+      capabilities: [embedding]
 
 deepseek:
   url: https://api.deepseek.com/v1

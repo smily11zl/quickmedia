@@ -22,6 +22,7 @@ const TASK_LABELS: Record<string, string> = {
   text: "文档分析",
   speech: "语音分析",
   video_summary: "视频总结",
+  embedding: "向量化",
 };
 
 const TASK_HINTS: Record<string, string> = {
@@ -29,6 +30,7 @@ const TASK_HINTS: Record<string, string> = {
   text: "分析文档类素材的摘要和关键词",
   speech: "分析语音转写文本的摘要和主题",
   video_summary: "综合画面描述和语音内容生成总结",
+  embedding: "生成素材向量用于语义搜索。⚠️ 创建后勿切换模型，否则需重建全部向量",
 };
 
 const BUILTIN_PROVIDERS: ProviderInfo[] = [

@@ -31,6 +31,7 @@ brew install ffmpeg
 brew install ollama
 ollama serve &
 ollama pull qwen3.5:9b
+ollama pull qwen3-embedding:8b  # 语义搜索嵌入模型
 ```
 
 ### 前端构建（开发时，已构建则跳过）

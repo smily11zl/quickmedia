@@ -37,3 +37,14 @@ class ProviderRegistry:
         """Return {provider, model} for a task type."""
         task_models = self._config.get("task_models") or {}
         return task_models.get(task_type)
+
+    def get_provider_url(self, provider_name: str) -> str | None:
+        """Return the URL for a provider from user config or built-in models.yaml."""
+        providers = self._config.get("providers") or {}
+        if provider_name in providers:
+            return providers[provider_name].get("url")
+        # Fall back to models.yaml
+        section = (self._models or {}).get(provider_name)
+        if isinstance(section, dict):
+            return section.get("url")
+        return None
