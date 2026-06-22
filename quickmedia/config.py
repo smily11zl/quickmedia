@@ -69,9 +69,41 @@ class Config:
         self._data: dict = self._deep_copy(DEFAULT_CONFIG)
         self._load()
         self._migrate_if_needed()
+        self._migrate_watch_paths()
         self._fill_missing_task_models()
         self._resolve_paths()
         self._ensure_models_yaml()
+
+    def _migrate_watch_paths(self) -> None:
+        """V10: migrate watch_paths to dict format with name/enabled."""
+        wp = self._data.get("watch_paths")
+        if not wp:
+            return
+        changed = False
+        new_wp = []
+        for i, item in enumerate(wp):
+            if isinstance(item, str):
+                new_wp.append({
+                    "name": f"文件夹 {i+1}",
+                    "path": item,
+                    "recursive": True,
+                    "max_depth": 3,
+                    "enabled": True,
+                })
+                changed = True
+            elif isinstance(item, dict):
+                if "name" not in item:
+                    item["name"] = f"文件夹 {i+1}"
+                    changed = True
+                if "enabled" not in item:
+                    item["enabled"] = True
+                    changed = True
+                new_wp.append(item)
+            else:
+                new_wp.append(item)
+        if changed:
+            self._data["watch_paths"] = new_wp
+            self._save()
 
     def _resolve_paths(self) -> None:
         """Fill in computed paths that depend on config_dir."""

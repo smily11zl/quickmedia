@@ -1,12 +1,29 @@
 """QuickMedia FastAPI server."""
 
 import os
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from quickmedia.database import Database
 from quickmedia.config import Config
+
+
+def _parse_osascript_path(output: str):
+    """Parse osascript choose folder output. Returns path or None."""
+    if not output or not output.strip():
+        return None
+    out = output.strip()
+    if "User cancelled" in out or "execution error" in out.lower():
+        return None
+    if out.startswith("alias "):
+        parts = out[6:].rstrip(":").split(":")
+        if len(parts) > 1:
+            p = "/" + "/".join(parts[1:])
+        else:
+            p = "/" + parts[0]
+        return p if p else None
+    return out if os.path.isdir(out) else None
 
 
 def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
@@ -223,7 +240,6 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             raise HTTPException(status_code=404, detail="No thumbnail")
         return FileResponse(thumb_path, media_type="image/jpeg")
 
-    # ── Search ──────────────────────────────────────────────────
 
     @app.get("/api/search")
     def search(q: str = Query(..., min_length=1), mode: str = "keyword"):
@@ -432,6 +448,52 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     # ── Stats ───────────────────────────────────────────────────
 
     
+    @app.post("/api/folder-picker")
+    def folder_picker():
+        """Open macOS folder picker and return selected path."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", "choose folder"],
+                capture_output=True, text=True, timeout=30,
+            )
+            path = _parse_osascript_path(result.stdout)
+            if path:
+                return {"path": path}
+            return {"error": "未选择文件夹", "path": None}
+        except FileNotFoundError:
+            return {"error": "仅支持 macOS", "path": None}
+        except Exception as e:
+            return {"error": str(e), "path": None}
+
+    @app.get("/api/task-models")
+    def get_task_models():
+        """Return current task model bindings."""
+        cfg = Config(config_dir=app.extra["config_dir"])
+        return cfg.get("task_models") or {}
+
+    @app.get("/api/config/watch-paths")
+    def get_watch_paths():
+        """Return configured watch paths."""
+        cfg = Config(config_dir=app.extra["config_dir"])
+        return {"paths": cfg.get("watch_paths") or []}
+
+    @app.put("/api/config/watch-paths")
+    def update_watch_paths(data: dict = Body(...)):
+        paths = data.get("paths", data) if isinstance(data, dict) else data
+        """Save watch paths and trigger scanner reload."""
+        cfg = Config(config_dir=app.extra["config_dir"])
+        cfg.set("watch_paths", paths)
+        cfg._save()
+        # Trigger hot reload of watcher
+        try:
+            scanner = app.extra.get("scanner")
+            if scanner:
+                scanner.reload_watch_paths()
+        except Exception:
+            pass
+        return {"ok": True, "message": f"已保存 {len(paths)} 条路径"}
+
     @app.get("/api/formats")
     def get_formats():
         cfg = Config(config_dir=app.extra["config_dir"])
@@ -861,10 +923,15 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         cfg = Config(config_dir=app.extra["config_dir"])
         _db = _get_db(app)
         scanner = Scanner(db=_db, config=cfg)
-        watch_paths = cfg.get("watch_paths") or []
         total_new = 0
+        watch_paths = cfg.get("watch_paths") or []
+        print(f"[扫描] 开始扫描 {len(watch_paths)} 条路径", flush=True)
         for wp in watch_paths:
-            path = os.path.expanduser(wp.get("path", ""))
+            path = os.path.expanduser(wp.get("path", "").replace(":", "/"))
+            r = wp.get("recursive", True)
+            md = wp.get("max_depth", 3)
+            print(f"[扫描]   进入目录: {path} (递归=@r, 深度=@d)".replace("@r",str(r)).replace("@d",str(md)), flush=True)
+            print(f"[扫描]   os.path.isdir({path}) = {os.path.isdir(path)}", flush=True)
             if os.path.isdir(path):
                 result = scanner.scan_directory(
                     path,

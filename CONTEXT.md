@@ -281,3 +281,25 @@ v9 新增：综合/语义搜索结果基础上，侧栏筛选（类型/格式/AI
 ### Top-K 聚合
 
 向量检索时，素材的 N 个 search_term 向量分别查询，取距离最小的 K 个求平均分。K 值可配，默认 2。
+
+## V10 — 可配置扫描文件夹（新增术语）
+
+### watch_paths
+
+`config.yaml` 中配置的扫描目录数组。每条含 name/path/recursive/max_depth/enabled。v10 升级为结构体（之前为简单字符串数组），启动时自动迁移。
+
+### showDirectoryPicker
+
+浏览器原生 API，弹出系统文件夹选择控件。选中后获得持久化 FileSystemDirectoryHandle。v10 首次配置时自动调用。
+
+### osascript choose folder
+
+macOS AppleScript 命令，服务端拉起 Finder 文件夹选择对话框，返回 POSIX 真实路径。v10 作为文件夹选择的第二条通道。
+
+### 热加载（watcher.reload）
+
+保存配置后调用 watchdog Observer 的重启逻辑，新扫描路径即时生效，不需重启整个服务。
+
+### 红点提示
+
+设置入口指示灯——缺模型配置或缺文件夹路径时亮红点。Tab 红点独立，各自保存后消除。总红点需两项全部完成才消。

@@ -54,6 +54,12 @@ class Scanner:
 
     # ── hashing ───────────────────────────────────────────────────
 
+    def reload_watch_paths(self) -> None:
+        """Reload watch paths from config without restarting."""
+        self._watch_paths = self.config.get("watch_paths") or []
+        print(f"[Scanner] 重载监控路径: {len(self._watch_paths)} 条", flush=True)
+
+
     def _compute_hash(self, filepath: str) -> str:
         """Compute SHA256 hash of a file."""
         hasher = hashlib.sha256()
@@ -152,11 +158,15 @@ class Scanner:
 
         if not os.path.isdir(directory):
             return result
+        print(f"[扫描] 正在扫描: {directory} (递归={recursive}, 深度={max_depth})", flush=True)
 
         # Collect all files
+        print(f"[扫描]   开始遍历: {directory}", flush=True)
         filepaths = []
         for root, dirs, files in os.walk(directory):
             depth = root[len(directory) :].count(os.sep)
+            if files:
+                print(f"[扫描]     子目录: {root} ({len(files)}个文件)", flush=True)
             if not recursive or depth >= max_depth:
                 dirs.clear()
             for fname in files:
@@ -288,6 +298,10 @@ class Scanner:
         # but no longer exist on disk)
         self._mark_deleted(directory)
 
+        try:
+            self._thumbnailer.process_queue()
+        except Exception as e:
+            print(f"[Scanner] 缩略图处理异常: {e}", flush=True)
         return result
 
     def _mark_deleted(self, directory: str) -> None:

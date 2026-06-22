@@ -3,12 +3,12 @@ import ModelManager from "./ModelManager";
 
 const S = {c:"#faf9f5",h:"#e6dfd8",d:"#efe9de",s:"#f5f0e8",i:"#141413",b:"#3d3d3a",m:"#6c6a64",ms:"#8e8b82",r:"#cc785c",rb:"rgba(204,120,92,0.08)",w:"#fff"};
 
-interface Props {
+interface Props { initialTab?: string; onModelSave?: () => void;
   onClose: () => void;
 }
 
-export default function SettingsModal({ onClose }: Props) {
-  const [tab, setTab] = useState<"basic" | "models" | "prompts">("basic");
+export default function SettingsModal({ onClose, initialTab, onModelSave }: Props) {
+  const [tab, setTab] = useState<"basic" | "models" | "prompts" | "folders">((initialTab as any)||"basic");
   const [cfn, setCfn] = useState(1);
   const [cto, setCto] = useState(300);
   const [initCfn, setInitCfn] = useState(1);
@@ -59,6 +59,17 @@ export default function SettingsModal({ onClose }: Props) {
       .catch(() => { setPs("恢复失败"); setTimeout(() => setPs(""), 3000); });
   };
 
+  
+  const [ftp,setFtp]=useState<{name:string;path:string;recursive:boolean;max_depth:number;enabled:boolean}[]>([]);
+  const [fSaving,setFSaving]=useState(false);
+  const [fMsg,setFMsg]=useState("");
+  const [tabDots,setTabDots]=useState<Record<string,boolean>>({});
+  useEffect(()=>{if(tab==="folders")fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>setFtp(d.paths||[]));fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{setTabDots(prev=>({...prev,folders:!d.paths||d.paths.length===0}));if(onModelSave)onModelSave();});fetch("/api/task-models").then(r=>r.json()).then(d=>{const has=!!(d&&Object.values(d).every((x:any)=>x.model));setTabDots(prev=>({...prev,models:!has}));});},[tab]);
+  const addPath=()=>setFtp([...ftp,{path:"",recursive:true,max_depth:3,enabled:true,name:""}]);
+  const updPath=(i:number,f:any)=>setFtp(ftp.map((x,j)=>j===i?{...x,...f}:x));
+  const delPath=(i:number)=>setFtp(ftp.filter((_,j)=>j!==i));
+  const savePaths=()=>{setFSaving(true);fetch("/api/config/watch-paths",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({paths:ftp})}).then(r=>{setFSaving(false);setFMsg(r.ok?"已保存":"保存失败");fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{setTabDots(prev=>({...prev,folders:!d.paths||d.paths.length===0}));if(onModelSave)onModelSave();});setTimeout(()=>setFMsg(""),2000);}).catch(()=>{setFSaving(false);setFMsg("保存失败");setTimeout(()=>setFMsg(""),3000);});};
+  const pickFolder=async(i:number)=>{try{const r=await fetch("/api/folder-picker",{method:"POST"});const d=await r.json();if(d.path)updPath(i,{path:d.path});}catch(e){}}
   const basicDirty = cfn !== initCfn || cto !== initCto;
   const promptDirty = pe !== initPe;
 
@@ -77,9 +88,9 @@ export default function SettingsModal({ onClose }: Props) {
         </div>
 
         <div className="flex gap-1 px-5 py-2" style={{borderBottom: `1px solid ${S.h}`}}>
-          {[{k:"basic" as const,l:"基础配置"},{k:"models" as const,l:"模型管理"},{k:"prompts" as const,l:"AI 提示词"}].map(t => (
+          {[{k:"basic" as const,l:"基础配置",el:null},{k:"models" as const,l:"模型管理",el:tabDots.models?<span className="inline-block w-1.5 h-1.5 rounded-full ml-1" style={{backgroundColor:"#c64545"}}></span>:null},{k:"prompts" as const,l:"AI 提示词",el:null},{k:"folders" as const,l:"文件夹",el:tabDots.folders?<span className="inline-block w-1.5 h-1.5 rounded-full ml-1" style={{backgroundColor:"#c64545"}}></span>:null}].map(t => (
             <button key={t.k} onClick={() => setTab(t.k)}
-              className="text-xs px-3 py-1.5 rounded" style={{backgroundColor: tab===t.k ? S.r : "transparent", color: tab===t.k ? S.w : S.ms}}>{t.l}</button>
+              className="text-xs px-3 py-1.5 rounded" style={{backgroundColor: tab===t.k ? S.r : "transparent", color: tab===t.k ? S.w : S.ms}}>{t.l}{t.el}</button>
           ))}
         </div>
 
@@ -103,10 +114,11 @@ export default function SettingsModal({ onClose }: Props) {
 
           {tab === "models" && (
             <div className="-mx-5 -my-4">
-              <ModelManager onClose={() => {}} standalone={false} />
+              <ModelManager onClose={() => {}} standalone={false} onModelsSaved={()=>{fetch("/api/task-models").then(r=>r.json()).then(d=>{const has=!!(d&&Object.values(d).every((x:any)=>x.model));setTabDots(prev=>({...prev,models:!has}));}).then(()=>{if(onModelSave)onModelSave();});}} />
             </div>
           )}
 
+          {tab === "folders" && (<div className="flex flex-col gap-3"><button onClick={addPath} className="text-xs px-3 py-1 rounded-md w-fit" style={{backgroundColor:S.d,color:S.b}}>+ 添加文件夹</button>{ftp.map((p,i)=>(<div key={i} className="p-3 rounded-lg" style={{border:`1px solid ${S.h}`}}><div className="flex gap-2 items-center mb-2"><input type="text" placeholder="名称" value={p.name||""} onChange={e=>updPath(i,{name:e.target.value})} className="text-xs px-2 py-1 rounded-md outline-none flex-1" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/><button onClick={()=>delPath(i)} className="text-xs px-2 py-1 rounded" style={{color:"#c64545"}}>✕</button></div><div className="flex gap-2 items-center"><input type="text" placeholder="路径" value={p.path} onChange={e=>updPath(i,{path:e.target.value})} className="flex-1 text-xs px-2 py-1 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/><button onClick={()=>pickFolder(i)} className="text-xs px-2 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>📁</button></div><div className="flex gap-3 mt-2 items-center"><label className="flex items-center gap-1 text-[10px]" style={{color:S.ms}}><input type="checkbox" checked={p.recursive} onChange={e=>updPath(i,{recursive:e.target.checked})} className="accent-[#cc785c]"/>递归</label><label className="text-[10px]" style={{color:S.ms}}>深度 <input type="number" min={1} max={10} value={p.max_depth||3} onChange={e=>updPath(i,{max_depth:parseInt(e.target.value)||3})} className="w-12 text-[10px] px-1 py-0.5 rounded outline-none ml-1" style={{border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/></label><label className="flex items-center gap-1 text-[10px]" style={{color:S.ms}}><input type="checkbox" checked={p.enabled!==false} onChange={e=>updPath(i,{enabled:e.target.checked})} className="accent-[#cc785c]"/>启用</label></div></div>))}<div className="flex gap-2 items-center"><button onClick={savePaths} className="text-xs px-3 py-1 rounded-md w-fit" style={{backgroundColor: S.r, color: S.w}}>{fSaving?"保存中...":"保存"}</button>{fMsg&&<span className="text-[10px]" style={{color:fMsg.includes("失败")?"#c64545":S.m}}>{fMsg}</span>}</div></div>)}
           {tab === "prompts" && (
             <div className="flex flex-col gap-3">
               <div className="flex gap-1">

@@ -47,7 +47,7 @@ function saveProviders(providers: Record<string, ProviderData>, taskModels: Reco
     .then(r => r.ok === true);
 }
 
-export default function ModelManager({ onClose, standalone = true }: { onClose: () => void; standalone?: boolean }) {
+export default function ModelManager({ onClose, standalone = true, onModelsSaved }: { onClose: () => void; standalone?: boolean; onModelsSaved?: () => void }) {
   const [tab, setTab] = useState<"providers" | "tasks">("providers");
   const [selProvider, setSelProvider] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -117,7 +117,7 @@ export default function ModelManager({ onClose, standalone = true }: { onClose: 
     setEditProviders(updated);
     setEditUrl(null);
     saveProviders(updated, editTaskModels).then(ok => {
-      setMsg(ok ? "已保存" : "保存失败");
+      setMsg(ok ? "已保存" : "保存失败");if(ok&&onModelsSaved)onModelsSaved();
       setTimeout(() => setMsg(""), ok ? 2000 : 3000);
     });
   };
@@ -128,7 +128,7 @@ export default function ModelManager({ onClose, standalone = true }: { onClose: 
 
   const saveTasks = () => {
     saveProviders(editProviders, editTaskModels).then(ok => {
-      setMsg(ok ? "已保存" : "保存失败");
+      setMsg(ok ? "已保存" : "保存失败");if(ok&&onModelsSaved)onModelsSaved();
       if (ok) setInitTaskModels({...editTaskModels});
       setTimeout(() => setMsg(""), ok ? 2000 : 3000);
     });

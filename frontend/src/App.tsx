@@ -61,10 +61,12 @@ function App() {
   const [fop,sfop]=useState(false);
   const [aop,saop]=useState(false);
   const [top,stop]=useState(false);
+  const [missingConfig,setMC]=useState(false);
   const [qStat,setQStat]=useState<{pending:number;processing_name:string|null}>({pending:0,processing_name:null});
   const dr=useRef<HTMLTextAreaElement>(null);
 
-  useEffect(()=>{fetch("/api/stats").then(r=>r.json()).then(ss);fetch("/api/formats").then(r=>r.json()).then(sfmts);},[]);
+  const ckCfg=()=>{Promise.all([fetch("/api/config/watch-paths").then(r=>r.json()),fetch("/api/task-models").then(r=>r.json())]).then(([wp,tm])=>{const hasWp=wp.paths&&wp.paths.length>0;const hasTm=!!(tm&&Object.values(tm).every((x:any)=>x.model));setMC(!hasWp||!hasTm);});};
+  useEffect(()=>{fetch("/api/stats").then(r=>r.json()).then(ss);fetch("/api/formats").then(r=>r.json()).then(sfmts);fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0)sso(true);});ckCfg();setInterval(ckCfg,30000);},[]);
   useEffect(()=>{fetch("/api/tags").then(r=>r.json()).then(stg);},[]);
   useEffect(()=>{fetch("/api/queue/status").then(r=>r.json()).then(setQStat);const i=setInterval(()=>fetch("/api/queue/status").then(r=>r.json()).then(setQStat),5000);return ()=>clearInterval(i);},[]);
 
@@ -183,8 +185,8 @@ function App() {
           </div>}
         </div>
         <div className="mt-auto pt-4 flex flex-col gap-1" style={{borderTop:`1px solid ${S.h}`}}>
-          <button onClick={()=>fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{alert(d.message);fa();})} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
-          <button onClick={()=>sso(true)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>⚙ 设置</button>
+          <button onClick={()=>fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0){alert("请先配置扫描文件夹");sso(true);}else{fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{alert(d.message);fa();})}})} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
+          <button onClick={()=>sso(true)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>⚙ 设置{missingConfig?<span className="w-2 h-2 rounded-full inline-block ml-1" style={{backgroundColor:"#c64545"}}></span>:null}</button>
         </div>
       </aside>
       {slc && <div className="fixed inset-0 z-40 flex items-center justify-center" style={{backgroundColor: "rgba(250,249,245,0.7)"}}><div className="text-center"><div className="animate-spin text-2xl mb-2">⏳</div><p className="text-sm" style={{color: "#6c6a64"}}>搜索中...</p></div></div>}
@@ -244,7 +246,7 @@ function App() {
         </div>
         {sel.ai_status&&sel.ai_status!=="-"&&<div className="text-xs flex items-center gap-2"><span style={{color:S.ms}}>AI 状态: </span><span style={{color:sel.ai_status==="done"?"#5db872":sel.ai_status==="processing"?"#e8a55a":sel.ai_status==="failed"?"#c64545":S.m}}>{sel.ai_status==="done"?"已完成":sel.ai_status==="processing"?"分析中...":sel.ai_status==="pending"?"等待分析":sel.ai_status}</span>{sel.ai_status==="failed"?<button onClick={()=>fetch(`/api/assets/${sel.id}/retry-ai`,{method:"POST"}).then(()=>selA(sel.id)).then(()=>fa())} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.r,color:S.w}}>重试</button>:<button onClick={()=>fetch(`/api/assets/${sel.id}/reanalyze`,{method:"POST"}).then(()=>{selA(sel.id);})} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.d,color:S.b}}>重新分析</button>}</div>}
         {(sel.visual_description||sel.ai_summary||sel.video_summary)&& <div><button onClick={() => scp(sel.id)} className="text-xs px-2 py-1 rounded-md" style={{backgroundColor: S.rb, color: S.r}}>🔍 找相似内容</button></div>}
-        {(sel.visual_description||sel.ai_summary||sel.video_summary)&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>AI 描述</div><p className="text-xs" style={{color:S.b}}>{sel.visual_description}</p></div>}
+        {sel.visual_description&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>AI 描述</div><p className="text-xs" style={{color:S.b}}>{sel.visual_description}</p></div>}
         {sel.ocr_text&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>OCR 文字</div><p className="text-xs" style={{color:S.b}}>{sel.ocr_text}</p></div>}
         {sel.transcript&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>语音转录</div><p className="text-xs max-h-32 overflow-y-auto whitespace-pre-wrap" style={{color:S.b}}>{sel.transcript}</p></div>}
         {sel.ai_summary&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>AI 摘要</div><p className="text-xs" style={{color:S.b}}>{sel.ai_summary}</p></div>}
@@ -258,7 +260,7 @@ function App() {
           <div className="flex gap-2"><input type="text" placeholder="新标签..." value={nt} onChange={e=>sn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&adT()} className="flex-1 text-xs px-2 py-1 rounded-md outline-none" style={{fontFamily:"'Inter',sans-serif",border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/><button onClick={adT} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>添加</button></div>
         </div>
       </aside>}
-      {so && <SettingsModal onClose={() => sso(false)} />}
+      {so && <SettingsModal onClose={() => {sso(false);ckCfg();}} initialTab="folders" onModelSave={()=>setTimeout(ckCfg,500)} />}
       {mm && <ModelManager onClose={() => smm(false)} />}
       {cp && <SimilarPanel assetId={cp} onClose={() => scp(null)} />}
     </div>
