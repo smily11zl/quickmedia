@@ -30,7 +30,7 @@ class ProviderRegistry:
         section = self._models.get(provider_name, {})
         models = section.get("models", []) if isinstance(section, dict) else []
         if capability:
-            models = [m for m in models if capability in m.get("capabilities", [])]
+            models = [m for m in models if capability in (m.get("capabilities") or {})]
         return models
 
     def get_task_binding(self, task_type: str) -> dict | None:
@@ -42,8 +42,17 @@ class ProviderRegistry:
         """Return the URL for a provider from user config or built-in models.yaml."""
         providers = self._config.get("providers") or {}
         if provider_name in providers:
-            return providers[provider_name].get("url")
-        # Fall back to models.yaml
+            return (providers[provider_name].get("url") or "").rstrip("/")
+        return (self._models.get(provider_name, {}).get("url") or "").rstrip("/") or None
+
+    def get_model_info(self, provider_name: str, model_name: str) -> dict | None:
+        """Return full model info dict for a specific provider/model."""
+        section = self._models.get(provider_name, {})
+        models = section.get("models", []) if isinstance(section, dict) else []
+        for m in models:
+            if m.get("name") == model_name:
+                return m
+        return None
         section = (self._models or {}).get(provider_name)
         if isinstance(section, dict):
             return section.get("url")

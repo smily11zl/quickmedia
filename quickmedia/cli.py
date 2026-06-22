@@ -183,7 +183,7 @@ def _cmd_search(db_path: str):
     for r in results:
         tags = db.get_asset_tags(r["id"])
         tag_str = ", ".join(t["name"] for t in tags) if tags else ""
-        desc = r["description"] or r["ai_description"] or tag_str or ""
+        desc = r["description"] or r["visual_description"] or tag_str or ""
         if len(desc) > 30:
             desc = desc[:30] + "..."
         print(f"{r['id']:<5} {r['filename']:<22} {r['asset_type']:<8} {desc}")

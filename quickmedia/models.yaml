@@ -2,76 +2,134 @@ ollama:
   url: http://localhost:11434/v1
   models:
     - name: qwen3.5:9b
-      capabilities: [vision, text, speech]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        video: [MP4]
+        text: []
     - name: qwen3-embedding:8b
-      capabilities: [embedding]
+      capabilities:
+        embedding: []
 
 openrouter:
   url: https://openrouter.ai/api/v1
   models:
     - name: openai/gpt-4o
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
     - name: openai/gpt-4o-mini
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
     - name: anthropic/claude-sonnet-4
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
     - name: anthropic/claude-haiku-4
-      capabilities: [text]
+      capabilities:
+        text: []
+        document: [PDF, TXT, MD]
     - name: google/gemini-2.5-flash
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        video: [MP4]
+        audio: [MP3, WAV]
+        text: []
+        document: [PDF, TXT, MD]
     - name: google/gemini-2.5-pro
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        video: [MP4]
+        audio: [MP3, WAV]
+        text: []
+        document: [PDF, TXT, MD]
     - name: deepseek/deepseek-chat
-      capabilities: [text]
+      capabilities:
+        text: []
     - name: deepseek/deepseek-v4-pro
-      capabilities: [text]
+      capabilities:
+        text: []
     - name: deepseek/deepseek-r1
-      capabilities: [text]
+      capabilities:
+        text: []
     - name: qwen/qwen3.5-plus-02-15
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        video: [MP4]
+        text: []
     - name: qwen/qwen3.5-max
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        video: [MP4]
+        text: []
     - name: qwen/qwen3.5-coder
-      capabilities: [text]
+      capabilities:
+        text: []
     - name: qwen/qwen3.7-plus
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        video: [MP4]
+        text: []
     - name: qwen/qwen3.7-max
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        video: [MP4]
+        text: []
     - name: qwen/qwen3-embedding-8b
-      capabilities: [embedding]
+      capabilities:
+        embedding: []
 
 deepseek:
   url: https://api.deepseek.com/v1
   models:
     - name: deepseek-chat
-      capabilities: [text, speech]
+      capabilities:
+        text: []
     - name: deepseek-reasoner
-      capabilities: [text]
+      capabilities:
+        text: []
     - name: deepseek-v4-flash
-      capabilities: [text, speech]
+      capabilities:
+        text: []
     - name: deepseek-v4-pro
-      capabilities: [text]
+      capabilities:
+        text: []
 
 minimax:
   url: https://api.minimaxi.com/v1
   models:
     - name: MiniMax-M3
-      capabilities: [vision, text]
+      capabilities:
+        text: []
     - name: MiniMax-M2.7
-      capabilities: [vision, text]
+      capabilities:
+        text: []
     - name: MiniMax-M2.5
-      capabilities: [vision, text]
+      capabilities:
+        text: []
     - name: MiniMax-M2.1
-      capabilities: [vision, text]
+      capabilities:
+        text: []
     - name: MiniMax-M2
-      capabilities: [vision, text]
+      capabilities:
+        text: []
     - name: MiniMax-M1
-      capabilities: [text]
+      capabilities:
+        text: []
 
 openai:
   url: https://api.openai.com/v1
   models:
     - name: gpt-4o
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
     - name: gpt-4o-mini
-      capabilities: [vision, text]
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]

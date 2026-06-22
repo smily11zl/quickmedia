@@ -15,7 +15,7 @@ DEFAULT_CONFIG = {
         "ollama_url": "http://localhost:11434",
         "model": "qwen3.5:9b",
         "timeout": 300,
-        "video_frames": 1,
+        "video_frames": 3,
     },
     "providers": {
         "ollama": {
@@ -34,7 +34,10 @@ DEFAULT_CONFIG = {
         "image": ["jpg", "jpeg", "png", "gif", "webp", "heic", "svg"],
         "video": ["mp4", "mov", "avi"],
         "audio": ["mp3", "wav", "m4a"],
-        "document": ["pdf", "txt", "md"],
+        "document": ["pdf", "txt", "md", "csv", "json", "xlsx", "docx"],
+    },
+    "semantic": {
+        "top_k": 2,
     },
     "system": {
         "max_file_size": 524288000,  # 500MB

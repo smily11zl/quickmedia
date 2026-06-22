@@ -52,7 +52,7 @@ class TestEmbeddingAnalyzer:
         from quickmedia.embedding import _build_field_text
         asset = {
             "filename": "vacation.jpg",
-            "ai_description": "海边日落",
+            "visual_description": "海边日落",
             "ai_summary": None,
             "tags": [{"name": "旅行"}, {"name": "海滩"}],
             "ocr_text": "",

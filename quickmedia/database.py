@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS assets (
     duration        REAL,
     exif_data       TEXT,
     description     TEXT,
-    ai_description  TEXT,
+    visual_description TEXT,
     ai_summary      TEXT,
     notes           TEXT,
     status          TEXT DEFAULT 'active',
@@ -42,7 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_assets_inode_device ON assets(inode, device);
 CREATE VIRTUAL TABLE IF NOT EXISTS assets_fts USING fts5(
     filename,
     description,
-    ai_description,
+    visual_description,
     ai_summary,
     notes,
     transcript,
@@ -84,6 +84,13 @@ CREATE TABLE IF NOT EXISTS config (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS asset_search_terms (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    term     TEXT NOT NULL,
+    UNIQUE(asset_id, term)
+);
 """
 
 
@@ -95,7 +102,19 @@ class Database:
         self.conn = sqlite3.connect(db_path)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
+        self._migrate_v9()
         self._init_schema()
+
+    def _migrate_v9(self) -> None:
+        """V9: rename ai_description to visual_description for existing databases."""
+        try:
+            cols = [r["name"] for r in self.conn.execute("PRAGMA table_info(assets)").fetchall()]
+            if "ai_description" in cols and "visual_description" not in cols:
+                self.conn.execute("ALTER TABLE assets RENAME COLUMN ai_description TO visual_description")
+                # Rebuild FTS5 index to pick up the new column name
+                self.conn.execute("INSERT INTO assets_fts(assets_fts) VALUES('rebuild')")
+        except Exception:
+            pass
 
     def _init_schema(self) -> None:
         """Create tables and indexes if they don't exist."""
@@ -148,7 +167,7 @@ class Database:
                 CREATE VIRTUAL TABLE assets_fts USING fts5(
                     filename,
                     description,
-                    ai_description,
+                    visual_description,
                     ai_summary,
                     notes,
                     transcript,
@@ -195,7 +214,7 @@ class Database:
     # ── search ────────────────────────────────────────────────────
 
     def search(self, query: str) -> list[sqlite3.Row]:
-        """Full-text search across filename, description, ai_description, notes.
+        """Full-text search across filename, description, visual_description, notes.
         
         Uses LIKE for broad compatibility (FTS5 with proper CJK tokenizer
         requires additional configuration).
@@ -208,7 +227,7 @@ class Database:
         if not tokens:
             return []
         # Build OR'd LIKE clauses for each token across all text columns
-        columns = ["a.filename", "a.description", "a.ai_description",
+        columns = ["a.filename", "a.description", "a.visual_description",
                    "a.ai_summary", "a.ocr_text", "a.transcript", "a.video_summary",
                    "a.notes", "t.name"]
         conditions = []
@@ -244,7 +263,7 @@ class Database:
             WHERE a.status = 'active' AND (
                 a.filename LIKE ? OR
                 a.description LIKE ? OR
-                a.ai_description LIKE ? OR
+                a.visual_description LIKE ? OR
                 a.ai_summary LIKE ? OR
                 a.notes LIKE ? OR
                 a.ocr_text LIKE ? OR

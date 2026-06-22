@@ -121,6 +121,17 @@
 - **ChromaDB** — 轻量开源向量数据库，内嵌模式零配置
 - **多模型** — Ollama qwen3-embedding:8b + OpenRouter qwen/qwen3-embedding-8b
 
+---
+
+## v9 — 语义搜索优化 ✅
+
+### 核心功能
+
+- **search_terms 字段** — AI 输出专注检索意图的搜索词（5-10个），与 tags 分离
+- **独立向量化** — 每个 search_term 存独立向量，Top-K 聚合匹配
+- **视频字段重构** — ai_description 重命名为 visual_description
+- **Prompt 增强** — system_format 固定 search_terms 生成规则
+
 ### 素材管理
 
 - **素材预览** — Web UI 直接打开文件预览（图片全屏、视频播放、文档查看）
@@ -158,7 +169,10 @@
 
 ### 🔴 高优先级 —「装上就会用，用了离不开」
 
-**1. 智能聚类 + 素材聚类**
+**1. MCP 服务对接**
+通过 MCP 协议把素材管理能力暴露给 Hermes / Claude Code / Cursor 等 AI Agent。在对话中直接搜素材、取文件、找相似，Agent 自动决定用什么素材。6 个工具：search_assets、get_asset、list_assets、find_similar、add_asset、delete_asset。
+
+**2. 智能聚类 + 素材聚类**
 几百张截图、照片堆着没人整理。AI 自动分组：「这 30 张是同一个人」「这 15 张都是发票」「这 20 张是设计灵感」，一键命名归类。没这个能力，手动整理几百张素材根本没人会做。
 
 ### 🟡 中优先级 —「锦上添花」

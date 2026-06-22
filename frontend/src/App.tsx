@@ -6,9 +6,12 @@ import SimilarPanel from "./SimilarPanel";
 interface Asset {
   id: number; filename: string; asset_type: string; size: number;
   width?: number; height?: number; duration?: number; path: string;
-  description?: string; ai_description?: string; ai_summary?: string;
+  description?: string; visual_description?: string;
+  ai_description?: string; ai_summary?: string;
   ocr_text?: string; transcript?: string; video_summary?: string;
   ai_status?: string;
+  doc_preview?: string;
+  _stars?: number;
   thumbnail_status: string; modified_at?: string;
   tags: { id: number; name: string; source: string }[];
   _distance?: number;
@@ -18,6 +21,7 @@ interface TagInfo { id: number; name: string; count: number; }
 
 const f=(b:number)=>{for(const u of["B","KB","MB","GB"]){if(b<1024)return `${b}${u}`;b=Math.floor(b/1024);}return `${b}TB`;};
 const S={c:"#faf9f5",h:"#e6dfd8",d:"#efe9de",s:"#f5f0e8",i:"#141413",b:"#3d3d3a",m:"#6c6a64",ms:"#8e8b82",r:"#cc785c",rb:"rgba(204,120,92,0.08)",w:"#fff"};
+const docI=(a:Asset)=>{const x=a.filename.split(".").pop()?.toLowerCase()||"";const m:Record<string,string>={pdf:"📕",md:"📝",txt:"📝",csv:"📊",json:"📋",xlsx:"📊",docx:"📄"};return m[x]||"📄";};
 const aiT=(s?:string)=>{if(!s||s==="-")return null;const m:{[k:string]:string}={done:"已完成",processing:"分析中...",pending:"等待分析",failed:"失败"};return <span className="text-[10px]" style={{color:S.ms}}>{m[s]||s}</span>;};
 
 const DocPreview = ({id}:{id:number}) => {
@@ -29,6 +33,9 @@ const DocPreview = ({id}:{id:number}) => {
 
 function App() {
   const [as,sa]=useState<Asset[]>([]);
+  const [fmts,sfmts]=useState<string[]>([]);
+  const [searchResults,sr]=useState<Asset[]>([]);
+  const [didSearch,sds]=useState(false);
   const [st,ss]=useState<Stats>({total:0,image:0,video:0,audio:0,document:0});
   const [tg,stg]=useState<TagInfo[]>([]);
   const [tf,stf]=useState<string|null>(null);
@@ -57,26 +64,37 @@ function App() {
   const [qStat,setQStat]=useState<{pending:number;processing_name:string|null}>({pending:0,processing_name:null});
   const dr=useRef<HTMLTextAreaElement>(null);
 
-  useEffect(()=>{fetch("/api/stats").then(r=>r.json()).then(ss);},[]);
+  useEffect(()=>{fetch("/api/stats").then(r=>r.json()).then(ss);fetch("/api/formats").then(r=>r.json()).then(sfmts);},[]);
   useEffect(()=>{fetch("/api/tags").then(r=>r.json()).then(stg);},[]);
   useEffect(()=>{fetch("/api/queue/status").then(r=>r.json()).then(setQStat);const i=setInterval(()=>fetch("/api/queue/status").then(r=>r.json()).then(setQStat),5000);return ()=>clearInterval(i);},[]);
 
   const doSearch=()=>{
-    if(!q.trim()){sq("");fa();return;}
+    if(!q.trim()){sq("");sr([]);sds(false);fa();return;}
     sslc(true);
-    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(sa).finally(()=>sslc(false));
+    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{sa((d.items||d||[]));if(smode!=="keyword"){sr((d.items||d||[]));sds(true);}}).finally(()=>sslc(false));
   };
   const fa=()=>{const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>sa(d.items));};
-  useEffect(()=>{fa();},[tf,ff,af,df,mf,tgf]);
+  useEffect(()=>{if(didSearch)return;fa();},[tf,ff,af,df,mf,tgf]);useEffect(()=>{const u=async()=>{const r=await fetch("/api/assets?limit=500");const d=await r.json();const m:Record<number,any>={};d.items.forEach((a:any)=>m[a.id]=a);sa((p:any[])=>{let c=false;const n=p.map(a=>{const f=m[a.id];if(f&&a.ai_status!==f.ai_status){c=true;return{...a,ai_status:f.ai_status,analyzed_at:f.analyzed_at};}return a;});return c?n:p;});};const i=setInterval(u,3000);return ()=>clearInterval(i);},[]);
 
   // Poll selected asset if it's being processed
   useEffect(()=>{
-    if(!sel||(sel.ai_status!=="processing"&&sel.ai_status!=="pending")) return;
+    if(!sel) return;
     const i=setInterval(()=>{fetch(`/api/assets/${sel.id}`).then(r=>r.json()).then(a=>{sl(a);sd(a.description||"");se(false);});},5000);
     return ()=>clearInterval(i);
   },[sel?.id,sel?.ai_status]);
 
-  let fs=as;if(gf)fs=as.filter(a=>a.tags.some(t=>t.id===gf));
+  let fs=(q&&smode!=="keyword"&&didSearch)?searchResults:as;
+  if(didSearch){
+    if(tf)fs=fs.filter(a=>a.asset_type===tf);
+    if(ff.size>0)fs=fs.filter(a=>{const x=a.filename.split(".").pop()?.toLowerCase()||"";return ff.has(x);});
+    if(af.size>0)fs=fs.filter(a=>{const s=a.ai_status||(a.visual_description||a.ai_summary?"done":"pending");return af.has(s);});
+    if(tgf.size>0)fs=fs.filter(a=>a.tags.some(t=>tgf.has(t.id)));
+    if(df.from)fs=fs.filter(a=>(a.modified_at||"")>=df.from);
+    if(df.to)fs=fs.filter(a=>(a.modified_at||"").slice(0,10)<=df.to);
+    if(mf.from)fs=fs.filter(a=>(a.modified_at||"")>=mf.from);
+    if(mf.to)fs=fs.filter(a=>(a.modified_at||"").slice(0,10)<=mf.to);
+  }
+  if(gf)fs=fs.filter(a=>a.tags.some(t=>t.id===gf));
   if(smode==="keyword")fs=[...fs].sort((a,b)=>{if(sb==="size")return b.size-a.size;if(sb==="date")return(b.modified_at||"").localeCompare(a.modified_at||"");return a.filename.localeCompare(b.filename);});
 
   const selA=(id:number)=>{fetch(`/api/assets/${id}`).then(r=>r.json()).then(a=>{sl(a);sd(a.description||"");se(false);});};
@@ -85,7 +103,7 @@ function App() {
   const rmT=(tid:number)=>{if(!sel)return;fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"DELETE"}).then(()=>{sl({...sel,tags:sel.tags.filter(t=>t.id!==tid)});fetch("/api/tags").then(r=>r.json()).then(stg);});};
   const cfT=(tid:number)=>{if(!sel)return;fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"DELETE"}).then(()=>fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"POST"})).then(()=>{sl({...sel,tags:sel.tags.map(t=>t.id===tid?{...t,source:"manual"}:t)});});};
   const tgA=(id:number)=>{const n=new Set(ms);n.has(id)?n.delete(id):n.add(id);sm(n);};
-  const bRe=()=>{fetch("/api/assets/batch-reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({asset_ids:[...ms]})}).then(()=>{sm(new Set());fa();});};
+  const bRe=()=>{fetch("/api/assets/batch-reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({asset_ids:[...ms]})}).then(()=>{sm(new Set());});};
   const delA=(id:number)=>{fetch(`/api/assets/${id}`,{method:"DELETE"}).then(()=>{sl(null);fa();});};
 
   const types=[{k:null,l:"全部素材",n:st.total},{k:"image",l:"图片",n:st.image},{k:"video",l:"视频",n:st.video},{k:"audio",l:"音频",n:st.audio},{k:"document",l:"文档",n:st.document}];
@@ -98,7 +116,7 @@ function App() {
         <div className="flex flex-col gap-1 mb-3">
           <div className="relative w-full">
             <input type="text" placeholder="搜索..." value={q} onChange={e=>sq(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()} className="w-full px-3 py-1.5 text-sm rounded-md outline-none pr-6" style={{fontFamily:"'Inter',sans-serif",backgroundColor:S.c,border:`1px solid ${S.h}`,color:S.i}}/>
-            {q&&<button onClick={()=>{sq("");fa();}} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{color:S.ms}}>✕</button>}
+            {q&&<button onClick={()=>{sq("");sr([]);sds(false);fa();}} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{color:S.ms}}>✕</button>}
           </div>
           <div className="flex gap-1">
             <select value={smode} onChange={e=>ssmode(e.target.value as any)} className="flex-1 text-[11px] px-1 py-1.5 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
@@ -131,7 +149,7 @@ function App() {
           </button>
           {fop&&<div className="fixed inset-0 z-[5]" onClick={()=>sfop(false)}/>}
           {fop&&<div className="absolute top-full left-0 right-0 mt-1 p-2 rounded border shadow-sm z-10 flex gap-1 flex-wrap" style={{borderColor:S.h,backgroundColor:S.c}}>
-            {["png","jpg","mp4","wav","md","txt","pdf","mov","avi","gif","webp","m4a"].map(f=><button key={f} onClick={()=>{const n=new Set(ff);n.has(f)?n.delete(f):n.add(f);sf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(ff.has(f)?"font-medium":"")} style={{color:ff.has(f)?S.r:S.ms,backgroundColor:ff.has(f)?S.rb:"transparent"}}>{f.toUpperCase()}</button>)}
+            {fmts.map(f=><button key={f} onClick={()=>{const n=new Set(ff);n.has(f)?n.delete(f):n.add(f);sf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(ff.has(f)?"font-medium":"")} style={{color:ff.has(f)?S.r:S.ms,backgroundColor:ff.has(f)?S.rb:"transparent"}}>{f.toUpperCase()}</button>)}
           </div>}
         </div>
         <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>AI 状态</div>
@@ -171,7 +189,7 @@ function App() {
       </aside>
       {slc && <div className="fixed inset-0 z-40 flex items-center justify-center" style={{backgroundColor: "rgba(250,249,245,0.7)"}}><div className="text-center"><div className="animate-spin text-2xl mb-2">⏳</div><p className="text-sm" style={{color: "#6c6a64"}}>搜索中...</p></div></div>}
       <main className="flex-1 overflow-y-auto p-6">
-        {ms.size>0&&<div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{backgroundColor:S.d}}><span className="text-xs" style={{color:S.b}}>已选 {ms.size} 个</span><button onClick={bRe} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>重新分析已选</button><button onClick={()=>sm(new Set())} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>取消选择</button></div>}
+        {ms.size>0&&<div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{backgroundColor:S.d}}><span className="text-xs" style={{color:S.b}}>已选 {ms.size} 个</span><button onClick={()=>sm(new Set(fs.map(a=>a.id)))} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>全选</button><button onClick={()=>sm(new Set())} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>取消选择</button><button onClick={bRe} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>重新分析已选</button></div>}
         <div className="flex gap-2 mb-4 items-center">
           <div className="flex gap-1 rounded-md p-0.5" style={{backgroundColor:S.s}}>
             <button onClick={()=>sv("grid")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="grid"?S.c:"transparent",color:S.i}}>▦ 网格</button>
@@ -189,10 +207,10 @@ function App() {
             {fs.map(a=>(<div key={a.id} onClick={()=>selA(a.id)} className="rounded-xl overflow-hidden cursor-pointer transition-shadow hover:shadow-sm relative" style={{backgroundColor:S.c,border:sel?.id===a.id?`2px solid ${S.r}`:`1px solid ${S.h}`}}>
               <div className="aspect-square flex flex-col items-center justify-center relative" style={{backgroundColor:S.s}}>
                 {a.thumbnail_status==="done"?<img src={`/api/thumbnails/${a.id}?t=${a.modified_at||''}`} className="w-full h-full object-cover"/>:a.asset_type==="image"?<span className="text-sm animate-pulse" style={{color:S.m}}>生成中...</span>:<>
-                  <span className="text-4xl">{a.asset_type==="video"?"🎬":a.asset_type==="audio"?"🎵":"📄"}</span>
+                  <span className="text-4xl">{a.asset_type==="video"?"🎬":a.asset_type==="audio"?"🎵":a.asset_type==="document"?docI(a):"📄"}</span>
                   {a.asset_type==="document" && <DocPreview id={a.id} />}
                 </>}
-                <span className="absolute top-1 left-1" onClick={e=>{e.stopPropagation();tgA(a.id);}}><input type="checkbox" checked={ms.has(a.id)} readOnly className="w-4 h-4 rounded accent-[#cc785c]"/></span>
+                {a._stars&&<span className="absolute top-1 right-1 text-xs"><span style={{color:"#e8a55a"}}>{"★".repeat(a._stars)}</span></span>}<span className="absolute top-1 left-1" onClick={e=>{e.stopPropagation();tgA(a.id);}}><input type="checkbox" checked={ms.has(a.id)} readOnly className="w-4 h-4 rounded accent-[#cc785c]"/></span>
               </div>
               <div className="p-3"><p className="text-sm font-medium truncate" style={{fontFamily:"'Inter',sans-serif",color:S.i}}>{hl(a.filename as any)}</p><p className="text-xs mt-0.5" style={{color:S.ms}}>{a.width&&a.height?`${a.width}×${a.height}`:a.duration?`${Math.round(a.duration)}秒`:""} {f(a.size)}{aiT(a.ai_status)&&<span className="ml-2">{aiT(a.ai_status)}</span>}</p>
                 {a.tags.length>0&&<div className="flex gap-1 mt-1.5 flex-wrap">{a.tags.slice(0,3).map(t=>(<span key={t.id} className="text-[10px] px-1.5 py-0.5 rounded-full font-medium" style={{fontFamily:"'Inter',sans-serif",border:t.source==="auto"?`1px dashed ${S.ms}`:"none",backgroundColor:t.source==="auto"?"transparent":S.d,color:t.source==="auto"?S.m:S.b}}>{t.name}</span>))}</div>}
@@ -215,7 +233,7 @@ function App() {
       </main>
       {sel&&<aside className="w-80 border-l overflow-y-auto p-4 flex flex-col gap-3" style={{borderColor:S.h,backgroundColor:S.c}}>
         <div className="flex justify-between items-center"><h2 className="text-sm font-medium truncate flex-1" style={{fontFamily:"'Inter',sans-serif",color:S.i}}>{sel.filename}</h2><button onClick={()=>{if(confirm(`确认删除 ${sel.filename}？`))delA(sel.id)}} className="text-xs px-1.5 py-0.5 rounded" style={{color:S.r}} title="删除">🗑</button><button onClick={()=>sl(null)} className="text-lg leading-none px-1" style={{color:S.ms}}>✕</button></div>
-        {sel.thumbnail_status==="done"?<img src={`/api/thumbnails/${sel.id}?t=${sel.modified_at||''}`} className="w-full rounded-lg" style={{border:`1px solid ${S.h}`}}/>:<div className="w-full aspect-square rounded-lg flex items-center justify-center" style={{backgroundColor:S.s}}><span className="text-5xl">{sel.asset_type==="video"?"🎬":sel.asset_type==="audio"?"🎵":"📄"}</span></div>}
+        {sel.thumbnail_status==="done"?<img src={`/api/thumbnails/${sel.id}?t=${sel.modified_at||''}`} className="w-full rounded-lg" style={{border:`1px solid ${S.h}`}}/>:<div className="w-full aspect-square rounded-lg flex items-center justify-center" style={{backgroundColor:S.s}}><span className="text-5xl">{sel.asset_type==="video"?"🎬":sel.asset_type==="audio"?"🎵":sel.asset_type==="document"?docI(sel):"📄"}</span></div>}
         <div><div className="text-[11px] mb-0.5" style={{color:S.ms}}>路径 <span onClick={()=>fetch("/api/finder/open",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:sel.path})})} className="cursor-pointer ml-1" title="在 Finder 中打开">📂</span></div><p className="text-xs break-all" style={{color:S.b}}>{sel.path}</p></div>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div><span style={{color:S.ms}}>类型</span><p style={{color:S.b}}>{sel.asset_type}</p></div>
@@ -224,9 +242,9 @@ function App() {
           {sel.duration&&<div><span style={{color:S.ms}}>时长</span><p style={{color:S.b}}>{Math.round(sel.duration)}秒</p></div>}
           {sel.modified_at&&<div><span style={{color:S.ms}}>修改时间</span><p style={{color:S.b}}>{sel.modified_at.slice(0,10)}</p></div>}
         </div>
-        {sel.ai_status&&sel.ai_status!=="-"&&<div className="text-xs flex items-center gap-2"><span style={{color:S.ms}}>AI 状态: </span><span style={{color:sel.ai_status==="done"?"#5db872":sel.ai_status==="processing"?"#e8a55a":sel.ai_status==="failed"?"#c64545":S.m}}>{sel.ai_status==="done"?"已完成":sel.ai_status==="processing"?"分析中...":sel.ai_status==="pending"?"等待分析":sel.ai_status}</span>{sel.ai_status==="failed"?<button onClick={()=>fetch(`/api/assets/${sel.id}/retry-ai`,{method:"POST"}).then(()=>selA(sel.id)).then(()=>fa())} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.r,color:S.w}}>重试</button>:<button onClick={()=>fetch(`/api/assets/${sel.id}/reanalyze`,{method:"POST"}).then(()=>{selA(sel.id);fa();})} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.d,color:S.b}}>重新分析</button>}</div>}
-        {sel.ai_description && <div><button onClick={() => scp(sel.id)} className="text-xs px-2 py-1 rounded-md" style={{backgroundColor: S.rb, color: S.r}}>🔍 找相似内容</button></div>}
-        {sel.ai_description&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>AI 描述</div><p className="text-xs" style={{color:S.b}}>{sel.ai_description}</p></div>}
+        {sel.ai_status&&sel.ai_status!=="-"&&<div className="text-xs flex items-center gap-2"><span style={{color:S.ms}}>AI 状态: </span><span style={{color:sel.ai_status==="done"?"#5db872":sel.ai_status==="processing"?"#e8a55a":sel.ai_status==="failed"?"#c64545":S.m}}>{sel.ai_status==="done"?"已完成":sel.ai_status==="processing"?"分析中...":sel.ai_status==="pending"?"等待分析":sel.ai_status}</span>{sel.ai_status==="failed"?<button onClick={()=>fetch(`/api/assets/${sel.id}/retry-ai`,{method:"POST"}).then(()=>selA(sel.id)).then(()=>fa())} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.r,color:S.w}}>重试</button>:<button onClick={()=>fetch(`/api/assets/${sel.id}/reanalyze`,{method:"POST"}).then(()=>{selA(sel.id);})} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.d,color:S.b}}>重新分析</button>}</div>}
+        {(sel.visual_description||sel.ai_summary||sel.video_summary)&& <div><button onClick={() => scp(sel.id)} className="text-xs px-2 py-1 rounded-md" style={{backgroundColor: S.rb, color: S.r}}>🔍 找相似内容</button></div>}
+        {(sel.visual_description||sel.ai_summary||sel.video_summary)&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>AI 描述</div><p className="text-xs" style={{color:S.b}}>{sel.visual_description}</p></div>}
         {sel.ocr_text&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>OCR 文字</div><p className="text-xs" style={{color:S.b}}>{sel.ocr_text}</p></div>}
         {sel.transcript&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>语音转录</div><p className="text-xs max-h-32 overflow-y-auto whitespace-pre-wrap" style={{color:S.b}}>{sel.transcript}</p></div>}
         {sel.ai_summary&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>AI 摘要</div><p className="text-xs" style={{color:S.b}}>{sel.ai_summary}</p></div>}

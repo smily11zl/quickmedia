@@ -3,6 +3,9 @@
 import json
 import urllib.request
 
+G = "\033[92m"  # green
+R = "\033[0m"   # reset
+
 
 class OpenAIAdapter:
     """Adapter for OpenAI-compatible /v1/chat/completions API."""
@@ -44,6 +47,27 @@ class OpenAIAdapter:
         if msg.get("reasoning_content"):
             print(f"[{self.provider_name}] reasoning: {msg['reasoning_content'][:200]}", flush=True)
         print(f"[{self.provider_name}] {content_text}", flush=True)
+        return content_text
+
+    def chat_with_file(self, prompt: str, file_path: str) -> str:
+        """Send document file as base64 inline for native document analysis."""
+        import base64, os
+        ext = os.path.splitext(file_path)[1].lower().lstrip(".")
+        with open(file_path, "rb") as f:
+            file_data = base64.b64encode(f.read()).decode("utf-8")
+        content = [
+            {"type": "text", "text": prompt},
+            {"type": "file", "file": {"file_data": file_data, "filename": os.path.basename(file_path)}}
+        ]
+        body = {"model": self.model, "messages": [{"role": "user", "content": content}]}
+        if self.provider_name == "deepseek":
+            body["thinking"] = {"type": "disabled"}
+        print(f"{G}[{self.provider_name}] 文档分析 model={self.model} file={os.path.basename(file_path)} ({len(file_data)//1024}KB){R}", flush=True)
+        print(f"{G}[{self.provider_name} prompt] {prompt}{R}", flush=True)
+        data = self._request("POST", "/chat/completions", body)
+        msg = data.get("choices", [{}])[0].get("message", {})
+        content_text = msg.get("content", "")
+        print(f"{G}[{self.provider_name}] {content_text}{R}", flush=True)
         return content_text
 
     def _request(self, method: str, path: str, body: dict = None) -> dict:

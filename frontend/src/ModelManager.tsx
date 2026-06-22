@@ -30,7 +30,7 @@ const TASK_HINTS: Record<string, string> = {
   text: "分析文档类素材的摘要和关键词",
   speech: "分析语音转写文本的摘要和主题",
   video_summary: "综合画面描述和语音内容生成总结",
-  embedding: "生成素材向量用于语义搜索。⚠️ 创建后勿切换模型，否则需重建全部向量",
+  embedding: "使用 search_terms 生成独立向量用于语义搜索。每个搜索词存一个向量，Top-K 聚合匹配。⚠️ 勿切换模型",
 };
 
 const BUILTIN_PROVIDERS: ProviderInfo[] = [
@@ -51,7 +51,7 @@ export default function ModelManager({ onClose, standalone = true }: { onClose: 
   const [tab, setTab] = useState<"providers" | "tasks">("providers");
   const [selProvider, setSelProvider] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [models, setModels] = useState<Record<string, {name:string;capabilities:string[]}[]>>({});
+  const [models, setModels] = useState<Record<string, {name:string;capabilities:Record<string,string[]>}[]>>({});
   const [testStatus, setTestStatus] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState("");
   const [editUrl, setEditUrl] = useState<string | null>(null);
@@ -66,7 +66,7 @@ export default function ModelManager({ onClose, standalone = true }: { onClose: 
       setEditProviders({...(d.providers || {})});
       setEditTaskModels({...(d.task_models || {})});
       setInitTaskModels({...(d.task_models || {})});
-      const m: Record<string, {name:string;capabilities:string[]}[]> = {};
+      const m: Record<string, {name:string;capabilities:Record<string,string[]>}[]> = {};
       Object.keys(d.providers || {}).forEach((p: string) => {
         fetch(`/api/providers/${p}/models`).then(r => r.json()).then(r2 => {
           m[p] = r2.models || [];
@@ -142,11 +142,18 @@ export default function ModelManager({ onClose, standalone = true }: { onClose: 
       .catch(() => setTestStatus({...testStatus, [name]: "连接失败"}));
   };
 
-  const providerModels = (provider: string): {name:string;capabilities:string[]}[] => models[provider] || [];
+  const providerModels = (provider: string): {name:string;capabilities:Record<string,string[]>}[] => models[provider] || [];
 
-  const capLabel = (caps: string[]) => {
-    const labels: Record<string,string> = {vision:"图片", text:"文字", speech:"语音"};
-    return caps.map(c => labels[c]||c).join("/") || "通用";
+  const capLabel = (caps: Record<string,string[]>) => {
+    const labels: Record<string,string> = {image:"图片", text:"文字", audio:"语音", document:"文档", video:"视频", embedding:"向量"};
+    if (!caps || typeof caps !== 'object') return "通用";
+    const parts: string[] = [];
+    for (const [k, fmts] of Object.entries(caps)) {
+      const label = labels[k] || k;
+      if (fmts && fmts.length > 0) parts.push(label + "(" + fmts.join(",") + ")");
+      else parts.push(label);
+    }
+    return parts.join(" / ") || "通用";
   };
 
   const tasksDirty = JSON.stringify(editTaskModels) !== JSON.stringify(initTaskModels);
@@ -244,8 +251,7 @@ export default function ModelManager({ onClose, standalone = true }: { onClose: 
                           {models_.map(m => (
                             <button key={m.name} onClick={() => { updateTask(taskType, binding.provider, m.name); setOpenModelPicker(null); }}
                               className="w-full text-left px-2 py-1.5 hover:brightness-95" style={{backgroundColor: binding.model === m.name ? S.s : S.c}}>
-                              <div className="text-[10px]" style={{color: S.i}}>{m.name}</div>
-                              <div className="text-[9px]" style={{color: S.ms}}>{capLabel(m.capabilities)}</div>
+                              <div className="text-[10px]" style={{color: S.i}}>{m.name}</div><div className="text-[8px]" style={{color:S.ms}}>{capLabel(m.capabilities)}</div>
                             </button>
                           ))}
                         </div>

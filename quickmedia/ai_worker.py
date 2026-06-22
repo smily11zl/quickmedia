@@ -41,6 +41,11 @@ class AIWorker:
         models_path = _os.path.join(self._config_dir, "models.yaml")
         self._registry = ProviderRegistry(config, models_path)
 
+
+    def _pc(self):
+        """Reload PromptConfig from disk on each analysis."""
+        from quickmedia.prompt_config import PromptConfig
+        return PromptConfig(self._config_dir) if getattr(self, "_config_dir", None) else None
     def _get_adapter(self, task_type: str):
         """Create an adapter for the given task type based on task_models config."""
         # Re-read config from disk to pick up live changes
@@ -58,6 +63,10 @@ class AIWorker:
                         k, v = line.split("=", 1)
                         self._env[k] = v
         binding = self._registry.get_task_binding(task_type)
+        if not binding:
+            # video_vision falls back to vision model
+            if task_type == "video_vision":
+                binding = self._registry.get_task_binding("vision")
         if not binding:
             # Fall back to ollama provider config
             ollama_url = self.config.get("providers.ollama.url") or "http://localhost:11434"
@@ -168,13 +177,13 @@ class AIWorker:
 
     def _process_vision(self, asset_id: int, path: str) -> None:
         adapter = self._get_adapter("vision")
-        analyzer = VisionAnalyzer(adapter=adapter, prompt_config=self._prompt_config)
+        analyzer = VisionAnalyzer(adapter=adapter, prompt_config=self._pc())
         result = analyzer.analyze(path)
         name = self.db.execute("SELECT filename FROM assets WHERE id=?", (asset_id,))[0]["filename"]
         print(f"[AIWorker] vision result for {name}: desc={bool(result.get('description'))}, tags={len(result.get('tags',[]))}, ocr={bool(result.get('ocr_text'))}", flush=True)
         if result.get("description"):
             self.db.execute(
-                "UPDATE assets SET ai_description=? WHERE id=?",
+                "UPDATE assets SET visual_description=? WHERE id=?",
                 (result["description"], asset_id),
             )
         if result.get("ocr_text"):
@@ -184,23 +193,35 @@ class AIWorker:
             )
         if result.get("tags"):
             self._link_tags(asset_id, result["tags"], source="auto")
+        if result.get("search_terms"):
+            self._save_search_terms(asset_id, result["search_terms"])
 
     def _process_video(self, asset_id: int, path: str) -> None:
         """Analyze a video using multi-frame sampling."""
         import tempfile
         num_frames = self.config.get("ai.video_frames") or 1
         frame_dir = tempfile.mkdtemp()
+        # Debug: save frames to Desktop if QM_DEBUG_FRAMES is set
+        _debug_dir = None
+        if os.environ.get("QM_DEBUG_FRAMES"):
+            import shutil, time
+            _debug_dir = os.path.join(os.path.expanduser("~/Desktop/test_frame"), f"{os.path.basename(path)}_{time.strftime('%Y%m%d_%H%M%S')}")
+            os.makedirs(_debug_dir, exist_ok=True)
         frames = extract_video_frames(path, frame_dir, num_frames)
-        if frames:
-            frame_results = []
-            adapter = self._get_adapter("vision")
+        if _debug_dir and frames:
             for fp in frames:
-                analyzer = VisionAnalyzer(adapter=adapter, prompt_config=self._prompt_config)
-                frame_results.append(analyzer.analyze(fp))
-            merged = merge_frame_results(frame_results)
+                shutil.copy2(fp, os.path.join(_debug_dir, os.path.basename(fp)))
+        if frames:
+            adapter = self._get_adapter("video_vision")
+            if len(frames) == 1:
+                analyzer = VisionAnalyzer(adapter=adapter, prompt_config=self._pc(), prompt_type="video_vision")
+                merged = analyzer.analyze(frames[0])
+            else:
+                analyzer = VisionAnalyzer(adapter=adapter, prompt_config=self._pc(), prompt_type="video_vision")
+                merged = analyzer.analyze_multi(frames)
             if merged.get("description"):
                 self.db.execute(
-                    "UPDATE assets SET ai_description=? WHERE id=?",
+                    "UPDATE assets SET visual_description=? WHERE id=?",
                     (merged["description"], asset_id),
                 )
             if merged.get("ocr_text"):
@@ -210,6 +231,8 @@ class AIWorker:
                 )
             if merged.get("tags"):
                 self._link_tags(asset_id, merged["tags"], source="auto")
+            if merged.get("search_terms"):
+                self._save_search_terms(asset_id, merged["search_terms"])
         # Try generating combined summary if transcript exists
         self._try_generate_video_summary(asset_id)
 
@@ -227,7 +250,7 @@ class AIWorker:
             print(f"[AIWorker] 转录完成: {name} ({len(transcript)}字)", flush=True)
             # Run speech analysis on transcript
             adapter = self._get_adapter("speech")
-            analyzer = TextAnalyzer(adapter=adapter, prompt_config=self._prompt_config)
+            analyzer = TextAnalyzer(adapter=adapter, prompt_config=self._pc())
             result = analyzer.analyze_speech(transcript)
             if result.get("summary"):
                 self.db.execute(
@@ -236,13 +259,16 @@ class AIWorker:
                 )
             if result.get("tags"):
                 self._link_tags(asset_id, result["tags"], source="auto")
+            atype = self.db.execute("SELECT asset_type FROM assets WHERE id=?", (asset_id,))[0]["asset_type"]
+            if result.get("search_terms") and atype == "audio":
+                self._save_search_terms(asset_id, result["search_terms"])
             # Try generating combined summary if vision is also done
             self._try_generate_video_summary(asset_id)
 
     def _try_generate_video_summary(self, asset_id: int) -> None:
         """Generate combined summary if both speech and vision are done for a video."""
         rows = self.db.execute(
-            "SELECT asset_type, ai_description, ai_summary FROM assets WHERE id=?",
+            "SELECT asset_type, visual_description, ai_summary FROM assets WHERE id=?",
             (asset_id,),
         )
         if not rows:
@@ -250,45 +276,85 @@ class AIWorker:
         asset = rows[0]
         if asset["asset_type"] != "video":
             return
-        if not asset["ai_description"] or not asset["ai_summary"]:
-            return  # both analyses must be complete
+        if not asset["visual_description"]:
+            return
+        # Silent video: copy visual_description to video_summary
+        has_transcript = bool(self.db.execute("SELECT transcript FROM assets WHERE id=?", (asset_id,))[0]["transcript"]) if self.db.execute("SELECT 1 FROM assets WHERE id=?", (asset_id,)) else False
+        if not has_transcript:
+            self.db.execute("UPDATE assets SET video_summary=? WHERE id=?", (asset["visual_description"], asset_id))
+            print(f"[AIWorker] 无声视频: video_summary=visual_description", flush=True)
+            return
 
         adapter = self._get_adapter("video_summary")
         # Generate combined summary via Ollama
-        if self._prompt_config:
-            base = self._prompt_config.get_prompt("video_summary")
+        if self._pc():
+            base = self._pc().get_prompt("video_summary")
         else:
-            base = "请将以下两段关于同一视频的描述融合为一段综合总结（200字以内）："
+            from quickmedia.prompt_config import DEFAULT_PROMPTS
+            base = "".join(DEFAULT_PROMPTS["video_summary"]["default"])
         prompt = (
             f"{base}\n\n"
-            f"画面内容：{asset['ai_description']}\n\n"
+            f"画面内容：{asset['visual_description']}\n\n"
             f"语音内容：{asset['ai_summary']}\n\n"
             "综合总结："
         )
         response = adapter.chat(prompt)
         if response:
-            self.db.execute(
-                "UPDATE assets SET video_summary=? WHERE id=?",
-                (response.strip(), asset_id),
-            )
-            name = self.db.execute(
-                "SELECT filename FROM assets WHERE id=?", (asset_id,)
-            )[0]["filename"]
+            import json as _json
+            try:
+                parsed = _json.loads(response) if isinstance(response, str) else response
+                if isinstance(parsed, dict):
+                    if parsed.get("video_summary"):
+                        self.db.execute("UPDATE assets SET video_summary=? WHERE id=?", (parsed["video_summary"], asset_id))
+                    if parsed.get("tags"):
+                        self._link_tags(asset_id, parsed["tags"], source="auto")
+                    if parsed.get("search_terms"):
+                        self._save_search_terms(asset_id, parsed["search_terms"])
+            except Exception:
+                self.db.execute("UPDATE assets SET video_summary=? WHERE id=?", (response.strip(), asset_id))
+            name = self.db.execute("SELECT filename FROM assets WHERE id=?", (asset_id,))[0]["filename"]
             print(f"[AIWorker] 综合总结完成: {name}", flush=True)
 
     def _process_text(self, asset_id: int, path: str) -> None:
+        G = "[92m"; R = "[0m"
+        import os as _os
+        ext = _os.path.splitext(path)[1].lower()
+
+        # Check if model supports native document upload for this format
+        # Currently only OpenAI direct (not OpenRouter) and Gemini support file upload
+        binding = self._registry.get_task_binding("text")
+        if binding and binding["provider"] in ("openai",):
+            from quickmedia.providers import ProviderRegistry
+            model_info = self._registry.get_model_info(binding["provider"], binding["model"])
+            doc_formats = (model_info.get("capabilities") or {}).get("document", []) if model_info else []
+            supported_format = ext.lstrip(".").upper()
+            if any(f.upper() == supported_format or f.lower() == ext.lstrip(".") for f in doc_formats):
+                adapter = self._get_adapter("text")
+                analyzer = TextAnalyzer(adapter=adapter, prompt_config=self._pc())
+                print(f"{G}[文档分析] 传文件模式: {_os.path.basename(path)} → {binding['model']}{R}", flush=True)
+                result = analyzer.analyze_file(path)
+                if result.get("summary"):
+                    self.db.execute("UPDATE assets SET ai_summary=? WHERE id=?", (result["summary"], asset_id))
+                if result.get("tags"):
+                    self._link_tags(asset_id, result["tags"], source="auto")
+                if result.get("search_terms"):
+                    self._save_search_terms(asset_id, result["search_terms"])
+                return
+
+        # Fall back to text extraction
         text = self._read_text(path)
         if text:
+            print(f"{G}[文档分析] 提取文字模式: {_os.path.basename(path)} ({len(text)}字){R}", flush=True)
             adapter = self._get_adapter("text")
-            analyzer = TextAnalyzer(adapter=adapter, prompt_config=self._prompt_config)
+            analyzer = TextAnalyzer(adapter=adapter, prompt_config=self._pc())
             result = analyzer.analyze(text)
             if result.get("summary"):
-                self.db.execute(
-                    "UPDATE assets SET ai_summary=? WHERE id=?",
-                    (result["summary"], asset_id),
-                )
+                self.db.execute("UPDATE assets SET ai_summary=? WHERE id=?", (result["summary"], asset_id))
             if result.get("tags"):
                 self._link_tags(asset_id, result["tags"], source="auto")
+            if result.get("search_terms"):
+                self._save_search_terms(asset_id, result["search_terms"])
+
 
     def _read_text(self, path: str) -> str:
         _, ext = os.path.splitext(path)
@@ -296,6 +362,42 @@ class AIWorker:
         if ext in {".txt", ".md"}:
             with open(path, "r", errors="replace") as f:
                 return f.read()
+        if ext == ".csv":
+            import csv, io
+            with open(path, "r", errors="replace") as f:
+                reader = csv.reader(f)
+                rows = list(reader)
+                if not rows:
+                    return ""
+                max_cols = max(len(r) for r in rows)
+                # Format as aligned table
+                lines = []
+                for row in rows:
+                    padded = row + [""] * (max_cols - len(row))
+                    lines.append(" | ".join(padded))
+                return "\n".join(lines)
+        if ext == ".json":
+            import json
+            with open(path, "r", errors="replace") as f:
+                data = json.load(f)
+                return json.dumps(data, ensure_ascii=False, indent=2)
+        if ext == ".xlsx":
+            import io
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+                parts = []
+                for name in wb.sheetnames:
+                    ws = wb[name]
+                    rows = []
+                    for row in ws.iter_rows(values_only=True):
+                        rows.append(" | ".join(str(c) if c is not None else "" for c in row))
+                    if rows:
+                        parts.append(f"=== Sheet: {name} ===\n" + "\n".join(rows[:500]))
+                wb.close()
+                return "\n\n".join(parts)
+            except ImportError:
+                return ""
         if ext == ".pdf":
             try:
                 import fitz
@@ -329,6 +431,27 @@ class AIWorker:
                     "INSERT INTO asset_tags (asset_id, tag_id, source) VALUES (?,?,?)",
                     (asset_id, tag_id, source),
                 )
+
+    def _save_search_terms(self, asset_id: int, search_terms: list[str]) -> None:
+        """Store search_terms, replacing any existing."""
+        if not search_terms:
+            return
+        self.db.execute("DELETE FROM asset_search_terms WHERE asset_id=?", (asset_id,))
+        self.db.conn.commit()
+        count = 0
+        for term in search_terms:
+            term = term.strip()
+            if term:
+                try:
+                    self.db.execute(
+                        "INSERT INTO asset_search_terms (asset_id, term) VALUES (?,?)",
+                        (asset_id, term),
+                    )
+                    count += 1
+                except Exception:
+                    pass
+        if count > 0:
+            print(f"[search_terms] saved {count} terms for asset {asset_id}", flush=True)
 
     def _enqueue_embedding(self, asset_id: int) -> None:
         """Enqueue an embedding task if not already queued for this asset."""
@@ -378,16 +501,22 @@ class AIWorker:
 
         analyzer = EmbeddingAnalyzer(adapter=adapter)
 
-        # Embed per field
-        fields = {"description": 0.5, "tags": 0.3, "text": 0.2}
-        vectors = {}
-        for field in fields:
-            field_text = _build_field_text(asset, field)
-            if field_text:
-                print(f"[Embedding] {field}: {field_text[:200]}", flush=True)
-                vectors[field] = analyzer.embed(field_text)
-
+        # Embed each search_term individually
+        terms = [r["term"] for r in self.db.execute("SELECT term FROM asset_search_terms WHERE asset_id=?", (asset_id,))]
+        # Also include tag names as vectors
+        tag_names = [r["name"] for r in self.db.execute(
+            "SELECT t.name FROM asset_tags at JOIN tags t ON at.tag_id=t.id WHERE at.asset_id=?", (asset_id,)
+        )]
+        terms = list(set(terms + tag_names))  # deduplicated
+        if not terms:
+            return
         chroma_path = os.path.join(self._config_dir, "chroma_db")
         store = ChromaStore(persist_path=chroma_path)
-        store.add_fields(asset_id, vectors)
-        print(f"[Embedding] 完成: {asset['filename']}", flush=True)
+        # Clear old search vectors for this asset
+        store.delete(asset_id)
+        for idx, term in enumerate(terms):
+            vector = analyzer.embed(term)
+            store.add(asset_id, "search", vector, term_index=idx, term_text=term)
+            print(f"[Embedding] {term} -> dim={len(vector)}", flush=True)
+        name_rows = self.db.execute("SELECT filename FROM assets WHERE id=?", (asset_id,))
+        print(f"[Embedding] 完成: {name_rows[0]['filename'] if name_rows else asset_id} ({len(terms)} terms)", flush=True)

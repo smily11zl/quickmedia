@@ -95,10 +95,10 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
 
         base_select = """SELECT a.id, a.filename, a.asset_type, a.size,
                    a.width, a.height, a.duration, a.path, a.description,
-                   a.ai_description, a.thumbnail_status, a.modified_at,
+                   a.visual_description, a.thumbnail_status, a.modified_at,
                    a.extension,
                    CASE WHEN aq.status IS NOT NULL THEN aq.status
-                        WHEN a.ai_description IS NOT NULL OR a.ai_summary IS NOT NULL THEN 'done'
+                        WHEN a.visual_description IS NOT NULL OR a.ai_summary IS NOT NULL THEN 'done'
                         ELSE 'pending'
                    END as ai_status"""
         base_from = """FROM assets a
@@ -134,6 +134,34 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         for item in items:
             tags = _db.get_asset_tags(item["id"])
             item["tags"] = [dict(t) for t in tags]
+            # Add doc_preview for document types
+            if item.get("asset_type") == "document":
+                try:
+                    p = item.get("path", "")
+                    if p and os.path.isfile(p):
+                        ext = os.path.splitext(p)[1].lower()
+                        if ext in {".txt", ".md", ".docx"}:
+                            text = ""
+                            if ext == ".docx":
+                                try:
+                                    import docx
+                                    doc = docx.Document(p)
+                                    lines = []
+                                    for para in doc.paragraphs[:3]:
+                                        t = para.text.strip()[:80]
+                                        if t:
+                                            lines.append(t)
+                                    text = "\n".join(lines)
+                                except ImportError:
+                                    pass
+                            else:
+                                with open(p, "r", errors="replace") as f:
+                                    lines = [f.readline().strip()[:80] for _ in range(3)]
+                                    text = "\n".join(l for l in lines if l)
+                            if text:
+                                item["doc_preview"] = text[:200]
+                except Exception:
+                    pass
         return {"total": total_row[0]["c"], "items": items}
 
     @app.get("/api/assets/{asset_id}")
@@ -155,7 +183,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             (asset_id,),
         )
         result["ai_status"] = ai_rows[0]["status"] if ai_rows else (
-            "done" if (result.get("ai_description") or result.get("ai_summary")) else "pending"
+            "done" if (result.get("visual_description") or result.get("ai_summary")) else "pending"
         )
         return result
 
@@ -178,7 +206,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     def delete_asset(asset_id: int):
         """Delete an asset and all related data from the database."""
         _db = _get_db(app)
-        rows = _db.execute("SELECT id FROM assets WHERE id=?", (asset_id,))
+        rows = _db.execute("SELECT id, filename FROM assets WHERE id=?", (asset_id,))
         if not rows:
             raise HTTPException(status_code=404, detail="Asset not found")
         # CASCADE handles ai_queue, asset_tags, thumbnail_queue
@@ -199,6 +227,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
 
     @app.get("/api/search")
     def search(q: str = Query(..., min_length=1), mode: str = "keyword"):
+        print(f"[Search] mode={mode} q={repr(q)}", flush=True)
         _db = _get_db(app)
 
         # Tokenize query for keyword search
@@ -212,6 +241,9 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
 
         keyword_results = _db.search_tokens(tokens) if len(tokens) > 1 else _db.search(q)
         items = [dict(r) for r in keyword_results]
+        print(f"[Keyword search] tokens={tokens} results={len(items)}", flush=True)
+        for item in items[:10]:
+            print("  " + str(item.get("filename","?")), flush=True)
         for item in items:
             tags = _db.get_asset_tags(item["id"])
             item["tags"] = [dict(t) for t in tags]
@@ -248,21 +280,47 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                             from quickmedia.embedding import OpenAiEmbeddingAdapter
                             adapter = OpenAiEmbeddingAdapter(base_url=url, api_key=api_key, model=binding.get("model", ""))
                         query_vector = adapter.embed(q)
-                        similar = store.query_weighted(query_vector, n_results=50)
-                        similar = similar[:20]
+                        k = cfg.get("semantic.top_k") or 2
+                        similar = store.query_search_terms(query_vector, k=k, n_results=50)
+                        pass  # removed [:20] truncation
                         print(f"[Semantic search] query='{q}' provider={binding['provider']} model={binding['model']} results={len(similar)}", flush=True)
                         for s in similar:
-                            rows = _db.execute("SELECT filename FROM assets WHERE id=?", (s["asset_id"],))
-                            name = rows[0]["filename"] if rows else "unknown"
-                            field_dists = {}
-                            for fld in ("description", "tags", "text"):
-                                f_results = store._raw_query(query_vector, 50, field_filter=fld)
-                                for fi in f_results:
-                                    if fi["asset_id"] == s["asset_id"]:
-                                        field_dists[fld] = fi["distance"]
-                                        break
-                            fstr = " ".join(f"{k}={field_dists.get(k, '—')}" for k in ("description","tags","text"))
-                            print(f"  {s['distance']:.4f}  {name}  | {fstr}", flush=True)
+                            row = _db.execute("SELECT filename FROM assets WHERE id=?", (s["asset_id"],))
+                            name = row[0]["filename"] if row else f"unknown({s['asset_id']})"
+                            details = s.get("top_k_details", [])
+                            all_terms = {i: t["term"] for i, t in enumerate(_db.execute("SELECT term FROM asset_search_terms WHERE asset_id=?", (s["asset_id"],)))}
+                            parts = []
+                            for d in details:
+                                tname = d.get("term_name") or all_terms.get(d["term_index"]) or f"t{d['term_index']}"
+                                parts.append(f"{tname}={d['distance']:.4f}")
+                            dstr = " | ".join(parts) if parts else "no terms"
+                            print(f"  {s['distance']:.4f}  {name}  ({dstr})", flush=True)
+
+                        # Semantic mode: return pure semantic results, no keyword fusion
+                        if mode == "semantic":
+                            result = []
+                            kw_ids = {item["id"] for item in items} if items else set()
+                            best_dist = similar[0]["distance"] if similar else 1.0
+                            ref = best_dist if best_dist > 0.001 else 0.001
+                            for s in similar:
+                                rows = _db.execute("SELECT * FROM assets WHERE id=?", (s["asset_id"],))
+                                if rows:
+                                    item = dict(rows[0])
+                                    tags = _db.get_asset_tags(s["asset_id"])
+                                    item["tags"] = [dict(t) for t in tags]
+                                    item["_distance"] = s["distance"]
+                                    if s["asset_id"] in kw_ids:
+                                        if best_dist == 0 and s["distance"] == 0: item["_stars"] = 5
+                                        elif best_dist == 0: pass
+                                        else:
+                                            ratio = s["distance"] / ref
+                                            if ratio <= 1.0: item["_stars"] = 5
+                                            elif ratio <= 1.5: item["_stars"] = 4
+                                            elif ratio <= 2.0: item["_stars"] = 3
+                                            elif ratio <= 2.5: item["_stars"] = 2
+                                            elif ratio <= 3.0: item["_stars"] = 1
+                                    result.append(item)
+                            return result
 
                         # RRF fusion: merge keyword + vector results by rank
                         # Build rank maps (1-indexed)
@@ -292,10 +350,29 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                                 merged_items.append(item)
                                 seen.add(aid)
 
+                        # Compute star: items within 3x best distance that are also in keyword results
+                        best_dist = similar[0]["distance"] if similar else 1.0
+                        star_map = {}
+                        if kw_rank:
+                            for s in similar:
+                                if s["asset_id"] in kw_rank:
+                                    ref = best_dist if best_dist > 0.001 else 0.001
+                                    ratio = s["distance"] / ref
+                                    if ratio <= 1.0: n = 5
+                                    elif ratio <= 1.5: n = 4
+                                    elif ratio <= 2.0: n = 3
+                                    elif ratio <= 2.5: n = 2
+                                    elif ratio <= 3.0: n = 1
+                                    else: n = 0
+                                    if n > 0: star_map[s["asset_id"]] = n
+
                         if mode == "semantic":
                             items = [it for it in merged_items if it["id"] in vec_rank]
                         else:  # combined
                             items = merged_items
+                            for it in items:
+                                if it["id"] in star_map:
+                                    it["_stars"] = star_map[it["id"]]
 
                         # Log RRF fusion results
                         print(f"[RRF fusion] tokens={tokens} total={len(items)}", flush=True)
@@ -354,6 +431,15 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
 
     # ── Stats ───────────────────────────────────────────────────
 
+    
+    @app.get("/api/formats")
+    def get_formats():
+        cfg = Config(config_dir=app.extra["config_dir"])
+        fmts = cfg.get("formats") or {}
+        all_fmts = []
+        for cat, exts in fmts.items():
+            all_fmts.extend(exts)
+        return sorted(set(all_fmts))
     @app.get("/api/stats")
     def stats():
         _db = _get_db(app)
@@ -385,7 +471,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         asset_type = rows[0]["asset_type"]
         # Clear existing AI results
         _db.conn.execute(
-            "UPDATE assets SET ai_description=NULL, ai_summary=NULL, "
+            "UPDATE assets SET visual_description=NULL, ai_summary=NULL, "
             "ocr_text=NULL, transcript=NULL, video_summary=NULL, "
             "analyzed_at=NULL WHERE id=?",
             (asset_id,),
@@ -401,6 +487,8 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             "DELETE FROM asset_tags WHERE asset_id=? AND source='auto'",
             (asset_id,),
         )
+        # Clear old search_terms
+        _db.conn.execute("DELETE FROM asset_search_terms WHERE asset_id=?", (asset_id,))
         # Reset existing queue entries
         _db.conn.execute(
             "DELETE FROM ai_queue WHERE asset_id=?", (asset_id,)
@@ -429,11 +517,21 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 continue
             asset_type = rows[0]["asset_type"]
             _db.conn.execute(
-                "UPDATE assets SET ai_description=NULL, ai_summary=NULL, "
+                "UPDATE assets SET visual_description=NULL, ai_summary=NULL, "
                 "ocr_text=NULL, transcript=NULL, video_summary=NULL, "
                 "analyzed_at=NULL WHERE id=?",
                 (aid,),
             )
+            # Clear old auto tags, search_terms, and embeddings
+            _db.conn.execute("DELETE FROM asset_tags WHERE asset_id=? AND source='auto'", (aid,))
+            _db.conn.execute("DELETE FROM asset_search_terms WHERE asset_id=?", (aid,))
+            try:
+                from quickmedia.embedding import ChromaStore
+                store = ChromaStore(persist_path=os.path.join(app.extra["config_dir"], "chroma_db"))
+                store.delete(aid)
+            except Exception:
+                pass
+
             _db.conn.execute("DELETE FROM ai_queue WHERE asset_id=?", (aid,))
             _db.conn.commit()
             if asset_type == "image":
@@ -467,7 +565,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     @app.get("/api/assets/{asset_id}/similar")
     def similar_assets(asset_id: int, limit: int = 10):
         _db = _get_db(app)
-        rows = _db.execute("SELECT id FROM assets WHERE id=?", (asset_id,))
+        rows = _db.execute("SELECT id, filename FROM assets WHERE id=?", (asset_id,))
         if not rows:
             raise HTTPException(status_code=404, detail="Asset not found")
         cfg = Config(config_dir=app.extra["config_dir"])
@@ -475,8 +573,45 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         if not os.path.isdir(chroma_path):
             return []
         from quickmedia.embedding import ChromaStore
+        from collections import defaultdict
         store = ChromaStore(persist_path=chroma_path)
-        vector = store.get_vector(asset_id, "description")
+        all_ids = store._collection.get()["ids"]
+        src_vectors = [sid for sid in all_ids if sid.startswith(f"search_{asset_id}_")]
+        if not src_vectors:
+            return []
+        per_match = defaultdict(list)
+        for sid in src_vectors:
+            v = store.get_vector(asset_id, "search", term_index=int(sid.rsplit("_", 1)[1]))
+            if v:
+                results = store._collection.query(query_embeddings=[v], n_results=limit * 5)
+                if results and results["ids"] and results["ids"][0]:
+                    for i, rid in enumerate(results["ids"][0]):
+                        if rid.startswith("search_"):
+                            mid = int(rid.split("_", 1)[1].rsplit("_", 1)[0])
+                            dist = results["distances"][0][i] if results.get("distances") else 0
+                            per_match[mid].append(dist)
+        items = []
+        for mid, dists in per_match.items():
+            if mid == asset_id:
+                continue
+            items.append({"asset_id": mid, "distance": min(dists)})
+        items.sort(key=lambda x: x["distance"])
+        items = items[:limit]
+        result = []
+        src_name = rows[0]["filename"] if rows else str(asset_id)
+        for i in items:
+            row = _db.execute("SELECT * FROM assets WHERE id=?", (i["asset_id"],))
+            if row:
+                item = dict(row[0])
+                tags = _db.get_asset_tags(item["id"])
+                item["tags"] = [dict(t) for t in tags]
+                result.append(item)
+        print(f"[Semantic search] similar={src_name} results={len(result)}", flush=True)
+        for i in items:
+            r = _db.execute("SELECT filename FROM assets WHERE id=?", (i["asset_id"],))
+            name = r[0]["filename"] if r else "unknown"
+            print(f"  {i['distance']:.4f}  {name}", flush=True)
+        return result[:limit]
         if not vector:
             return []
         similar = store.query(vector, n_results=limit + 1)
@@ -513,7 +648,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         result = analyzer.analyze(path)
         if result.get("description"):
             _db.execute(
-                "UPDATE assets SET ai_description=? WHERE id=?",
+                "UPDATE assets SET visual_description=? WHERE id=?",
                 (result["description"], asset_id),
             )
         if result.get("ocr_text"):
@@ -574,7 +709,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     def get_prompts():
         from quickmedia.prompt_config import PromptConfig
         pc = PromptConfig(config_dir=app.extra["config_dir"])
-        return pc.get_config()
+        return pc.get_all()
 
     @app.put("/api/prompts")
     def update_prompts(body: dict):
@@ -584,7 +719,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         custom = body.get("custom", "")
         if analysis_type not in ("vision", "text", "speech", "video_summary"):
             raise HTTPException(status_code=400, detail="Invalid analysis type")
-        pc.update_custom(analysis_type, custom)
+        pc.save(analysis_type, custom)
         return {"ok": True}
 
     # ── Providers ─────────────────────────────────────────────────

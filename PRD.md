@@ -230,3 +230,29 @@ whisper 语音转录、语音内容分析、视频综合总结、重新分析。
 - 入库和搜索必须同一模型，切换需重建全量向量
 
 详见 [docs/v8/tasks.md](docs/v8/tasks.md)。
+
+---
+
+## v9 — 语义搜索优化 ✅
+
+### Problem Statement
+
+语义搜索效果差——模型对短标签中文区分度不够，tags 向量检索意图弱。
+
+### Solution
+
+AI 输出新字段 search_terms（检索意图搜索词，每词独立向量）+ Top-K 聚合匹配。
+
+### 实现成果
+
+- **search_terms + tags 合并向量化**——每个素材的标签和搜索词合并去重后独立存向量，Top-K 聚合排序
+- **视频字段迁移**——ai_description → visual_description；无声视频自动填充 video_summary
+- **多帧一次 API 调用**——video_vision 独立 prompt 类型，Qwen-VL 多帧批量分析
+- **文档格式扩展**——CSV/JSON/XLSX/DOCX 支持
+- **⭐ 智能标记**——语义+关键词双重命中 + 距离比的 1-5 星重要度标识
+- **搜索筛选联动**——搜索结果上叠加侧栏筛选，纯语义模式独立
+- **状态实时轮询**——列表3s/详情5s 自动刷新
+- **文档预览**——缩略图区显示前 3 行文字
+- **热加载 Prompt**——自定义 prompt 保存后即时生效
+
+详见 [docs/v9/tasks.md](docs/v9/tasks.md)。

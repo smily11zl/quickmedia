@@ -43,7 +43,7 @@ class OllamaAdapter:
 
 
 class VisionAnalyzer:
-    """Analyze images using AI vision models."""
+    """Analyze images using vision-capable LLMs."""
 
     def __init__(
         self,
@@ -53,10 +53,12 @@ class VisionAnalyzer:
         max_dimension: int = 672,
         timeout: int = 300,
         prompt_config = None,
+        prompt_type: str = "vision",
     ):
         self.adapter = adapter or OllamaAdapter(ollama_url, model, timeout)
         self.max_dimension = max_dimension
         self._prompt_config = prompt_config
+        self._prompt_type = prompt_type
 
     def analyze(self, image_path: str) -> dict:
         """Analyze an image, returning {description, tags}."""
@@ -64,6 +66,13 @@ class VisionAnalyzer:
         img_b64 = self._encode_image(img)
         prompt = self._build_prompt()
         response = self.adapter.chat(prompt, [img_b64])
+        return self._parse_response(response)
+
+    def analyze_multi(self, image_paths: list[str]) -> dict:
+        """Analyze multiple frames in one API call. Returns merged result."""
+        imgs = [self._encode_image(self._prepare_image(p)) for p in image_paths]
+        prompt = self._build_prompt()
+        response = self.adapter.chat(prompt, imgs)
         return self._parse_response(response)
 
     def _prepare_image(self, image_path: str) -> Image.Image:
@@ -84,18 +93,11 @@ class VisionAnalyzer:
 
     def _build_prompt(self) -> str:
         if self._prompt_config:
-            return self._prompt_config.get_prompt("vision")
-        return (
-            "请描述这张图片的场景、整体风格和色调（50字以内）。"
-            "然后列出图片中出现的具体人物、动物、物体、建筑、文字等关键元素。\n\n"
-            "标签示例：\n"
-            "标签1\n"
-            "标签2\n"
-            "标签3\n\n"
-            "请严格按以下JSON格式输出（只输出JSON，不要有其他文字）：\n"
-            '{"description": "图片描述", "tags": ["标签1", "标签2", "标签3"], "text": "文字内容"}\n'
-            "如果没有识别到文字，text 为空字符串。"
-        )
+            return self._prompt_config.get_prompt(self._prompt_type)
+        from quickmedia.prompt_config import DEFAULT_PROMPTS
+        fmt = "".join(DEFAULT_PROMPTS[self._prompt_type]["system_format"])
+        default = "".join(DEFAULT_PROMPTS[self._prompt_type]["default"])
+        return f"{default}\n\n{fmt}"
 
     @staticmethod
     def _extract_json(text: str) -> str | None:
@@ -126,6 +128,7 @@ class VisionAnalyzer:
                     "description": str(data.get("description", "")),
                     "tags": data.get("tags", []) if isinstance(data.get("tags"), list) else [],
                     "ocr_text": str(data.get("text", "")),
+                    "search_terms": data.get("search_terms", []) if isinstance(data.get("search_terms"), list) else [],
                 }
         except (json.JSONDecodeError, TypeError, KeyError):
             pass
@@ -136,6 +139,7 @@ class VisionAnalyzer:
         result = self._parse_json_response(text)
         if result is not None:
             return result
+        print(f"[V9 debug] _parse_response fallback for: {text[:100]}", flush=True)
         return {"description": "", "tags": [], "ocr_text": ""}
 
 
@@ -147,18 +151,27 @@ class TextAnalyzer:
         self._prompt_config = prompt_config
 
     def analyze(self, text: str) -> dict:
-        """Analyze text, returning {summary, tags}."""
+        """Analyze text, returning {summary, tags, search_terms}."""
         if self._prompt_config:
             prompt = self._prompt_config.get_prompt("text") + f"\n\n文档内容：\n{text[:4000]}"
         else:
-            prompt = (
-                "总结以下文档内容（200字以内），并提取5-10个主题关键词。\n\n"
-                "请严格按以下JSON格式输出（只输出JSON，不要有其他文字）：\n"
-                '{"summary": "文档摘要", "tags": ["标签1", "标签2", "标签3"]}\n'
-                "如果没有标签，tags 为空数组。\n\n"
-                f"文档内容：\n{text[:4000]}"
-            )
+            from quickmedia.prompt_config import DEFAULT_PROMPTS
+            fmt = "".join(DEFAULT_PROMPTS["text"]["system_format"])
+            default = "".join(DEFAULT_PROMPTS["text"]["default"])
+            prompt = f"{default}\n\n{fmt}\n\n文档内容：\n{text[:4000]}"
         response = self.adapter.chat(prompt)
+        return self._parse_response(response)
+
+    def analyze_file(self, file_path: str) -> dict:
+        """Analyze document via native file upload."""
+        if self._prompt_config:
+            prompt = self._prompt_config.get_prompt("text")
+        else:
+            from quickmedia.prompt_config import DEFAULT_PROMPTS
+            fmt = "".join(DEFAULT_PROMPTS["text"]["system_format"])
+            default = "".join(DEFAULT_PROMPTS["text"]["default"])
+            prompt = f"{default}\n\n{fmt}"
+        response = self.adapter.chat_with_file(prompt, file_path)
         return self._parse_response(response)
 
     @staticmethod
@@ -173,6 +186,7 @@ class TextAnalyzer:
                     return {
                         "summary": str(data.get("summary", "")),
                         "tags": data.get("tags", []) if isinstance(data.get("tags"), list) else [],
+                        "search_terms": data.get("search_terms", []) if isinstance(data.get("search_terms"), list) else [],
                     }
             except (json.JSONDecodeError, TypeError, KeyError):
                 pass
@@ -183,16 +197,24 @@ class TextAnalyzer:
         if self._prompt_config:
             prompt = self._prompt_config.get_prompt("speech") + f"\n\n语音转录：\n{transcript[:4000]}"
         else:
-            prompt = (
-                "以下是一段语音转录文本。请总结这段语音的主要内容（150字以内），"
-                "并提取5-10个主题关键词。\n\n"
-                "请严格按以下JSON格式输出（只输出JSON，不要有其他文字）：\n"
-                '{"summary": "语音摘要", "tags": ["标签1", "标签2", "标签3"]}\n'
-                "如果没有标签，tags 为空数组。\n\n"
-                f"语音转录：\n{transcript[:4000]}"
-            )
+            from quickmedia.prompt_config import DEFAULT_PROMPTS
+            fmt = "".join(DEFAULT_PROMPTS["speech"]["system_format"])
+            default = "".join(DEFAULT_PROMPTS["speech"]["default"])
+            prompt = f"{default}\n\n{fmt}\n\n语音转录：\n{transcript[:4000]}"
         response = self.adapter.chat(prompt)
         return self._parse_response(response)
+
+
+def _dedupe_strs(str_lists):
+    """Deduplicate strings across multiple lists, preserving order."""
+    seen = set()
+    result = []
+    for lst in str_lists:
+        for s in lst:
+            if s not in seen:
+                seen.add(s)
+                result.append(s)
+    return result
 
 
 def merge_frame_results(frames: list[dict]) -> dict:
@@ -236,6 +258,7 @@ def merge_frame_results(frames: list[dict]) -> dict:
         "description": first_desc,
         "tags": tags,
         "ocr_text": ", ".join(ocr_parts),
+        "search_terms": _dedupe_strs(f.get("search_terms", []) for f in frames),
     }
 
 
