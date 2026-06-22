@@ -271,3 +271,18 @@ AI 输出新字段 search_terms（检索意图搜索词，每词独立向量）+
 - **向后兼容** — 旧 watch_paths 自动迁移新格式
 
 详见 [docs/v10/prd.md](docs/v10/prd.md)。
+
+
+---
+
+## v11 — MCP 对话式素材管理 ✅
+
+### 实现成果
+
+- **Hermes 原生集成** — quickmedia mcp 启动 MCP server，Hermes 配置 3 行即用
+- **6 工具 + 批量** — search_assets / get_asset / list_assets / find_similar / add_asset / delete_asset
+- **结构化输出** — Pydantic 模型 + Field(description)，协议层完整字段schema
+- **架构复用** — search.py / asset_ops.py 共享模块，API + MCP 共用
+- **单文件扫描** — Scanner.scan_file 精确添加单个文件
+
+详见 [docs/v11/prd.md](docs/v11/prd.md)。

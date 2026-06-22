@@ -304,6 +304,104 @@ class Scanner:
             print(f"[Scanner] 缩略图处理异常: {e}", flush=True)
         return result
 
+    def scan_file(self, filepath: str) -> int:
+        """Add a single file to the asset database. Returns asset_id or 0."""
+        import os as _os
+        from quickmedia.scanner import hash_file
+
+        if not _os.path.isfile(filepath):
+            return 0
+
+        filename = _os.path.basename(filepath)
+        ext = _os.path.splitext(filename)[1].lower().lstrip(".")
+        if not self._is_allowed(filename):
+            return 0
+
+        # Determine asset type
+        formats = self._formats
+        asset_type = None
+        for cat in ["image", "video", "audio", "document"]:
+            if ext in formats.get(cat, []):
+                asset_type = cat
+                break
+        if not asset_type:
+            asset_type = "other"
+
+        stat = _os.stat(filepath)
+        size = stat.st_size
+        modified_ts = int(stat.st_mtime)
+        created_ts = int(stat.st_ctime)
+
+        # Check for existing asset by path
+        existing = self.db.execute("SELECT id FROM assets WHERE path=?", (filepath,))
+        now = int(_os.time())
+        if existing:
+            asset_id = existing[0]["id"]
+            self.db.execute(
+                "UPDATE assets SET size=?, modified_at=?, analyzed_at=NULL WHERE id=?",
+                (size, now, asset_id),
+            )
+            return asset_id
+
+        # Compute hash for dedup
+        file_hash = hash_file(filepath)
+        hash_existing = self.db.execute("SELECT id FROM assets WHERE hash=?", (file_hash,))
+        if hash_existing:
+            # Same file under different path — skip dedup, just add
+            pass
+
+        # Insert new asset
+        cursor = self.db.conn.execute(
+            """INSERT INTO assets (hash, inode, device, path, filename, ext, asset_type, size, modified_at, created_at, indexed_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (file_hash, stat.st_ino, stat.st_dev, filepath, filename, ext.lower(),
+             asset_type, size, modified_ts, created_ts, now),
+        )
+        self.db.conn.commit()
+        asset_id = cursor.lastrowid
+
+        # Generate auto tags
+        auto_tags = self._auto_tags(filename, asset_type, filepath, 0)
+        self._link_tags(asset_id, auto_tags, source="auto")
+
+        # Extract metadata
+        meta = self._metadata.extract(filepath)
+        if meta.get("width") or meta.get("height") or meta.get("duration"):
+            updates = []
+            params = []
+            if meta.get("width") is not None:
+                updates.append("width=?")
+                params.append(meta["width"])
+            if meta.get("height") is not None:
+                updates.append("height=?")
+                params.append(meta["height"])
+            if meta.get("duration") is not None:
+                updates.append("duration=?")
+                params.append(meta["duration"])
+            if updates:
+                params.append(asset_id)
+                self.db.execute(
+                    f"UPDATE assets SET {', '.join(updates)} WHERE id=?",
+                    tuple(params),
+                )
+
+        # Enqueue thumbnail + AI
+        if asset_type in ("image", "video"):
+            self._thumbnailer.enqueue(asset_id)
+        if asset_type == "image":
+            self._ai.enqueue(asset_id, "vision")
+        elif asset_type == "video":
+            self._ai.enqueue(asset_id, "vision")
+            self._ai.enqueue(asset_id, "transcribe")
+        elif asset_type == "audio":
+            self._ai.enqueue(asset_id, "transcribe")
+        elif asset_type == "document":
+            self._ai.enqueue(asset_id, "text")
+
+        self._thumbnailer.process_queue()
+        return asset_id
+
+
     def _mark_deleted(self, directory: str) -> None:
         """Mark assets whose paths no longer exist on disk as deleted."""
         rows = self.db.execute(

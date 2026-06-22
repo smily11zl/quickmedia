@@ -303,3 +303,22 @@ macOS AppleScript 命令，服务端拉起 Finder 文件夹选择对话框，返
 ### 红点提示
 
 设置入口指示灯——缺模型配置或缺文件夹路径时亮红点。Tab 红点独立，各自保存后消除。总红点需两项全部完成才消。
+
+
+## V11 — MCP 对话式素材管理（新增术语）
+
+### MCP（Model Context Protocol）
+
+Anthropic 制定的 AI Agent 工具调用协议。Hermes 内置 MCP 客户端，QuickMedia 实现 MCP server 端。通过 stdio 传输，Hermes 启动时 spawn QuickMedia 子进程，自动发现工具并注册。
+
+### mcp Python 库
+
+，MCP 协议的 Python 实现。QuickMedia 用它实现 server 端（ 装饰器），Hermes 用它做客户端。
+
+### quickmedia mcp
+
+新增 CLI 子命令。启动 MCP server 进程，监听 stdio，向 Hermes 暴露 6 个素材管理工具。Hermes 配置：。
+
+### QUICKMEDIA_HOME
+
+环境变量，指定数据目录。默认 。MCP server 和 Web 版共享。

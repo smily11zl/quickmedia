@@ -18,10 +18,13 @@ def _parse_osascript_path(output: str):
         return None
     if out.startswith("alias "):
         parts = out[6:].rstrip(":").split(":")
-        if len(parts) > 1:
+        parts = [x for x in parts if x]
+        if len(parts) > 1 and ":" in out[6:]:
             p = "/" + "/".join(parts[1:])
+        elif parts:
+            p = "/".join(parts) if parts[0].startswith("/") else "/" + "/".join(parts)
         else:
-            p = "/" + parts[0]
+            return None
         return p if p else None
     return out if os.path.isdir(out) else None
 
@@ -221,15 +224,14 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
 
     @app.delete("/api/assets/{asset_id}")
     def delete_asset(asset_id: int):
-        """Delete an asset and all related data from the database."""
+        """Delete an asset and all related data."""
         _db = _get_db(app)
-        rows = _db.execute("SELECT id, filename FROM assets WHERE id=?", (asset_id,))
-        if not rows:
-            raise HTTPException(status_code=404, detail="Asset not found")
-        # CASCADE handles ai_queue, asset_tags, thumbnail_queue
-        _db.conn.execute("DELETE FROM assets WHERE id=?", (asset_id,))
-        _db.conn.commit()
-        return {"ok": True, "message": "已删除"}
+        cfg = Config(config_dir=app.extra["config_dir"])
+        from quickmedia.asset_ops import delete_asset_full
+        result = delete_asset_full(_db, cfg, asset_id)
+        if not result.get("ok"):
+            raise HTTPException(status_code=404, detail=result.get("error", "not found"))
+        return result
 
     # ── Thumbnails ──────────────────────────────────────────────
 
@@ -273,28 +275,10 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 chroma_path = os.path.join(app.extra["config_dir"], "chroma_db")
                 if os.path.isdir(chroma_path):
                     store = ChromaStore(persist_path=chroma_path)
-                    # Get embedding adapter from task binding
-                    from quickmedia.providers import ProviderRegistry
-                    user_models = os.path.join(app.extra["config_dir"], "models.yaml")
-                    registry = ProviderRegistry(cfg, user_models)
-                    binding = registry.get_task_binding("embedding")
-                    if binding:
-                        url = registry.get_provider_url(binding["provider"]) or ""
-                        # Create adapter and embed query
-                        if binding["provider"] == "ollama":
-                            adapter = EmbeddingAdapter(base_url=url, model=binding.get("model", "qwen3-embedding:8b"))
-                        else:
-                            # Load API key for non-ollama providers
-                            env_path = os.path.join(app.extra["config_dir"], ".env")
-                            api_key = ""
-                            if os.path.isfile(env_path):
-                                with open(env_path, "r") as f:
-                                    for line in f:
-                                        if f"{binding['provider'].upper()}_API_KEY" in line:
-                                            api_key = line.split("=", 1)[1].strip()
-                                            break
-                            from quickmedia.embedding import OpenAiEmbeddingAdapter
-                            adapter = OpenAiEmbeddingAdapter(base_url=url, api_key=api_key, model=binding.get("model", ""))
+                    # Get embedding adapter
+                    from quickmedia.search import get_embedding_adapter
+                    adapter, binding = get_embedding_adapter(cfg, app.extra["config_dir"])
+                    if adapter:
                         query_vector = adapter.embed(q)
                         k = cfg.get("semantic.top_k") or 2
                         similar = store.query_search_terms(query_vector, k=k, n_results=50)

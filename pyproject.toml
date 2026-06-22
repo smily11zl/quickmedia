@@ -33,7 +33,11 @@ embedding = [
     "chromadb>=0.5",
     "jieba>=0.42",
 ]
+mcp = [
+    "mcp>=1.0",
+]
 all = [
+    "quickmedia[mcp]",
     "quickmedia[dev,web,audio,text,embedding]",
 ]
 

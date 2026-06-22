@@ -35,12 +35,14 @@ class TestV10WatchPathsConfig:
 
     def test_old_format_auto_migration(self):
         """Old string-only paths should be migrated to new dict format."""
-        cfg = Config()
+        import tempfile, os
+        tmp = tempfile.mkdtemp()
+        cfg = Config(config_dir=tmp)
         # Simulate old format: array of paths with no name field
         cfg.set("watch_paths", ["/tmp/legacy"])
         cfg._save()
         # Re-read — migration should kick in
-        cfg2 = Config()
+        cfg2 = Config(config_dir=tmp)
         paths = cfg2.get("watch_paths")
         assert len(paths) == 1
         p = paths[0]
@@ -51,14 +53,16 @@ class TestV10WatchPathsConfig:
 
     def test_old_dict_without_name_gets_migrated(self):
         """Dict with path but no name should get name auto-added."""
-        cfg = Config()
+        import tempfile, os
+        tmp = tempfile.mkdtemp()
+        cfg = Config(config_dir=tmp)
         cfg.set("watch_paths", [{
             "path": "/tmp/test",
             "recursive": False,
             "max_depth": 1,
         }])
         cfg._save()
-        cfg2 = Config()
+        cfg2 = Config(config_dir=tmp)
         paths = cfg2.get("watch_paths")
         assert paths[0].get("name") is not None
         assert paths[0].get("enabled") is True
@@ -75,7 +79,9 @@ class TestV10ConfigMigrationIdempotent:
 
     def test_already_migrated_passes_through(self):
         """New format should pass through unchanged."""
-        cfg = Config()
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        cfg = Config(config_dir=tmp)
         data = [{
             "name": "已迁移",
             "path": "/tmp/done",
@@ -85,7 +91,7 @@ class TestV10ConfigMigrationIdempotent:
         }]
         cfg.set("watch_paths", data)
         cfg._save()
-        cfg2 = Config()
+        cfg2 = Config(config_dir=tmp)
         paths = cfg2.get("watch_paths")
         assert paths == data
 

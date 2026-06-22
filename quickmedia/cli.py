@@ -32,11 +32,21 @@ def main(config_dir: str | None = None):
         _cmd_edit(db_path)
     elif command == "serve":
         _cmd_serve(cfg, db_path)
+    elif command == "mcp":
+        _cmd_mcp(cfg)
     elif command in ("-h", "--help"):
         _print_usage()
     else:
         print(f"未知命令: {command}")
         _print_usage()
+
+
+
+
+def _cmd_mcp(cfg):
+    """Start the MCP server for AI agent integration."""
+    from quickmedia.mcp_server import main as mcp_main
+    mcp_main()
 
 
 def _print_usage():
