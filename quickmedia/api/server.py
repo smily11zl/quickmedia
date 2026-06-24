@@ -43,6 +43,10 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     app.extra["config_dir"] = cfg.config_dir
     app.extra["thumb_dir"] = thumb_dir
 
+    # V12: Aggregation routes
+    from quickmedia.aggregation.api import register_aggregation_routes
+    register_aggregation_routes(app)
+
     # ── Frontend static files ────────────────────────────────────
 
     frontend_dist = os.path.join(
@@ -73,45 +77,64 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         _db = _get_db(app)
         conditions = ["a.status='active'"]
         params = []
+        # For counts we exclude the type filter so sidebar shows full distribution
+        counts_conditions = ["a.status='active'"]
+        counts_params = []
 
         if type:
             conditions.append("a.asset_type=?")
             params.append(type)
+            # NOT added to counts_conditions — type filter excluded from counts
 
         if formats:
             fmt_list = [f".{f.strip().lower()}" for f in formats.split(",")]
             placeholders = ",".join("?" * len(fmt_list))
             conditions.append(f"a.extension IN ({placeholders})")
             params.extend(fmt_list)
+            counts_conditions.append(f"a.extension IN ({placeholders})")
+            counts_params.extend(fmt_list)
 
         if date_from:
             conditions.append("a.created_at >= ?")
             params.append(date_from)
+            counts_conditions.append("a.created_at >= ?")
+            counts_params.append(date_from)
         if date_to:
             conditions.append("a.created_at <= ?")
             params.append(date_to)
+            counts_conditions.append("a.created_at <= ?")
+            counts_params.append(date_to)
         if mdate_from:
             conditions.append("a.modified_at >= ?")
             params.append(mdate_from)
+            counts_conditions.append("a.modified_at >= ?")
+            counts_params.append(mdate_from)
         if mdate_to:
             conditions.append("a.modified_at <= ?")
             params.append(mdate_to)
+            counts_conditions.append("a.modified_at <= ?")
+            counts_params.append(mdate_to)
         if ai_status:
             status_list = ai_status.split(",")
             placeholders = ",".join("?" * len(status_list))
             conditions.append(f"COALESCE(aq.status, '-') IN ({placeholders})")
             params.extend(status_list)
+            counts_conditions.append(f"COALESCE(aq.status, '-') IN ({placeholders})")
+            counts_params.extend(status_list)
         if tags:
             tag_ids = [int(t) for t in tags.split(",")]
-            # Union: asset with ANY of the specified tags
             tag_placeholders = ",".join("?" * len(tag_ids))
-            conditions.append(
+            tag_cond = (
                 f"a.id IN (SELECT DISTINCT asset_id FROM asset_tags "
                 f"WHERE tag_id IN ({tag_placeholders}))"
             )
+            conditions.append(tag_cond)
             params.extend(tag_ids)
+            counts_conditions.append(tag_cond)
+            counts_params.extend(tag_ids)
 
         where_clause = " AND ".join(conditions)
+        counts_where = " AND ".join(counts_conditions)
 
         base_select = """SELECT a.id, a.filename, a.asset_type, a.size,
                    a.width, a.height, a.duration, a.path, a.description,
@@ -143,6 +166,20 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 f"SELECT COUNT(*) as c FROM assets a WHERE {where_clause}",
                 tuple(params),
             )
+        # Counts grouped by asset_type (same filter minus type, full set, not limited)
+        if ai_status or tags:
+            counts_rows = _db.execute(
+                f"SELECT asset_type, COUNT(*) as count FROM ({base_select} {base_from} WHERE {counts_where}) GROUP BY asset_type",
+                tuple(counts_params),
+            )
+        else:
+            counts_rows = _db.execute(
+                f"SELECT a.asset_type, COUNT(*) as count FROM assets a WHERE {counts_where} GROUP BY a.asset_type",
+                tuple(counts_params),
+            )
+        counts = {"image": 0, "video": 0, "audio": 0, "document": 0}
+        for row in counts_rows:
+            counts[row["asset_type"]] = row["count"]
         rows = _db.execute(
             f"""{base_select}
                {base_from}
@@ -182,7 +219,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                                 item["doc_preview"] = text[:200]
                 except Exception:
                     pass
-        return {"total": total_row[0]["c"], "items": items}
+        return {"total": total_row[0]["c"], "items": items, "counts": counts}
 
     @app.get("/api/assets/{asset_id}")
     def get_asset(asset_id: int):
@@ -247,6 +284,14 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     def search(q: str = Query(..., min_length=1), mode: str = "keyword"):
         print(f"[Search] mode={mode} q={repr(q)}", flush=True)
         _db = _get_db(app)
+
+        def _count_by_type(items):
+            cnt = {"image": 0, "video": 0, "audio": 0, "document": 0}
+            for it in items:
+                t = it.get("asset_type", "")
+                if t in cnt:
+                    cnt[t] += 1
+            return cnt
 
         # Tokenize query for keyword search
         try:
@@ -320,7 +365,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                                             elif ratio <= 2.5: item["_stars"] = 2
                                             elif ratio <= 3.0: item["_stars"] = 1
                                     result.append(item)
-                            return result
+                            return {"items": result, "counts": _count_by_type(result)}
 
                         # RRF fusion: merge keyword + vector results by rank
                         # Build rank maps (1-indexed)
@@ -389,7 +434,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 # Semantic search failure should not break the request
                 print(f"Semantic search error: {e}", flush=True)
 
-        return items
+        return {"items": items, "counts": _count_by_type(items)}
 
     # ── Tags ────────────────────────────────────────────────────
 
@@ -449,6 +494,52 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             return {"error": "仅支持 macOS", "path": None}
         except Exception as e:
             return {"error": str(e), "path": None}
+
+    @app.post("/api/file-picker")
+    def file_picker():
+        """Open macOS file picker and return selected path."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["osascript", "-e", "choose file"],
+                capture_output=True, text=True, timeout=30,
+            )
+            path = _parse_osascript_path(result.stdout)
+            if path:
+                return {"path": path}
+            return {"error": "未选择文件", "path": None}
+        except FileNotFoundError:
+            return {"error": "仅支持 macOS", "path": None}
+        except Exception as e:
+            return {"error": str(e), "path": None}
+
+    @app.post("/api/scan-file")
+    def scan_single_file(body: dict):
+        """Scan a single file into the asset library."""
+        from quickmedia.scanner import Scanner
+        path = body.get("path", "")
+        if not path or not os.path.isfile(path):
+            raise HTTPException(status_code=400, detail=f"文件不存在: {path}")
+        db = _get_db(app)
+        cfg = Config(config_dir=app.extra["config_dir"])
+        scanner = Scanner(db=db, config=cfg)
+        aid = scanner.scan_file(path)
+        if aid:
+            return {"ok": True, "asset_id": aid, "message": f"已添加 {os.path.basename(path)}"}
+        return {"ok": False, "error": "添加失败"}
+
+    @app.post("/api/scan-folder")
+    def scan_single_folder(body: dict):
+        """Scan a folder into the asset library."""
+        from quickmedia.scanner import Scanner
+        path = body.get("path", "")
+        if not path or not os.path.isdir(path):
+            raise HTTPException(status_code=400, detail=f"文件夹不存在: {path}")
+        db = _get_db(app)
+        cfg = Config(config_dir=app.extra["config_dir"])
+        scanner = Scanner(db=db, config=cfg)
+        result = scanner.scan_directory(path, recursive=True, max_depth=3)
+        return {"ok": True, "message": f"已扫描 {path}", "result": result}
 
     @app.get("/api/task-models")
     def get_task_models():

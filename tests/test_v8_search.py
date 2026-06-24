@@ -23,7 +23,9 @@ class TestSemanticSearch:
             client = TestClient(app)
             resp = client.get("/api/search?q=test")
             assert resp.status_code == 200
-            assert isinstance(resp.json(), list)
+            assert isinstance(resp.json(), dict)
+            assert "items" in resp.json()
+            assert "counts" in resp.json()
         finally:
             import shutil
             shutil.rmtree(d, ignore_errors=True)
@@ -36,7 +38,9 @@ class TestSemanticSearch:
             client = TestClient(app)
             resp = client.get("/api/search?q=hello&mode=semantic")
             assert resp.status_code == 200
-            assert isinstance(resp.json(), list)
+            assert isinstance(resp.json(), dict)
+            assert "items" in resp.json()
+            assert "counts" in resp.json()
         finally:
             import shutil
             shutil.rmtree(d, ignore_errors=True)
@@ -49,7 +53,9 @@ class TestSemanticSearch:
             client = TestClient(app)
             resp = client.get("/api/search?q=test&mode=combined")
             assert resp.status_code == 200
-            assert isinstance(resp.json(), list)
+            assert isinstance(resp.json(), dict)
+            assert "items" in resp.json()
+            assert "counts" in resp.json()
         finally:
             import shutil
             shutil.rmtree(d, ignore_errors=True)

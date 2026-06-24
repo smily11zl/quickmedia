@@ -52,6 +52,7 @@ def delete_asset_full(db, cfg, asset_id: int) -> dict:
         return {"ok": False, "error": f"asset {asset_id} not found"}
     db.execute("DELETE FROM asset_tags WHERE asset_id=?", (asset_id,))
     db.execute("DELETE FROM asset_search_terms WHERE asset_id=?", (asset_id,))
+    db.execute("DELETE FROM node_assets WHERE asset_id=?", (asset_id,))
     db.execute("DELETE FROM ai_queue WHERE asset_id=?", (asset_id,))
     try:
         from quickmedia.embedding import ChromaStore

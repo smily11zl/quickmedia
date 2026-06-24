@@ -322,3 +322,79 @@ Anthropic 制定的 AI Agent 工具调用协议。Hermes 内置 MCP 客户端，
 ### QUICKMEDIA_HOME
 
 环境变量，指定数据目录。默认 。MCP server 和 Web 版共享。
+
+## V12 — 素材聚合（Aggregation）
+
+### 聚合节点（Aggregation Node）
+
+素材的语义分组单元。AI 分析全库素材内容后自动生成。每个节点有名称（name）和描述（description），可手动编辑。节点与素材为多对多关系：一个素材可以属于多个节点，一个节点包含多个素材。
+
+### 聚合模式（Aggregation Mode）
+
+三种手动触发的模式：
+
+- **全量分析（full）** — 忽略已有节点，从零重新分析全库素材，生成全新节点和关联。适合初始聚合或彻底重建。
+- **全量追加（full_append）** — 带已有节点关系 + 全量素材，AI 可以：增加新节点、追加素材到已有节点、修改已有节点关系。适合发现新聚合主题。
+- **追加分析（append）** — 仅将新素材（未分配）分配到已有节点，不修改节点列表。轻量快速。
+
+三种模式均由用户手动触发，无自动逻辑。Prompt 由函数根据 mode 参数组合，AI 不感知 mode。
+
+### 聚合 Worker（Aggregation Worker）
+
+独立的后台进程，使用独立的 SQLite 队列表（aggregation_queue），与现有 AI 分析队列（ai_queue）完全隔离。串行处理聚合任务，同一时间只允许一个任务，有任务运行时拒绝新提交。无自动重试，失败直接标记失败。
+
+### 聚合任务状态
+
+两种状态：分析中 / 完成。前端节点面板顶部黄色横幅显示状态。失败显示红色错误信息。通过轮询（~3s）检测完成。
+
+### 节点素材关联（Node-Asset Relationship）
+
+`node_assets(node_id, asset_id)` 多对多关联表。素材删除时级联清理关联记录。节点删除时素材变为未分配（不删素材）。
+
+### 聚合粒度
+
+中粒度（~10-30 个节点），按主题区分：猫的行为、狗的日常、家居收纳、购物记录、项目文档等。
+
+### 聚合模型
+
+复用现有 text 分析模型配置，不额外设置。
+
+### 节点交互
+
+- 左键点击节点 → 右侧素材面板显示节点关联素材（复用现有素材列表）
+- 右键节点 → 弹出菜单：重命名、编辑描述、删除节点、手动添加素材
+- 手动添加素材 → 弹出搜索框 + 全量素材列表（多选勾选 + 确认）
+- 节点列表按素材数降序排列
+
+### 侧边栏 Tab
+
+侧边栏顶部增加 Tab 切换：
+- Tab 1：搜索与筛选（现有功能）
+- Tab 2：聚合节点（NodePanel 组件）
+
+### 代码组织
+
+- 后端：`quickmedia/aggregation/` 子包（api.py / prompts.py / worker.py）
+- 前端：`NodePanel.tsx` + `AddAssetModal.tsx`
+- **架构演变**：最初设计为独立 Worker 进程轮询队列，后简化为 daemon 线程按需执行。`aggregation_queue` 仅用于状态追踪和防重复提交。
+
+### 聚合线程（Aggregation Thread）
+
+API 接收请求后 spawn daemon 线程执行，不再使用常驻后台 Worker。线程执行完自动结束。使用 `OpenAIAdapter.chat()` / `OllamaAdapter.chat()` 复用现有 AI 调用层。
+
+### 追加分析空素材跳过
+
+append / full_append 模式下，如果所有素材已全部分配到节点（unassigned=0），跳过 AI 调用直接标记 done。
+
+### 扫描弹窗（Scan Popup）
+
+侧边栏底部"扫描新素材"按钮点击弹出三个选项：
+- 扫描配置路径 — 原有行为，POST /api/scan
+- 选择文件 — macOS Finder 选文件 → POST /api/file-picker → POST /api/scan-file
+- 选择文件夹 — macOS Finder 选文件夹 → POST /api/folder-picker → POST /api/scan-folder
+
+### Scanner 重构（_ingest_file）
+
+提取 `_insert_asset()` 和 `_ingest_file()` 两个公共方法，`scan_directory` 和 `scan_file` 共享同一入库逻辑。`_ingest_file` 三道防线：inode 匹配 → 哈希匹配 → 新增入库。
+
+修复 `scan_file` 4 个历史 bug：`hash_file` 函数不存在 / `_os.time()` / INSERT 列名 `ext`→`extension` / `indexed_at`→`scanned_at`。

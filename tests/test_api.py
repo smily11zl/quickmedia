@@ -95,8 +95,10 @@ class TestSearchAPI:
         r = seeded.get("/api/search?q=橘猫")
         assert r.status_code == 200
         data = r.json()
-        assert len(data) == 1
-        assert data[0]["filename"] == "cat.png"
+        items = data["items"] if isinstance(data, dict) else data
+        assert len(items) == 1
+        assert items[0]["filename"] == "cat.png"
+        assert "counts" in data
 
 
 class TestTagAPI:

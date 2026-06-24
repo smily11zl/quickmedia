@@ -198,3 +198,13 @@
 - 6 工具 + 批量操作 + Pydantic 结构化输出
 - 共享搜索/资产操作模块，消除重复代码
 - Hermes 3 行配置即用
+
+## v12 — 素材聚合 ✅
+- AI 自动聚类：全量分析 / 全量追加 / 追加分析
+- 独立聚合线程 (daemon，按需执行)
+- 多对多节点关系 (nodes + node_assets)
+- 侧边栏双 Tab：搜索筛选 / 聚合节点
+- 节点右键交互 + 手动添加素材
+- 扫描弹窗 (配置路径/选择文件/选择文件夹)
+- Scanner 重构 (_insert_asset + _ingest_file)
+- 43 tests (28 backend + 15 frontend)

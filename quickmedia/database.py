@@ -91,6 +91,28 @@ CREATE TABLE IF NOT EXISTS asset_search_terms (
     term     TEXT NOT NULL,
     UNIQUE(asset_id, term)
 );
+
+CREATE TABLE IF NOT EXISTS aggregation_queue (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    mode         TEXT NOT NULL,
+    status       TEXT DEFAULT 'pending',
+    error        TEXT,
+    created_at   TEXT DEFAULT (datetime('now')),
+    completed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS nodes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS node_assets (
+    node_id  INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+    asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    PRIMARY KEY (node_id, asset_id)
+);
 """
 
 
@@ -103,6 +125,7 @@ class Database:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self._migrate_v9()
+        self._migrate_v12()
         self._init_schema()
 
     def _migrate_v9(self) -> None:
@@ -179,6 +202,42 @@ class Database:
             self.conn.execute(
                 "INSERT INTO assets_fts(assets_fts) VALUES('rebuild')"
             )
+
+    def _migrate_v12(self) -> None:
+        """Apply v12 schema changes: aggregation tables for existing DBs.
+        New DBs get these from SCHEMA_SQL. This handles upgrades."""
+        tables = self.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+        table_names = {r["name"] for r in tables}
+        if "aggregation_queue" not in table_names:
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS aggregation_queue (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    mode         TEXT NOT NULL,
+                    status       TEXT DEFAULT 'pending',
+                    error        TEXT,
+                    created_at   TEXT DEFAULT (datetime('now')),
+                    completed_at TEXT
+                )
+            """)
+        if "nodes" not in table_names:
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS nodes (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name        TEXT NOT NULL,
+                    description TEXT DEFAULT '',
+                    created_at  TEXT DEFAULT (datetime('now'))
+                )
+            """)
+        if "node_assets" not in table_names:
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS node_assets (
+                    node_id  INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+                    asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+                    PRIMARY KEY (node_id, asset_id)
+                )
+            """)
 
     def execute(self, sql: str, params=()) -> list[sqlite3.Row]:
         """Execute a SQL query and return results as Row objects."""

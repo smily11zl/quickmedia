@@ -286,3 +286,46 @@ AI 输出新字段 search_terms（检索意图搜索词，每词独立向量）+
 - **单文件扫描** — Scanner.scan_file 精确添加单个文件
 
 详见 [docs/v11/prd.md](docs/v11/prd.md)。
+
+---
+
+## v12 — 素材聚合（Aggregation）
+
+### Problem Statement
+
+素材通过 AI 分析获得了描述、标签、摘要，但所有素材仍然是以扁平列表呈现。用户没有"概念级"的素材组织方式——无法按主题（如"猫的照片"、"购物记录"）快速浏览跨类型的素材集合。标签可以实现部分筛选，但需要手动创建且归因粒度太细。
+
+### Solution
+
+AI 驱动的素材自动聚类。全库分析后生成聚合节点（~10-30个），每个节点代表一个语义主题，包含节点名、描述、关联素材。支持全量分析、全量追加、追加分析三种模式，全部手动触发。节点和素材为多对多关系，节点可手动编辑。
+
+### Key Features
+
+- **三种聚合模式** — 全量分析（从头重建）/ 全量追加（增量发现新节点）/ 追加分析（新素材入已分配节点）
+- **AI 自动聚类** — 复用现有 text 分析模型，单次 prompt 调用分析全库素材，返回 nodes + assignments
+- **独立异步 Worker** — 独立进程 + 独立 SQLite 队列表，与现有 AI 分析队列完全隔离
+- **多对多节点关系** — `nodes` + `node_assets` 表，一个素材可属于多个节点，一个节点包含多个素材
+- **节点编辑** — 右键菜单支持重命名、编辑描述、删除节点、手动添加/移除素材
+- **侧边栏 Tab** — 顶部双 Tab 切换：Tab1 搜索与筛选（现有）、Tab2 聚合节点（新增）
+- **素材列表复用** — 点击节点后右侧素材面板复用现有素材浏览列表
+- **级联清理** — 删除素材时自动清理 node_assets 关联
+
+### Implementation Decisions
+
+- **聚合模式**：全量分析 / 全量追加 / 追加分析，全部手动触发
+- **异步机制**：独立 Aggregation Worker 进程，独立 aggregation_queue 表
+- **任务限制**：单任务，运行中拒绝新提交
+- **失败处理**：直接标记失败，不重试
+- **Prompt**：函数根据 mode 参数组合，AI 不感知 mode
+- **模型**：复用现有 text 分析模型配置
+- **前端**：NodePanel.tsx + AddAssetModal.tsx，纯 React+TailwindCSS，零依赖
+- **后端**：quickmedia/aggregation/ 子包（worker.py / prompts.py / api.py）
+
+### Testing Decisions
+
+- **最高 seam**：POST /api/aggregation/run、GET /api/aggregation/status、节点 CRUD API
+- **中层 seam**：数据库 nodes/node_assets/aggregation_queue 表 + 级联删除
+- **低层 seam**：build_aggregation_prompt() 三种 mode 输出
+- **集成 seam**：delete_asset_full 是否清理 node_assets
+
+详见 [docs/v12/tasks.md](docs/v12/tasks.md)。

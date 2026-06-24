@@ -193,106 +193,8 @@ class Scanner:
             size = st.st_size
             scanned_paths.add(filepath)
 
-            # Check inode match first
-            existing = self._find_by_inode(st.st_ino, st.st_dev)
-            if existing and existing["path"] != filepath:
-                # Same inode, different path → file was renamed/moved
-                self.db.execute(
-                    "UPDATE assets SET path=?, scanned_at=? WHERE id=?",
-                    (filepath, datetime.now().isoformat(), existing["id"]),
-                )
-                result["updated"] += 1
-                result["total"] += 1
-                continue
-            elif existing and existing["path"] == filepath:
-                # Path unchanged, update scanned_at
-                self.db.execute(
-                    "UPDATE assets SET scanned_at=?, size=? WHERE id=?",
-                    (datetime.now().isoformat(), size, existing["id"]),
-                )
-                result["total"] += 1
-                continue
-
-            # Compute hash for new or unknown file
-            hash_val = self._compute_hash(filepath)
-
-            # Check hash duplicate (same content, different path or inode)
-            hash_existing = self._find_by_hash(hash_val)
-            if hash_existing:
-                result["duplicates"] += 1
-                result["total"] += 1
-                continue
-
-            # New asset — insert
-            modified_ts = datetime.fromtimestamp(st.st_mtime).isoformat()
-            created_ts = datetime.fromtimestamp(st.st_ctime).isoformat()
-            now = datetime.now().isoformat()
-
-            cursor = self.db.conn.execute(
-                """INSERT INTO assets
-                   (hash, inode, device, path, filename, extension, asset_type,
-                    size, status, thumbnail_status, modified_at, created_at,
-                    scanned_at)
-                   VALUES (?,?,?,?,?,?,?,?, 'active','pending',?,?,?)""",
-                (
-                    hash_val,
-                    st.st_ino,
-                    st.st_dev,
-                    filepath,
-                    filename,
-                    ext.lower(),
-                    asset_type,
-                    size,
-                    modified_ts,
-                    created_ts,
-                    now,
-                ),
-            )
-            self.db.conn.commit()
-            asset_id = cursor.lastrowid
-
-            # Generate and link auto tags
-            auto_tags = self._auto_tags(filename, asset_type, filepath, 0)
-            self._link_tags(asset_id, auto_tags, source="auto")
-
-            # Extract metadata (width, height, duration)
-            meta = self._metadata.extract(filepath)
-            if meta.get("width") or meta.get("height") or meta.get("duration"):
-                updates = []
-                params = []
-                if meta.get("width") is not None:
-                    updates.append("width=?")
-                    params.append(meta["width"])
-                if meta.get("height") is not None:
-                    updates.append("height=?")
-                    params.append(meta["height"])
-                if meta.get("duration") is not None:
-                    updates.append("duration=?")
-                    params.append(meta["duration"])
-                if updates:
-                    params.append(asset_id)
-                    self.db.execute(
-                        f"UPDATE assets SET {', '.join(updates)} WHERE id=?",
-                        tuple(params),
-                    )
-
-            # Enqueue thumbnail generation for images and videos
-            if asset_type in ("image", "video"):
-                self._thumbnailer.enqueue(asset_id)
-
-            # Enqueue AI analysis (async queue, not blocking)
-            if asset_type == "image":
-                self._ai.enqueue(asset_id, "vision")
-            elif asset_type == "video":
-                self._ai.enqueue(asset_id, "vision")
-                self._ai.enqueue(asset_id, "transcribe")
-            elif asset_type == "audio":
-                self._ai.enqueue(asset_id, "transcribe")
-            elif asset_type == "document":
-                self._ai.enqueue(asset_id, "text")
-
-            result["new"] += 1
-            result["total"] += 1
+            # Ingest file (inode dedup, hash dedup, or insert new)
+            self._ingest_file(filepath, result)
 
         # Mark deleted files (files in DB whose path is under this directory
         # but no longer exist on disk)
@@ -304,88 +206,99 @@ class Scanner:
             print(f"[Scanner] 缩略图处理异常: {e}", flush=True)
         return result
 
-    def scan_file(self, filepath: str) -> int:
-        """Add a single file to the asset database. Returns asset_id or 0."""
+    def _insert_asset(self, filepath: str, filename: str, ext: str,
+                      asset_type: str, size: int, st, hash_val: str) -> int:
+        """Insert a new asset into the database. Returns asset_id."""
+        modified_ts = datetime.fromtimestamp(st.st_mtime).isoformat()
+        created_ts = datetime.fromtimestamp(st.st_ctime).isoformat()
+        now = datetime.now().isoformat()
+
+        cursor = self.db.conn.execute(
+            """INSERT INTO assets
+               (hash, inode, device, path, filename, extension, asset_type,
+                size, status, thumbnail_status, modified_at, created_at,
+                scanned_at)
+               VALUES (?,?,?,?,?,?,?,?, 'active','pending',?,?,?)""",
+            (hash_val, st.st_ino, st.st_dev, filepath, filename,
+             ext.lower(), asset_type, size, modified_ts, created_ts, now),
+        )
+        self.db.conn.commit()
+        return cursor.lastrowid
+
+    def _ingest_file(self, filepath: str, result: dict = None) -> int:
+        """Ingest a single file into the asset database. Returns asset_id or 0.
+        
+        Args:
+            filepath: Absolute path to the file.
+            result: Optional dict for stats tracking (new, updated, duplicates, total).
+        """
         import os as _os
-        from quickmedia.scanner import hash_file
-
-        if not _os.path.isfile(filepath):
-            return 0
-
         filename = _os.path.basename(filepath)
         ext = _os.path.splitext(filename)[1].lower().lstrip(".")
         if not self._is_allowed(filename):
             return 0
 
-        # Determine asset type
-        formats = self._formats
-        asset_type = None
-        for cat in ["image", "video", "audio", "document"]:
-            if ext in formats.get(cat, []):
-                asset_type = cat
-                break
+        asset_type = self._get_type(ext)
         if not asset_type:
             asset_type = "other"
 
         stat = _os.stat(filepath)
         size = stat.st_size
-        modified_ts = int(stat.st_mtime)
-        created_ts = int(stat.st_ctime)
+        now = datetime.now().isoformat()
 
-        # Check for existing asset by path
-        existing = self.db.execute("SELECT id FROM assets WHERE path=?", (filepath,))
-        now = int(_os.time())
-        if existing:
-            asset_id = existing[0]["id"]
+        # 1. Inode match — file was renamed/moved
+        existing = self._find_by_inode(stat.st_ino, stat.st_dev)
+        if existing and existing["path"] != filepath:
             self.db.execute(
-                "UPDATE assets SET size=?, modified_at=?, analyzed_at=NULL WHERE id=?",
-                (size, now, asset_id),
+                "UPDATE assets SET path=?, scanned_at=? WHERE id=?",
+                (filepath, now, existing["id"]),
             )
-            return asset_id
+            if result:
+                result["updated"] = result.get("updated", 0) + 1
+                result["total"] = result.get("total", 0) + 1
+            return existing["id"]
+        elif existing and existing["path"] == filepath:
+            self.db.execute(
+                "UPDATE assets SET scanned_at=?, size=? WHERE id=?",
+                (now, size, existing["id"]),
+            )
+            if result:
+                result["total"] = result.get("total", 0) + 1
+            return existing["id"]
 
-        # Compute hash for dedup
-        file_hash = hash_file(filepath)
-        hash_existing = self.db.execute("SELECT id FROM assets WHERE hash=?", (file_hash,))
+        # 2. Hash match — duplicate content
+        hash_val = self._compute_hash(filepath)
+        hash_existing = self._find_by_hash(hash_val)
         if hash_existing:
-            # Same file under different path — skip dedup, just add
-            pass
+            if result:
+                result["duplicates"] = result.get("duplicates", 0) + 1
+                result["total"] = result.get("total", 0) + 1
+            return hash_existing["id"]
 
-        # Insert new asset
-        cursor = self.db.conn.execute(
-            """INSERT INTO assets (hash, inode, device, path, filename, ext, asset_type, size, modified_at, created_at, indexed_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (file_hash, stat.st_ino, stat.st_dev, filepath, filename, ext.lower(),
-             asset_type, size, modified_ts, created_ts, now),
-        )
-        self.db.conn.commit()
-        asset_id = cursor.lastrowid
+        # 3. New asset
+        asset_id = self._insert_asset(filepath, filename, ext, asset_type, size, stat, hash_val)
+        if result:
+            result["new"] = result.get("new", 0) + 1
+            result["total"] = result.get("total", 0) + 1
 
-        # Generate auto tags
+        # Post-processing: tags, metadata, thumbnail, AI
         auto_tags = self._auto_tags(filename, asset_type, filepath, 0)
         self._link_tags(asset_id, auto_tags, source="auto")
-
-        # Extract metadata
         meta = self._metadata.extract(filepath)
         if meta.get("width") or meta.get("height") or meta.get("duration"):
-            updates = []
-            params = []
+            updates, params = [], []
             if meta.get("width") is not None:
-                updates.append("width=?")
-                params.append(meta["width"])
+                updates.append("width=?"); params.append(meta["width"])
             if meta.get("height") is not None:
-                updates.append("height=?")
-                params.append(meta["height"])
+                updates.append("height=?"); params.append(meta["height"])
             if meta.get("duration") is not None:
-                updates.append("duration=?")
-                params.append(meta["duration"])
+                updates.append("duration=?"); params.append(meta["duration"])
             if updates:
                 params.append(asset_id)
                 self.db.execute(
                     f"UPDATE assets SET {', '.join(updates)} WHERE id=?",
                     tuple(params),
                 )
-
-        # Enqueue thumbnail + AI
         if asset_type in ("image", "video"):
             self._thumbnailer.enqueue(asset_id)
         if asset_type == "image":
@@ -398,9 +311,17 @@ class Scanner:
         elif asset_type == "document":
             self._ai.enqueue(asset_id, "text")
 
-        self._thumbnailer.process_queue()
         return asset_id
 
+    def scan_file(self, filepath: str) -> int:
+        """Add a single file to the asset database. Returns asset_id or 0."""
+        import os as _os
+        if not _os.path.isfile(filepath):
+            return 0
+        aid = self._ingest_file(filepath)
+        if aid:
+            self._thumbnailer.process_queue()
+        return aid
 
     def _mark_deleted(self, directory: str) -> None:
         """Mark assets whose paths no longer exist on disk as deleted."""

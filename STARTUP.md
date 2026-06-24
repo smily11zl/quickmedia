@@ -73,6 +73,47 @@ quickmedia tag <ID> <标签>      # 打标签
 quickmedia edit <ID>            # 编辑描述
 quickmedia stats                # 统计
 quickmedia serve [端口]         # Web UI
+quickmedia mcp                  # 启动 MCP server (供 AI Agent 调用)
+```
+
+## MCP 集成（AI Agent 对话式素材管理）
+
+QuickMedia 可作为 MCP server 供 Hermes / Claude Desktop / Codex CLI 等 AI 工具调用。
+
+### Hermes 配置
+
+编辑 `~/.hermes/config.yaml`，添加：
+
+```yaml
+mcp_servers:
+  quickmedia:
+    command: "/path/to/quickmedia/.venv/bin/python"
+    args: ["-m", "quickmedia.mcp_server"]
+```
+
+替换 `/path/to/quickmedia` 为实际项目路径。重启 Hermes 即可使用 `search_assets`、`get_asset`、`list_assets`、`find_similar`、`add_asset`、`delete_asset` 等工具。
+
+### Claude Desktop 配置
+
+编辑 `~/Library/Application Support/Claude/claude_desktop_config.json`：
+
+```json
+{
+  "mcpServers": {
+    "quickmedia": {
+      "command": "/path/to/quickmedia/.venv/bin/python",
+      "args": ["-m", "quickmedia.mcp_server"]
+    }
+  }
+}
+```
+
+重启 Claude Desktop 后，在对话中可直接搜索和管理素材。
+
+### Codex CLI 配置
+
+```bash
+codex mcp add quickmedia -- /path/to/quickmedia/.venv/bin/python -m quickmedia.mcp_server
 ```
 
 ## 配置
@@ -116,13 +157,20 @@ quickmedia/
 │   ├── scanner.py       # 扫描引擎
 │   ├── metadata.py      # 元数据提取
 │   ├── thumbnailer.py   # 缩略图生成
-│   ├── ai.py            # AI 视觉/文本分析
-│   ├── watcher.py       # fsevents 监听
-│   └── api/server.py    # FastAPI 服务
+|   ├── ai.py            # AI 视觉/文本分析
+|   ├── watcher.py       # fsevents 监听
+|   ├── aggregation/     # V12 素材聚合
+|   ├── mcp_server.py    # MCP server
+|   └── api/server.py    # FastAPI 服务
 ├── frontend/            # React 前端
-│   └── dist/            # 构建输出
-├── tests/               # 测试
-├── QUICKMEDIA_DESIGN.md # 设计文档
+|   ├── dist/            # 构建输出
+|   └── tests/           # 前端测试 (vitest)
+├── tests/               # Python 测试
+├── docs/                # 版本文档 (v1-v12)
+├── CONTEXT.md           # 领域术语表
+├── PRD.md               # 产品需求（全版本）
+├── ROADMAP.md           # 版本路线图
+├── STARTUP.md           # 启动指南
 ├── DESIGN.md            # UI 设计规范
-└── TASKS.md             # 任务文档
+└── AGENTS.md            # AI Agent 项目指南
 ```

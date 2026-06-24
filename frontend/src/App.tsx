@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import ModelManager from "./ModelManager";
 import SettingsModal from "./SettingsModal";
 import SimilarPanel from "./SimilarPanel";
+import NodePanel from "./NodePanel";
 
 interface Asset {
   id: number; filename: string; asset_type: string; size: number;
@@ -16,7 +17,6 @@ interface Asset {
   tags: { id: number; name: string; source: string }[];
   _distance?: number;
 }
-interface Stats { total: number; image: number; video: number; audio: number; document: number; }
 interface TagInfo { id: number; name: string; count: number; }
 
 const f=(b:number)=>{for(const u of["B","KB","MB","GB"]){if(b<1024)return `${b}${u}`;b=Math.floor(b/1024);}return `${b}TB`;};
@@ -36,7 +36,6 @@ function App() {
   const [fmts,sfmts]=useState<string[]>([]);
   const [searchResults,sr]=useState<Asset[]>([]);
   const [didSearch,sds]=useState(false);
-  const [st,ss]=useState<Stats>({total:0,image:0,video:0,audio:0,document:0});
   const [tg,stg]=useState<TagInfo[]>([]);
   const [tf,stf]=useState<string|null>(null);
   const [gf,sgf]=useState<number|null>(null);
@@ -63,20 +62,26 @@ function App() {
   const [top,stop]=useState(false);
   const [missingConfig,setMC]=useState(false);
   const [qStat,setQStat]=useState<{pending:number;processing_name:string|null}>({pending:0,processing_name:null});
+  const [activeTab, setActiveTab] = useState<"search" | "nodes">("search");
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
+  const [selectedNodeName, setSelectedNodeName] = useState<string>("");
+  const [scm, sscm] = useState(false);
   const dr=useRef<HTMLTextAreaElement>(null);
+  const [counts, setCounts] = useState({image: 0, video: 0, audio: 0, document: 0});
 
   const ckCfg=()=>{Promise.all([fetch("/api/config/watch-paths").then(r=>r.json()),fetch("/api/task-models").then(r=>r.json())]).then(([wp,tm])=>{const hasWp=wp.paths&&wp.paths.length>0;const hasTm=!!(tm&&Object.values(tm).every((x:any)=>x.model));setMC(!hasWp||!hasTm);});};
-  useEffect(()=>{fetch("/api/stats").then(r=>r.json()).then(ss);fetch("/api/formats").then(r=>r.json()).then(sfmts);fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0)sso(true);});ckCfg();setInterval(ckCfg,30000);},[]);
+  useEffect(()=>{fetch("/api/formats").then(r=>r.json()).then(sfmts);fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0)sso(true);});ckCfg();setInterval(ckCfg,30000);},[]);
   useEffect(()=>{fetch("/api/tags").then(r=>r.json()).then(stg);},[]);
   useEffect(()=>{fetch("/api/queue/status").then(r=>r.json()).then(setQStat);const i=setInterval(()=>fetch("/api/queue/status").then(r=>r.json()).then(setQStat),5000);return ()=>clearInterval(i);},[]);
 
   const doSearch=()=>{
     if(!q.trim()){sq("");sr([]);sds(false);fa();return;}
     sslc(true);
-    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{sa((d.items||d||[]));if(smode!=="keyword"){sr((d.items||d||[]));sds(true);}}).finally(()=>sslc(false));
+    setSelectedNodeId(null); setSelectedNodeName("");
+    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);}}).finally(()=>sslc(false));
   };
-  const fa=()=>{const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>sa(d.items));};
-  useEffect(()=>{if(didSearch)return;fa();},[tf,ff,af,df,mf,tgf]);useEffect(()=>{const u=async()=>{const r=await fetch("/api/assets?limit=500");const d=await r.json();const m:Record<number,any>={};d.items.forEach((a:any)=>m[a.id]=a);sa((p:any[])=>{let c=false;const n=p.map(a=>{const f=m[a.id];if(f&&a.ai_status!==f.ai_status){c=true;return{...a,ai_status:f.ai_status,analyzed_at:f.analyzed_at};}return a;});return c?n:p;});};const i=setInterval(u,3000);return ()=>clearInterval(i);},[]);
+  const fa=()=>{const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>{sa(d.items); if(d.counts)setCounts(d.counts);});};
+  useEffect(()=>{if(didSearch||selectedNodeId)return;fa();},[tf,ff,af,df,mf,tgf]);useEffect(()=>{const u=async()=>{const r=await fetch("/api/assets?limit=500");const d=await r.json();const m:Record<number,any>={};d.items.forEach((a:any)=>m[a.id]=a);sa((p:any[])=>{let c=false;const n=p.map(a=>{const f=m[a.id];if(f&&a.ai_status!==f.ai_status){c=true;return{...a,ai_status:f.ai_status,analyzed_at:f.analyzed_at};}return a;});return c?n:p;});};const i=setInterval(u,3000);return ()=>clearInterval(i);},[]);
 
   // Poll selected asset if it's being processed
   useEffect(()=>{
@@ -85,8 +90,19 @@ function App() {
     return ()=>clearInterval(i);
   },[sel?.id,sel?.ai_status]);
 
+  // V12: Load assets when a node is selected
+  useEffect(()=>{
+    if (selectedNodeId) {
+      fetch(`/api/nodes/${selectedNodeId}/assets`).then(r=>r.json()).then(d=>{
+        sa(d.items); sr([]); sds(false); sq("");
+        stf(null); sgf(null);
+        if (d.counts) setCounts(d.counts);
+      });
+    }
+  },[selectedNodeId]);
+
   let fs=(q&&smode!=="keyword"&&didSearch)?searchResults:as;
-  if(didSearch){
+  if(didSearch||selectedNodeId){
     if(tf)fs=fs.filter(a=>a.asset_type===tf);
     if(ff.size>0)fs=fs.filter(a=>{const x=a.filename.split(".").pop()?.toLowerCase()||"";return ff.has(x);});
     if(af.size>0)fs=fs.filter(a=>{const s=a.ai_status||(a.visual_description||a.ai_summary?"done":"pending");return af.has(s);});
@@ -108,13 +124,19 @@ function App() {
   const bRe=()=>{fetch("/api/assets/batch-reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({asset_ids:[...ms]})}).then(()=>{sm(new Set());});};
   const delA=(id:number)=>{fetch(`/api/assets/${id}`,{method:"DELETE"}).then(()=>{sl(null);fa();});};
 
-  const types=[{k:null,l:"全部素材",n:st.total},{k:"image",l:"图片",n:st.image},{k:"video",l:"视频",n:st.video},{k:"audio",l:"音频",n:st.audio},{k:"document",l:"文档",n:st.document}];
+  const types=[{k:null,l:"全部素材",n:counts.image+counts.video+counts.audio+counts.document},{k:"image",l:"图片",n:counts.image},{k:"video",l:"视频",n:counts.video},{k:"audio",l:"音频",n:counts.audio},{k:"document",l:"文档",n:counts.document}];
   const hl=(text:string):any=>{if(!q)return text;const i=text.toLowerCase().indexOf(q.toLowerCase());if(i<0)return text;return <>{text.slice(0,i)}<span style={{color:S.r,fontWeight:600}}>{text.slice(i,i+q.length)}</span>{text.slice(i+q.length)}</>;};
 
   return (
     <div className="flex h-screen" style={{backgroundColor:S.c}}>
       <aside className="w-64 flex flex-col gap-0.5 p-4 border-r overflow-y-auto" style={{borderColor:S.h}}>
         <h1 style={{fontFamily:"'Tiempos Headline',Garamond,serif",fontSize:22,fontWeight:400,color:S.i}} className="mb-4">QuickMedia</h1>
+        <div className="flex gap-0 mb-3">
+          <button onClick={()=>setActiveTab("search")} className="flex-1 text-xs py-1.5 rounded-t-md font-medium" style={{fontFamily:"'Inter',sans-serif",backgroundColor:activeTab==="search"?S.d:"transparent",color:activeTab==="search"?S.i:S.ms,borderBottom:activeTab==="search"?`2px solid ${S.r}`:"2px solid transparent"}}>搜索筛选</button>
+          <button onClick={()=>setActiveTab("nodes")} className="flex-1 text-xs py-1.5 rounded-t-md font-medium" style={{fontFamily:"'Inter',sans-serif",backgroundColor:activeTab==="nodes"?S.d:"transparent",color:activeTab==="nodes"?S.i:S.ms,borderBottom:activeTab==="nodes"?`2px solid ${S.r}`:"2px solid transparent"}}>聚合节点</button>
+        </div>
+        {activeTab==="search" ? (
+        <>
         <div className="flex flex-col gap-1 mb-3">
           <div className="relative w-full">
             <input type="text" placeholder="搜索..." value={q} onChange={e=>sq(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()} className="w-full px-3 py-1.5 text-sm rounded-md outline-none pr-6" style={{fontFamily:"'Inter',sans-serif",backgroundColor:S.c,border:`1px solid ${S.h}`,color:S.i}}/>
@@ -184,8 +206,18 @@ function App() {
             </div>
           </div>}
         </div>
-        <div className="mt-auto pt-4 flex flex-col gap-1" style={{borderTop:`1px solid ${S.h}`}}>
-          <button onClick={()=>fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0){alert("请先配置扫描文件夹");sso(true);}else{fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{alert(d.message);fa();})}})} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
+        </>
+        ) : (
+          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");}} selectedNodeId={selectedNodeId} />
+        )}
+        <div className="mt-auto pt-4 flex flex-col gap-1 relative" style={{borderTop:`1px solid ${S.h}`}}>
+          <button onClick={()=>sscm(!scm)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
+          {scm&&<div className="fixed inset-0 z-[5]" onClick={()=>sscm(false)}/>}
+          {scm&&<div className="absolute bottom-full left-0 right-0 mb-1 p-2 rounded border shadow-sm z-10 flex flex-col gap-0.5" style={{borderColor:S.h,backgroundColor:S.c}}>
+            <button onClick={()=>{sscm(false);fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0){alert("请先配置扫描文件夹");sso(true);}else{fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{alert(d.message);fa();})}})}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📂 扫描配置路径</button>
+            <button onClick={()=>{sscm(false);fetch("/api/file-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-file",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{alert(d.message);fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📄 选择文件</button>
+            <button onClick={()=>{sscm(false);fetch("/api/folder-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{alert(d.message);fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📁 选择文件夹</button>
+          </div>}
           <button onClick={()=>sso(true)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>⚙ 设置{missingConfig?<span className="w-2 h-2 rounded-full inline-block ml-1" style={{backgroundColor:"#c64545"}}></span>:null}</button>
         </div>
       </aside>
@@ -204,6 +236,21 @@ function App() {
           {qStat.pending > 0 && <span className="text-[10px]" style={{color: S.ms}}>{qStat.pending} 个待分析</span>}
           <span className="text-xs ml-auto" style={{color:S.ms}}>{fs.length} 个素材</span>
         </div>
+        {selectedNodeId && (
+          <div className="flex items-center gap-2 mb-3 px-3 py-1.5 rounded-md" style={{backgroundColor:S.rb, borderLeft:`3px solid ${S.r}`}}>
+            <span className="text-xs" style={{color:S.r, fontFamily:"'Inter',sans-serif"}}>
+              📌 节点: "{selectedNodeName}"
+            </span>
+            <button
+              onClick={()=>{setSelectedNodeId(null);setSelectedNodeName("");fa();}}
+              className="text-xs px-2 py-0.5 rounded ml-auto font-medium"
+              style={{color:S.r}}
+              title="清除节点筛选"
+            >
+              ✕ 清除
+            </button>
+          </div>
+        )}
         {vw==="grid"?(
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {fs.map(a=>(<div key={a.id} onClick={()=>selA(a.id)} className="rounded-xl overflow-hidden cursor-pointer transition-shadow hover:shadow-sm relative" style={{backgroundColor:S.c,border:sel?.id===a.id?`2px solid ${S.r}`:`1px solid ${S.h}`}}>

@@ -1,116 +1,236 @@
 # QuickMedia
 
-本地素材管理工具 — 扫描、标签、AI 分析。支持本地 + 云端多模型。
+本地素材管理工具 — 扫描、标签、AI 分析、语义搜索、素材聚合。
 
-## 功能
+## 核心功能
 
-- **素材扫描** — SHA256 去重 + inode 追踪，不碰原文件
-- **元数据提取** — 图片尺寸、视频分辨率/时长、音频信息
-- **AI 分析（多模型）** — 图片场景描述 + 标签 + OCR，文档摘要 + 关键词，语音转写 + 摘要，视频帧分析 + 综合总结
-- **多模型支持** — Ollama / DeepSeek / OpenRouter / OpenAI / MiniMax，不同任务可选不同模型
-- **自定义 Prompt** — 每个分析类型可编辑分析指令、切换预设模板
-- **全文搜索** — 按文件名、描述、标签、AI 摘要搜索
-- **标签系统** — 手动打标 + AI 自动标签，多选筛选
-- **Web UI** — 网格/列表视图，详情面板，暖色调设计
+### 素材扫描与管理
+- 目录扫描（SHA256 去重 + inode 追踪）
+- 实时文件监听（fsevents）
+- 元数据提取（图片尺寸、视频分辨率/时长、音频信息）
+- 缩略图异步生成
+- 手工扫描（Web UI 点击触发，支持配置路径 / 选择文件 / 选择文件夹）
+- 素材删除（仅移除索引，源文件不受影响）
 
-## 快速开始
+### AI 智能分析
+- 图片视觉描述 + 元素标签
+- 视频多帧采样 + 首帧分析 + 综合总结
+- 音频/视频语音转录（whisper）
+- 文档摘要 + 关键词
+- OCR 图片文字提取
+- AI 任务队列（异步，不阻塞扫描）
+- 重试机制（3 次，2s 间隔）+ 手动重试/重新分析
+- 自定义 AI Prompt（图片/文档/语音/视频四类独立模板 + 预设）
+- 多模型支持（Ollama / OpenAI / DeepSeek / OpenRouter / MiniMax）
+- 任务模型绑定（不同分析类型可指定不同模型）
 
-### 系统依赖
+### 搜索
+- 语义搜索（ChromaDB 向量，`qwen3-embedding`）
+- RRF 融合排序（BM25 关键词 + 语义向量混合）
+- 三种模式：综合 / 语义 / 匹配
+- jieba 中文分词
+- 搜索结果关键词高亮
+- 相似素材推荐（详情页叠加层）
+
+### 标签系统
+- 三种来源：auto（系统自动）/ ai（AI 生成）/ manual（手动）
+- 扁平结构（无层级），取并集筛选
+- AI 标签确认/删除
+
+### 素材聚合（v12）
+- AI 自动聚类：全量分析 / 全量追加 / 追加分析
+- 聚合节点多对多关联（素材可属于多个节点）
+- 侧边栏双 Tab：搜索筛选 / 聚合节点
+- 节点管理：重命名、编辑描述、删除、手动添加素材
+- 选中节点状态持久（跨 Tab 保留，主内容区清除条）
+
+### 筛选
+- 类型筛选（图片/视频/音频/文档），数量实时反映当前结果集
+- 创建/修改时间日期区间
+- 文件格式下拉多选
+- AI 状态下拉多选（已完成/分析中/等待/失败）
+- 标签多选筛选（取并集）
+- 批量选择 + 重新分析
+- 排序（名称/大小/时间）
+
+### MCP 工具（v11）
+- FastMCP 驱动，stdio 传输
+- 10 个工具：search_assets / get_asset / list_assets / find_similar / add_asset / delete_asset / list_prompts / get_prompt / list_resources / read_resource
+- Hermes / Claude Desktop / Codex CLI 均可用
+
+### Web UI
+- 设置页面：监控路径配置、模型管理、AI Prompt 模板
+- 文档预览（txt/md/docx），素材详情（路径/尺寸/时长/AI 结果）
+- 批量操作（多选 + 重新分析）
+
+## 安装
+
+### 基础环境
+
+- Python 3.11+
+- ffmpeg（视频元数据、缩略图提取）
 
 ```bash
-# macOS
-brew install ffmpeg   # 视频缩略图、元数据提取
-
-# Linux
-sudo apt install ffmpeg
+brew install ffmpeg
 ```
 
-### 安装
+### Python 包安装
+
+核心依赖（必装）：Pillow、PyYAML、watchdog
 
 ```bash
-# 进入项目目录，创建虚拟环境
-cd quickmedia
 python3 -m venv .venv
 source .venv/bin/activate
-
-# 安装依赖
-pip install -e ".[all]"
-
-# 扫描素材目录
-quickmedia scan ~/Desktop/test_media
-
-# 启动 Web UI
-quickmedia serve
-# → http://localhost:8088
+pip install -e ".[all]"   # 安装全部功能包
 ```
 
-## 数据存储
+可选按需安装，替代 `[all]`：
 
-所有索引和配置文件存储在 `~/.asset-manager/`：
+```bash
+pip install -e ".[web]"        # Web UI（FastAPI + Uvicorn）
+pip install -e ".[audio]"      # 语音转录（Whisper）
+pip install -e ".[text]"       # 文档解析（PyMuPDF + openpyxl）
+pip install -e ".[embedding]"  # 语义搜索 + 聚合（ChromaDB + jieba）
+pip install -e ".[mcp]"        # MCP 工具接口
+```
 
-| 文件 | 说明 |
-|------|------|
-| `data.db` | SQLite 素材索引 |
-| `config.yaml` | 应用配置（端口、监视路径、Provider） |
-| `.env` | API Key（远端模型需要） |
-| `prompts.yaml` | AI 分析提示词模板 |
-| `models.yaml` | 可用模型目录 |
-| `thumbnails/` | 缩略图缓存 |
+### 前端构建
 
-## AI 分析
+需要 Node.js。构建一次即可，产物在 `frontend/dist/` 下，运行时无需 Node。
 
-### 本地模型（Ollama）
+```bash
+cd frontend && npm install && npm run build && cd ..
+```
+
+### AI 模型（可选）
+
+需要 Ollama 或其他兼容服务。未配置时 AI 分析/搜索功能不可用，素材管理、扫描功能正常。
 
 ```bash
 brew install ollama
 ollama serve &
-ollama pull qwen3.5:9b
+ollama pull qwen3.5:9b              # 视觉/文本分析
+ollama pull qwen3-embedding:8b      # 语义搜索嵌入
 ```
 
-启动后 QuickMedia 自动检测并连接。
+## 启动
 
-### 远端模型
-
-支持 DeepSeek / OpenRouter / OpenAI / MiniMax。在 Web UI **设置 → 模型管理** 中添加 Provider 并填入 API Key。Key 存储在 `~/.asset-manager/.env`：
-
-```
-DEEPSEEK_API_KEY=***
-OPENROUTER_API_KEY=***
-MINIMAX_API_KEY=***
-OPENAI_API_KEY=***
+```bash
+quickmedia serve
 ```
 
-### 分析类型
+首次启动会自动弹出配置页面，添加监控文件夹后即可扫描。
 
-| 类型 | 适用素材 | 分析内容 |
-|------|---------|---------|
-| 图片分析 | jpg/png/webp/gif | 场景描述、元素标签、OCR 文字 |
-| 文档分析 | txt/md/pdf | 摘要、关键词 |
-| 语音分析 | wav/mp3/m4a | Whisper 转写 + 摘要 |
-| 视频分析 | mp4/mov/avi | 帧分析 + 语音总结 |
+## MCP 集成
 
-每种分析类型可在设置中绑定不同模型，例如图片用 GPT-4o、文档用 DeepSeek。
+### Hermes
 
-## CLI 命令
+```yaml
+# ~/.hermes/config.yaml
+mcp_servers:
+  quickmedia:
+    command: "quickmedia"
+    args: ["mcp"]
+```
 
-| 命令 | 说明 |
-|------|------|
-| `quickmedia scan <路径>` | 扫描目录 |
-| `quickmedia stats` | 统计 |
-| `quickmedia list [--type image]` | 列出素材 |
-| `quickmedia search <关键词>` | 搜索 |
-| `quickmedia serve [端口]` | 启动 Web UI（默认 8088） |
-| `quickmedia tag <ID> <标签>` | 打标签 |
-| `quickmedia edit <ID>` | 编辑描述 |
+### Claude Desktop
 
-## 技术栈
+```json
+{
+  "mcpServers": {
+    "quickmedia": {
+      "command": "quickmedia",
+      "args": ["mcp"]
+    }
+  }
+}
+```
 
-Python / FastAPI / SQLite / React / TailwindCSS / Ollama / faster-whisper
+### Codex CLI
 
-## 文档
+```bash
+codex mcp add quickmedia -- quickmedia mcp
+```
 
-- [启动指南](STARTUP.md) — 环境要求、依赖安装细节
-- [设计规范](DESIGN.md) — UI 色彩、字体、组件规范
-- [路线图](ROADMAP.md) — 版本计划和已完成功能
-- [领域术语](CONTEXT.md) — Asset、Scan、Provider 等概念
-- [设计文档](docs/v1/design.md) — 技术方案（schema/API/架构）
+## 支持的模型
+
+通过 Web UI 设置页 → 模型管理配置。不同分析任务可绑定不同模型。
+
+| Provider | 模型 | 图片 | 视频 | 音频 | 文本 |
+|----------|------|:----:|:----:|:----:|:----:|
+| **Ollama** (本地) | `qwen3.5:9b` | ✓ | ✓ | | ✓ |
+| | `qwen3-embedding:8b` | | | | 嵌入 |
+| **OpenAI** | `gpt-4o` | ✓ | | | ✓ |
+| | `gpt-4o-mini` | ✓ | | | ✓ |
+| **DeepSeek** | `deepseek-chat` | | | | ✓ |
+| | `deepseek-reasoner` | | | | ✓ |
+| | `deepseek-v4-flash` | | | | ✓ |
+| | `deepseek-v4-pro` | | | | ✓ |
+| **OpenRouter** | `openai/gpt-4o` | ✓ | | | ✓ |
+| | `openai/gpt-4o-mini` | ✓ | | | ✓ |
+| | `anthropic/claude-sonnet-4` | ✓ | | | ✓ |
+| | `anthropic/claude-haiku-4` | | | | ✓ |
+| | `google/gemini-2.5-flash` | ✓ | ✓ | ✓ | ✓ |
+| | `google/gemini-2.5-pro` | ✓ | ✓ | ✓ | ✓ |
+| | `deepseek/deepseek-chat` | | | | ✓ |
+| | `deepseek/deepseek-v4-pro` | | | | ✓ |
+| | `deepseek/deepseek-r1` | | | | ✓ |
+| | `qwen/qwen3.5-plus-02-15` | ✓ | ✓ | | ✓ |
+| | `qwen/qwen3.5-max` | ✓ | ✓ | | ✓ |
+| | `qwen/qwen3.5-coder` | | | | ✓ |
+| | `qwen/qwen3.7-plus` | ✓ | ✓ | | ✓ |
+| | `qwen/qwen3.7-max` | ✓ | ✓ | | ✓ |
+| | `qwen/qwen3-embedding-8b` | | | | 嵌入 |
+| **MiniMax** | `MiniMax-M3` | | | | ✓ |
+| | `MiniMax-M2.7` | | | | ✓ |
+| | `MiniMax-M2.5` | | | | ✓ |
+| | `MiniMax-M2.1` | | | | ✓ |
+| | `MiniMax-M2` | | | | ✓ |
+| | `MiniMax-M1` | | | | ✓ |
+
+> 嵌入模型用于语义搜索和素材聚合。图片/视频分析需要多模态模型。各 Provider 需要配置对应的 API Key。
+
+## 数据存储
+
+- 数据库：`~/.asset-manager/data.db`
+- 配置文件：`~/.asset-manager/config.yaml`
+- 模型目录：`~/.asset-manager/models.yaml`
+- Prompt 模板：`~/.asset-manager/prompts.yaml`
+- 向量库：`~/.asset-manager/chroma_db/`
+- 缩略图：`~/.asset-manager/thumbnails/`
+
+## 项目结构
+
+```
+quickmedia/
+├── quickmedia/           # Python 后端
+│   ├── api/server.py     # FastAPI 路由
+│   ├── aggregation/      # 聚合模块（prompts/worker/api）
+│   ├── database.py       # SQLite + 迁移
+│   ├── scanner.py        # 文件扫描器
+│   ├── search.py         # 语义搜索
+│   ├── mcp_server.py     # MCP 服务
+│   ├── ai.py             # AI 分析器
+│   ├── cli.py            # CLI 入口
+│   └── ...
+├── frontend/             # React 前端
+│   └── src/
+│       ├── App.tsx       # 主组件
+│       ├── NodePanel.tsx # 聚合节点面板
+│       └── ...
+├── tests/                # Pytest 测试
+└── docs/v*/              # 版本文档（plan/PRD/design/tasks）
+```
+
+## 开发
+
+```bash
+# 运行测试
+python -m pytest tests/ -q
+
+# 前端开发模式
+cd frontend && npm run dev
+
+# 前端测试
+cd frontend && npx vitest run
+```
