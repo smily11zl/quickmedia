@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import AddAssetModal from "./AddAssetModal";
 import Toast from "./Toast";
 import ConfirmModal from "./ConfirmModal";
@@ -27,11 +27,14 @@ interface Props {
   selectedNodeId: number | null;
   onRefreshAssets?: (nodeId: number) => void;
   refreshKey?: number;
+  onGraphRefresh?: (newNodeId?: number) => void;
+  onGraphFullReload?: () => void;
 }
 
-function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey }: Props) {
+function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, onGraphRefresh, onGraphFullReload }: Props) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [aggStatus, setAggStatus] = useState<AggStatus>({ status: "idle" });
+  const lastAggMode = useRef("");
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: number } | null>(null);
   const [editNode, setEditNode] = useState<{ id: number; name: string; desc: string } | null>(null);
   const [addModal, setAddModal] = useState<{ nodeId: number; nodeName: string } | null>(null);
@@ -68,6 +71,12 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey }
   useEffect(() => {
     if (aggStatus.task?.status === "done") {
       fetchNodes();
+      if (lastAggMode.current === "full") {
+        onGraphFullReload?.();
+      } else {
+        onGraphRefresh?.();
+      }
+      lastAggMode.current = "";
     }
   }, [aggStatus.task?.status]);
 
@@ -80,6 +89,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey }
       .then((r) => r.json())
       .then((d) => {
         if (d.ok) {
+          lastAggMode.current = mode;
           fetchStatus();
         } else {
           setToast({ message: d.detail || "提交失败", type: "error" });
@@ -100,6 +110,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey }
           setNodes(nodes.filter((n) => n.id !== confirmDelete));
           if (selectedNodeId === confirmDelete) onSelectNode(null);
           setDeletingNodeId(null);
+          onGraphRefresh?.();
         }, 300);
       } else {
         setDeletingNodeId(null);
@@ -130,6 +141,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey }
       setEditNode(null);
       setCreatingNode(false);
       fetchNodes();
+      onGraphRefresh?.(d.id);
       return d.id;
     });
   };
@@ -144,6 +156,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey }
       setEditNode(null);
       setCreatingNode(false);
       fetchNodes();
+      onGraphRefresh?.(d.id);
       // Trigger analyze_append on the new node
       setTimeout(() => runAnalyzeAppend(d.id), 200);
     });
@@ -158,6 +171,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey }
         if (d.ok) {
           setToast({ message: `分析完成，已添加 ${d.added} 个素材`, type: "info" });
           fetchNodes();
+          onGraphRefresh?.();
           // If this node is currently selected, refresh asset list
           if (selectedNodeId === nodeId && onRefreshAssets) {
             onRefreshAssets(nodeId);
@@ -484,7 +498,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey }
           nodeId={addModal.nodeId}
           nodeName={addModal.nodeName}
           onClose={() => setAddModal(null)}
-          onAdded={() => fetchNodes()}
+          onAdded={() => { fetchNodes(); onGraphRefresh?.(); }}
         />
       )}
       {removeModal && (
@@ -495,6 +509,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey }
           onClose={() => setRemoveModal(null)}
           onAdded={() => {
             fetchNodes();
+            onGraphRefresh?.();
             if (selectedNodeId === removeModal.nodeId && onRefreshAssets) {
               onRefreshAssets(removeModal.nodeId);
             }
