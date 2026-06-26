@@ -1,12 +1,27 @@
 """QuickMedia FastAPI server."""
 
 import os
-from fastapi import FastAPI, Query, HTTPException, Body
+from fastapi import FastAPI, Query, HTTPException, Body, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from quickmedia.database import Database
 from quickmedia.config import Config
+
+# WebSocket connection pool
+_graph_ws_clients: list = []
+
+async def broadcast_graph_changed():
+    """Push graph_changed event to all connected WebSocket clients."""
+    import asyncio
+    disconnected = []
+    for ws in _graph_ws_clients:
+        try:
+            await ws.send_json({"event": "graph_changed"})
+        except Exception:
+            disconnected.append(ws)
+    for ws in disconnected:
+        _graph_ws_clients.remove(ws)
 
 
 def _parse_osascript_path(output: str):
@@ -435,6 +450,42 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 print(f"Semantic search error: {e}", flush=True)
 
         return {"items": items, "counts": _count_by_type(items)}
+
+    # ── Graph API ─────────────────────────────────────────────────
+
+    @app.get("/api/graph")
+    def get_graph():
+        _db = _get_db(app)
+        nodes = [dict(r) for r in _db.execute(
+            "SELECT n.id, n.name, n.description, "
+            "COUNT(na.asset_id) as asset_count "
+            "FROM nodes n LEFT JOIN node_assets na ON n.id=na.node_id "
+            "GROUP BY n.id"
+        )]
+        edges = [dict(r) for r in _db.execute(
+            "SELECT na.node_id, na.asset_id, a.filename, a.asset_type, "
+            "a.ai_summary, a.thumbnail_status "
+            "FROM node_assets na JOIN assets a ON a.id=na.asset_id"
+        )]
+        unassigned = [dict(r) for r in _db.execute(
+            "SELECT a.id, a.filename, a.asset_type, a.thumbnail_status "
+            "FROM assets a WHERE a.status='active' "
+            "AND a.id NOT IN (SELECT DISTINCT asset_id FROM node_assets)"
+        )]
+        return {"nodes": nodes, "edges": edges, "unassigned": unassigned}
+
+    @app.websocket("/ws/graph")
+    async def ws_graph(websocket: WebSocket):
+        await websocket.accept()
+        _graph_ws_clients.append(websocket)
+        try:
+            while True:
+                await websocket.receive_text()  # keepalive
+        except WebSocketDisconnect:
+            pass
+        finally:
+            if websocket in _graph_ws_clients:
+                _graph_ws_clients.remove(websocket)
 
     # ── Tags ────────────────────────────────────────────────────
 

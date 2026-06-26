@@ -3,6 +3,7 @@ import ModelManager from "./ModelManager";
 import SettingsModal from "./SettingsModal";
 import SimilarPanel from "./SimilarPanel";
 import NodePanel from "./NodePanel";
+import GraphView from "./GraphView";
 
 interface Asset {
   id: number; filename: string; asset_type: string; size: number;
@@ -49,7 +50,7 @@ function App() {
   const [nt,sn]=useState("");
   const [so,sso]=useState(false);
   const [mm,smm]=useState(false);
-  const [vw,sv]=useState<"grid"|"list">("grid");
+  const [vw,sv]=useState<"graph"|"grid"|"list">("grid");
   const [sb,ssb]=useState<"name"|"size"|"date">("name");
   const [ms,sm]=useState<Set<number>>(new Set());
   const [ff,sf]=useState<Set<string>>(new Set());
@@ -66,6 +67,10 @@ function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [selectedNodeName, setSelectedNodeName] = useState<string>("");
   const [scm, sscm] = useState(false);
+  const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
+  const [graphData, setGraphData] = useState({nodes:[] as any[],edges:[] as any[],unassigned:[] as any[]});
+  const [graphKey, setGraphKey] = useState(0);
+  const graphInitRef = useRef(false);
   const dr=useRef<HTMLTextAreaElement>(null);
   const [counts, setCounts] = useState({image: 0, video: 0, audio: 0, document: 0});
 
@@ -100,6 +105,16 @@ function App() {
       });
     }
   },[selectedNodeId]);
+
+  useEffect(()=>{
+    if(vw==="graph") fetch("/api/graph").then(r=>r.json()).then(d=>{
+      setGraphData(d);
+      if(!graphInitRef.current && d.nodes.length>0){
+        setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));
+        graphInitRef.current = true;
+      }
+    });
+  },[vw]);
 
   let fs=(q&&smode!=="keyword"&&didSearch)?searchResults:as;
   if(didSearch||selectedNodeId){
@@ -208,7 +223,7 @@ function App() {
         </div>
         </>
         ) : (
-          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");}} selectedNodeId={selectedNodeId} />
+          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} />
         )}
         <div className="mt-auto pt-4 flex flex-col gap-1 relative" style={{borderTop:`1px solid ${S.h}`}}>
           <button onClick={()=>sscm(!scm)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
@@ -222,12 +237,14 @@ function App() {
         </div>
       </aside>
       {slc && <div className="fixed inset-0 z-40 flex items-center justify-center" style={{backgroundColor: "rgba(250,249,245,0.7)"}}><div className="text-center"><div className="animate-spin text-2xl mb-2">⏳</div><p className="text-sm" style={{color: "#6c6a64"}}>搜索中...</p></div></div>}
-      <main className="flex-1 overflow-y-auto p-6">
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-6 pt-4 pb-2">
         {ms.size>0&&<div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{backgroundColor:S.d}}><span className="text-xs" style={{color:S.b}}>已选 {ms.size} 个</span><button onClick={()=>sm(new Set(fs.map(a=>a.id)))} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>全选</button><button onClick={()=>sm(new Set())} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>取消选择</button><button onClick={bRe} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>重新分析已选</button></div>}
         <div className="flex gap-2 mb-4 items-center">
           <div className="flex gap-1 rounded-md p-0.5" style={{backgroundColor:S.s}}>
             <button onClick={()=>sv("grid")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="grid"?S.c:"transparent",color:S.i}}>▦ 网格</button>
             <button onClick={()=>sv("list")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="list"?S.c:"transparent",color:S.i}}>☰ 列表</button>
+            <button onClick={()=>sv("graph")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:(vw as string)==="graph"?S.c:"transparent",color:S.i}}>☁ 云图</button>
           </div>
           <select value={sb} onChange={e=>ssb(e.target.value as any)} disabled={!!(q && smode!=="keyword")} className="text-xs px-2 py-1 rounded-md outline-none" style={!!(q && smode!=="keyword")?{border:"1px solid #e8e4dd",color:"#bcb8b2",backgroundColor:"#f5f2ed",cursor:"not-allowed",opacity:0.6}:{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
             <option value="name">按名称</option><option value="size">按大小</option><option value="date">按时间</option>
@@ -236,7 +253,7 @@ function App() {
           {qStat.pending > 0 && <span className="text-[10px]" style={{color: S.ms}}>{qStat.pending} 个待分析</span>}
           <span className="text-xs ml-auto" style={{color:S.ms}}>{fs.length} 个素材</span>
         </div>
-        {selectedNodeId && (
+        {vw!=="graph"&&selectedNodeId && (
           <div className="flex items-center gap-2 mb-3 px-3 py-1.5 rounded-md" style={{backgroundColor:S.rb, borderLeft:`3px solid ${S.r}`}}>
             <span className="text-xs" style={{color:S.r, fontFamily:"'Inter',sans-serif"}}>
               📌 节点: "{selectedNodeName}"
@@ -251,6 +268,25 @@ function App() {
             </button>
           </div>
         )}
+        </div>
+        <div className="flex-1 relative">
+        <div className={`absolute inset-0${vw!=="graph"?" hidden":""}`}>
+          <GraphView
+            key={graphKey}
+            graphData={graphData}
+            selectedNodeId={selectedNodeId}
+            selectedNodeName={selectedNodeName}
+            onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}}
+            onSelectAsset={(aid:number)=>{selA(aid);}}
+            searchResults={searchResults}
+            filteredAssets={fs}
+            hasActiveFilter={!!(tf||ff.size>0||af.size>0||tgf.size>0||(q&&didSearch)||selectedNodeId)}
+            expandedNodes={expandedNodes}
+            onExpandedChange={setExpandedNodes}
+            onReload={()=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));setGraphKey(k=>k+1);});}}
+          />
+        </div>
+        <div className={`absolute inset-0 overflow-y-auto px-6 pb-6${vw==="graph"?" hidden":""}`}>
         {vw==="grid"?(
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {fs.map(a=>(<div key={a.id} onClick={()=>selA(a.id)} className="rounded-xl overflow-hidden cursor-pointer transition-shadow hover:shadow-sm relative" style={{backgroundColor:S.c,border:sel?.id===a.id?`2px solid ${S.r}`:`1px solid ${S.h}`}}>
@@ -279,6 +315,8 @@ function App() {
           </div>
         )}
         {fs.length===0&&<div className="text-center mt-20"><p className="text-4xl mb-4">📁</p><p style={{fontFamily:"'Inter',sans-serif",color:S.b}}>暂无素材</p><p className="text-sm mt-2" style={{color:S.m}}>运行 quickmedia scan 来扫描素材</p></div>}
+        </div>
+        </div>
       </main>
       {sel&&<aside className="w-80 border-l overflow-y-auto p-4 flex flex-col gap-3" style={{borderColor:S.h,backgroundColor:S.c}}>
         <div className="flex justify-between items-center"><h2 className="text-sm font-medium truncate flex-1" style={{fontFamily:"'Inter',sans-serif",color:S.i}}>{sel.filename}</h2><button onClick={()=>{if(confirm(`确认删除 ${sel.filename}？`))delA(sel.id)}} className="text-xs px-1.5 py-0.5 rounded" style={{color:S.r}} title="删除">🗑</button><button onClick={()=>sl(null)} className="text-lg leading-none px-1" style={{color:S.ms}}>✕</button></div>

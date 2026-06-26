@@ -168,7 +168,7 @@ function NodePanel({ onSelectNode, selectedNodeId }: Props) {
         {nodes.map((node) => (
           <div key={node.id}>
             <button
-              onClick={() => { onSelectNode(node.id, node.name); }}
+              onClick={() => { if (node.id === selectedNodeId) onSelectNode(null); else onSelectNode(node.id, node.name); }}
               onContextMenu={(e) => {
                 e.preventDefault();
                 setCtxMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });

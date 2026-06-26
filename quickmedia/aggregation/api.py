@@ -72,6 +72,9 @@ def register_aggregation_routes(app):
                 if mode in ("append", "full_append") and len(unassigned) == 0:
                     print(f"[Aggregation] 任务 #{task_id}: 无新素材，跳过分析", flush=True)
                     mark_done(task_db, task_id)
+                    import asyncio
+                    from quickmedia.api.server import broadcast_graph_changed
+                    asyncio.run(broadcast_graph_changed())
                     return
 
                 prompt = build_prompt(mode, assets, nodes)
@@ -124,6 +127,9 @@ def register_aggregation_routes(app):
 
                 save_aggregation_result(task_db, result)
                 mark_done(task_db, task_id)
+                import asyncio
+                from quickmedia.api.server import broadcast_graph_changed
+                asyncio.run(broadcast_graph_changed())
                 print(f"[Aggregation] 任务 #{task_id} 完成: 已保存 {node_count} 个节点", flush=True)
 
             except Exception as e:
@@ -167,6 +173,9 @@ def register_aggregation_routes(app):
             (name, body.get("description", "")),
         )
         nid = db.execute("SELECT last_insert_rowid()")[0]["last_insert_rowid()"]
+        import asyncio
+        from quickmedia.api.server import broadcast_graph_changed
+        asyncio.run(broadcast_graph_changed())
         return {"id": nid, "name": name, "description": body.get("description", "")}
 
     @app.put("/api/nodes/{node_id}")
@@ -181,6 +190,9 @@ def register_aggregation_routes(app):
                 "UPDATE nodes SET name=?, description=? WHERE id=?",
                 (name, body.get("description", ""), node_id),
             )
+        import asyncio
+        from quickmedia.api.server import broadcast_graph_changed
+        asyncio.run(broadcast_graph_changed())
         return {"ok": True}
 
     @app.delete("/api/nodes/{node_id}")
@@ -191,6 +203,9 @@ def register_aggregation_routes(app):
             raise HTTPException(status_code=404, detail="节点不存在")
         db.execute("DELETE FROM node_assets WHERE node_id=?", (node_id,))
         db.execute("DELETE FROM nodes WHERE id=?", (node_id,))
+        import asyncio
+        from quickmedia.api.server import broadcast_graph_changed
+        asyncio.run(broadcast_graph_changed())
         return {"ok": True}
 
     @app.post("/api/nodes/{node_id}/assets")
@@ -208,6 +223,9 @@ def register_aggregation_routes(app):
                 )
             except Exception:
                 pass
+        import asyncio
+        from quickmedia.api.server import broadcast_graph_changed
+        asyncio.run(broadcast_graph_changed())
         return {"ok": True}
 
     @app.delete("/api/nodes/{node_id}/assets/{asset_id}")
@@ -217,6 +235,9 @@ def register_aggregation_routes(app):
             "DELETE FROM node_assets WHERE node_id=? AND asset_id=?",
             (node_id, asset_id),
         )
+        import asyncio
+        from quickmedia.api.server import broadcast_graph_changed
+        asyncio.run(broadcast_graph_changed())
         return {"ok": True}
 
     @app.get("/api/nodes/{node_id}/assets")
