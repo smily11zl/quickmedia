@@ -26,9 +26,10 @@ interface Props {
   onSelectNode: (nodeId: number | null, nodeName?: string) => void;
   selectedNodeId: number | null;
   onRefreshAssets?: (nodeId: number) => void;
+  refreshKey?: number;
 }
 
-function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets }: Props) {
+function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey }: Props) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [aggStatus, setAggStatus] = useState<AggStatus>({ status: "idle" });
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: number } | null>(null);
@@ -47,6 +48,8 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets }: Props) {
       .then((r) => r.json())
       .then(setNodes);
   };
+
+  useEffect(() => { fetchNodes(); }, [refreshKey]);
 
   const fetchStatus = () => {
     fetch("/api/aggregation/status")

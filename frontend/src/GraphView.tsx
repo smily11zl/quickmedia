@@ -20,6 +20,7 @@ interface Props {
   expandedNodes: Set<number>;
   onExpandedChange: (nodes: Set<number>) => void;
   onReload: () => void;
+  onAssetDrop?: (assetId: number, nodeId: number | number[], unassign: boolean) => void;
 }
 
 const ASSET_COLORS: Record<string, string> = {
@@ -39,7 +40,7 @@ interface FgNode extends NodeObject {
   hasThumbnail?: boolean;
 }
 
-function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr, filteredAssets, hasActiveFilter, expandedNodes, onExpandedChange, onReload }: Props) {
+function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr, filteredAssets, hasActiveFilter, expandedNodes, onExpandedChange, onReload, onAssetDrop }: Props) {
   const fgRef = useRef<any>(null);
   const expandedRef = useRef(expandedNodes);
   expandedRef.current = expandedNodes;
@@ -54,9 +55,12 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
   const nodeCountRef = useRef(0);
   const linkCountRef = useRef(0);
   const prevExpandedCountRef = useRef(0);
+  const linkHashRef = useRef("");
 
   const savedZoom = useRef(1);
   const chargeSettled = useRef(false);
+  const dragTargetAggId = useRef<string | null>(null);
+  const dragHighlightRef = useRef(0);
 
   const searchIdSet = useMemo(() => {
     const ids = new Set<number>();
@@ -189,9 +193,10 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
     for (const key of lm.keys()) { if (!newLinkKeys.has(key)) removeLink(key); }
 
     const newNodeCount = nm.size, newLinkCount = lm.size, newExpandedCount = expandedNodes.size;
-    const prevHash = `${nodeCountRef.current}:${linkCountRef.current}:${prevExpandedCountRef.current}`;
-    const newHash = `${newNodeCount}:${newLinkCount}:${newExpandedCount}`;
-    nodeCountRef.current = newNodeCount; linkCountRef.current = newLinkCount; prevExpandedCountRef.current = newExpandedCount;
+    const edgeKeys = Array.from(lm.keys()).sort().join(",");
+    const prevHash = `${nodeCountRef.current}:${linkCountRef.current}:${prevExpandedCountRef.current}:${linkHashRef.current}`;
+    const newHash = `${newNodeCount}:${newLinkCount}:${newExpandedCount}:${edgeKeys}`;
+    nodeCountRef.current = newNodeCount; linkCountRef.current = newLinkCount; prevExpandedCountRef.current = newExpandedCount; linkHashRef.current = edgeKeys;
 
     if (newHash !== prevHash) {
       const aggNodes = Array.from(nm.values()).filter((n) => n.isAgg && n.id !== "unassigned");
@@ -255,6 +260,13 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
         ctx.fillStyle = `hsl(14, ${s}%, ${l}%)`;
       }
       ctx.fill();
+      // Drag highlight ring
+      if (dragTargetAggId.current === node.id) {
+        ctx.beginPath(); ctx.arc(x, y, r + 6, 0, 2 * Math.PI);
+        ctx.strokeStyle = node.isUnassigned ? "rgba(134,152,176,0.6)" : "rgba(204,120,92,0.6)";
+        ctx.lineWidth = 2.5 / scale;
+        ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
+      }
       if (node.isUnassigned) { ctx.setLineDash([4, 3]); ctx.strokeStyle = "#6a7a90"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]); }
       // Label below
       ctx.font = `${Math.max(10, 12 / scale)}px Inter, sans-serif`; ctx.fillStyle = "#3d3d3a"; ctx.textAlign = "center";
@@ -311,7 +323,71 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
             : 5;
           ctx.beginPath(); ctx.arc(node.x!, node.y!, r, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill();
         }}
-        linkWidth={2} linkColor={() => "#e0dcd4"} onNodeClick={handleNodeClick} onNodeHover={() => {}}
+        linkWidth={2} linkColor={() => "#e0dcd4"} onNodeClick={handleNodeClick}
+        onNodeDrag={(node) => {
+          const n = node as FgNode;
+          if (n.isAgg) return;
+          const ax = node.x!, ay = node.y!;
+          // Freeze only the targeted agg node, unfreeze previous
+          const prevFrozen = dragTargetAggId.current;
+          dragTargetAggId.current = null;
+          nodeMap.current.forEach((target) => {
+            if (!target.isAgg) return;
+            // Unassigned node: use fixed radius
+            const r = target.isUnassigned ? 16 : Math.max(12, Math.min(55, (target.count || 1) * 5));
+            const dx = ax - (target.x || 0), dy = ay - (target.y || 0);
+            if (Math.sqrt(dx * dx + dy * dy) < r + 20) {
+              // Unfreeze previous target if different from new
+              if (prevFrozen && prevFrozen !== String(target.id)) {
+                const old = nodeMap.current.get(prevFrozen);
+                if (old) { old.fx = undefined; old.fy = undefined; }
+              }
+              dragTargetAggId.current = String(target.id);
+              if (target.x != null && target.y != null) {
+                target.fx = target.x; target.fy = target.y;
+              }
+            } else if (prevFrozen === String(target.id)) {
+              // Moved away from previous target, unfreeze it
+              target.fx = undefined; target.fy = undefined;
+              dragTargetAggId.current = null;
+            }
+          });
+          if (dragHighlightRef.current !== (dragTargetAggId.current ? 1 : 0)) {
+            dragHighlightRef.current = dragTargetAggId.current ? 1 : 0;
+            try { fgRef.current?.refresh?.(); } catch {}
+          }
+        }}
+        onNodeDragEnd={(node) => {
+          const n = node as FgNode;
+          const targetId = dragTargetAggId.current;
+          dragTargetAggId.current = null;
+          dragHighlightRef.current = 0;
+          // Unfreeze all
+          nodeMap.current.forEach((target) => {
+            if (target.isAgg) { target.fx = undefined; target.fy = undefined; }
+          });
+          try { fgRef.current?.refresh?.(); } catch {}
+          if (n.isAgg || !targetId || !onAssetDrop) return;
+          const assetId = parseInt(String(n.id).replace("asset-", ""));
+          if (isNaN(assetId)) return;
+          if (targetId === "unassigned") {
+            // Find all nodes this asset belongs to
+            const nodes = [] as number[];
+            for (const [nid, assets] of edgeMap) {
+              if (assets.some((e: any) => e.asset_id === assetId)) {
+                nodes.push(nid);
+              }
+            }
+            if (nodes.length > 0) {
+              onAssetDrop(assetId, nodes, true);
+            }
+          } else {
+            const nodeId = parseInt(targetId.replace("node-", ""));
+            const existingAssets = edgeMap.get(nodeId) || [];
+            if (existingAssets.some((e: any) => e.asset_id === assetId)) return;
+            onAssetDrop(assetId, nodeId, false);
+          }
+        }}
         onBackgroundClick={() => onSelectNode(null)}
         onZoom={(z: { k: number }) => setZoomPercent(Math.round(z.k * 100))}
         onEngineStop={() => {

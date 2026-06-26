@@ -72,6 +72,7 @@ function App() {
   const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
   const [graphData, setGraphData] = useState({nodes:[] as any[],edges:[] as any[],unassigned:[] as any[]});
   const [graphKey, setGraphKey] = useState(0);
+  const [nodeRefreshKey, setNodeRefreshKey] = useState(0);
   const graphInitRef = useRef(false);
   const dr=useRef<HTMLTextAreaElement>(null);
   const [counts, setCounts] = useState({image: 0, video: 0, audio: 0, document: 0});
@@ -227,7 +228,7 @@ function App() {
         </div>
         </>
         ) : (
-          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} />
+          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} refreshKey={nodeRefreshKey} />
         )}
         <div className="mt-auto pt-4 flex flex-col gap-1 relative" style={{borderTop:`1px solid ${S.h}`}}>
           <button onClick={()=>sscm(!scm)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
@@ -288,6 +289,58 @@ function App() {
             expandedNodes={expandedNodes}
             onExpandedChange={setExpandedNodes}
             onReload={()=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));setGraphKey(k=>k+1);});}}
+            onAssetDrop={(assetId:number, nodeId:number|number[], unassign:boolean)=>{
+              if (unassign) {
+                // Remove asset from all connected nodes back to unassigned
+                const nodeIds = Array.isArray(nodeId) ? nodeId : [nodeId];
+                Promise.all(nodeIds.map(nid =>
+                  fetch(`/api/nodes/${nid}/assets/${assetId}`, { method: "DELETE" })
+                )).then(results => {
+                  const allOk = results.every(r => r.ok);
+                  if (allOk || results.some(r => r.ok)) {
+                    setNodeRefreshKey(k => k + 1);
+                    setGraphData((prev:any) => {
+                      let newNodes = prev.nodes;
+                      let newEdges = prev.edges;
+                      for (const nid of nodeIds) {
+                        newNodes = newNodes.map((n:any) =>
+                          n.id === nid ? {...n, asset_count: Math.max(0, (n.asset_count||0) - 1)} : n
+                        );
+                        newEdges = newEdges.filter((e:any) => !(e.asset_id === assetId && e.node_id === nid));
+                      }
+                      return {
+                        nodes: newNodes,
+                        edges: newEdges,
+                        unassigned: [...prev.unassigned, {id: assetId, filename: "", asset_type: ""}],
+                      };
+                    });
+                  }
+                });
+              } else {
+              const nid = nodeId as number;
+              fetch(`/api/nodes/${nid}/assets`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({asset_ids: [assetId]}),
+              }).then(r=>r.json()).then(d=>{
+                if (d.ok) {
+                  setExpandedNodes((prev:Set<number>) => new Set(prev).add(nid));
+                  setNodeRefreshKey(k => k + 1);
+                  setGraphData((prev:any) => {
+                    const exists = prev.edges.some((e:any) => e.asset_id === assetId && e.node_id === nid);
+                    if (exists) return prev;
+                    return {
+                      nodes: prev.nodes.map((n:any) =>
+                        n.id === nid ? {...n, asset_count: (n.asset_count||0) + 1} : n
+                      ),
+                      edges: [...prev.edges, {node_id: nid, asset_id: assetId}],
+                      unassigned: prev.unassigned.filter((a:any) => a.id !== assetId),
+                    };
+                  });
+                }
+              });
+              }
+            }}
           />
         </div>
         <div className={`absolute inset-0 overflow-y-auto px-6 pb-6${vw==="graph"?" hidden":""}`}>
