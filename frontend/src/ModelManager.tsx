@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ConfirmModal from "./ConfirmModal";
 
 const S = {c:"#faf9f5",h:"#e6dfd8",d:"#efe9de",s:"#f5f0e8",i:"#141413",b:"#3d3d3a",m:"#6c6a64",ms:"#8e8b82",r:"#cc785c",rb:"rgba(204,120,92,0.08)",w:"#fff"};
 
@@ -60,6 +61,7 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
   const [editProviders, setEditProviders] = useState<Record<string, ProviderData>>({});
   const [editTaskModels, setEditTaskModels] = useState<Record<string, TaskBinding>>({});
   const [initTaskModels, setInitTaskModels] = useState<Record<string, TaskBinding>>({});
+  const [confirmDeleteProvider, setConfirmDeleteProvider] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/providers").then(r => r.json()).then(d => {
@@ -96,19 +98,24 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
   };
 
   const removeProvider = (name: string) => {
-    if (!confirm(`确定删除 provider "${name}"？`)) return;
+    setConfirmDeleteProvider(name);
+  };
+
+  const doRemoveProvider = () => {
+    if (!confirmDeleteProvider) return;
     const updated = {...editProviders};
-    delete updated[name];
+    delete updated[confirmDeleteProvider];
     setEditProviders(updated);
     const tm = {...editTaskModels};
     for (const t of Object.keys(tm)) {
-      if (tm[t].provider === name) tm[t] = {provider: "", model: ""};
+      if (tm[t].provider === confirmDeleteProvider) tm[t] = {provider: "", model: ""};
     }
     setEditTaskModels(tm);
     saveProviders(updated, tm).then(ok => {
       setMsg(ok ? "已删除" : "删除失败");
       setTimeout(() => setMsg(""), ok ? 2000 : 3000);
     });
+    setConfirmDeleteProvider(null);
   };
 
   const saveUrl = (name: string) => {
@@ -267,6 +274,16 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
             {msg && <span className="text-[10px]" style={{color: msg.includes("失败") ? "#c64545" : S.m}}>{msg}</span>}
           </div>
         </div>
+      )}
+      {confirmDeleteProvider && (
+        <ConfirmModal
+          title="删除 Provider"
+          message={`确定删除 provider "${confirmDeleteProvider}"？`}
+          confirmText="删除"
+          confirmColor="error"
+          onConfirm={doRemoveProvider}
+          onCancel={() => setConfirmDeleteProvider(null)}
+        />
       )}
     </div>
   );

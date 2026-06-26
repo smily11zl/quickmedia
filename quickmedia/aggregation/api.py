@@ -163,7 +163,7 @@ def register_aggregation_routes(app):
         return [dict(n) for n in nodes]
 
     @app.post("/api/nodes")
-    def create_node(body: dict):
+    async def create_node(body: dict):
         db = _get_db(app)
         name = body.get("name", "").strip()
         if not name:
@@ -173,13 +173,12 @@ def register_aggregation_routes(app):
             (name, body.get("description", "")),
         )
         nid = db.execute("SELECT last_insert_rowid()")[0]["last_insert_rowid()"]
-        import asyncio
         from quickmedia.api.server import broadcast_graph_changed
-        asyncio.run(broadcast_graph_changed())
+        await broadcast_graph_changed()
         return {"id": nid, "name": name, "description": body.get("description", "")}
 
     @app.put("/api/nodes/{node_id}")
-    def update_node(node_id: int, body: dict):
+    async def update_node(node_id: int, body: dict):
         db = _get_db(app)
         existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
         if not existing:
@@ -190,26 +189,24 @@ def register_aggregation_routes(app):
                 "UPDATE nodes SET name=?, description=? WHERE id=?",
                 (name, body.get("description", ""), node_id),
             )
-        import asyncio
         from quickmedia.api.server import broadcast_graph_changed
-        asyncio.run(broadcast_graph_changed())
+        await broadcast_graph_changed()
         return {"ok": True}
 
     @app.delete("/api/nodes/{node_id}")
-    def delete_node(node_id: int):
+    async def delete_node(node_id: int):
         db = _get_db(app)
         existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
         if not existing:
             raise HTTPException(status_code=404, detail="节点不存在")
         db.execute("DELETE FROM node_assets WHERE node_id=?", (node_id,))
         db.execute("DELETE FROM nodes WHERE id=?", (node_id,))
-        import asyncio
         from quickmedia.api.server import broadcast_graph_changed
-        asyncio.run(broadcast_graph_changed())
+        await broadcast_graph_changed()
         return {"ok": True}
 
     @app.post("/api/nodes/{node_id}/assets")
-    def assign_assets(node_id: int, body: dict):
+    async def assign_assets(node_id: int, body: dict):
         db = _get_db(app)
         existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
         if not existing:
@@ -223,21 +220,19 @@ def register_aggregation_routes(app):
                 )
             except Exception:
                 pass
-        import asyncio
         from quickmedia.api.server import broadcast_graph_changed
-        asyncio.run(broadcast_graph_changed())
+        await broadcast_graph_changed()
         return {"ok": True}
 
     @app.delete("/api/nodes/{node_id}/assets/{asset_id}")
-    def unassign_asset(node_id: int, asset_id: int):
+    async def unassign_asset(node_id: int, asset_id: int):
         db = _get_db(app)
         db.execute(
             "DELETE FROM node_assets WHERE node_id=? AND asset_id=?",
             (node_id, asset_id),
         )
-        import asyncio
         from quickmedia.api.server import broadcast_graph_changed
-        asyncio.run(broadcast_graph_changed())
+        await broadcast_graph_changed()
         return {"ok": True}
 
     @app.get("/api/nodes/{node_id}/assets")
@@ -274,3 +269,78 @@ def register_aggregation_routes(app):
         for r in cnt_rows:
             counts[r["asset_type"]] = r["count"]
         return {"items": items, "total": len(items), "counts": counts}
+
+    @app.post("/api/nodes/{node_id}/analyze-append")
+    async def analyze_append_node(node_id: int):
+        db = _get_db(app)
+        existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
+        if not existing:
+            raise HTTPException(status_code=404, detail="节点不存在")
+        node_row = db.execute("SELECT * FROM nodes WHERE id=?", (node_id,))[0]
+        node_info = dict(node_row)
+        print(f"[AnalyzeAppend] 节点: {node_info['name']} (id={node_id})", flush=True)
+
+        # Get existing assets in this node
+        node_assets = db.execute(
+            "SELECT filename, ai_summary, visual_description FROM assets a "
+            "JOIN node_assets na ON a.id=na.asset_id WHERE na.node_id=?",
+            (node_id,),
+        )
+        existing_assets = [dict(r) for r in node_assets]
+
+        # Get all assets NOT connected to this node
+        candidates = db.execute(
+            "SELECT id, filename, asset_type, ai_summary, visual_description FROM assets "
+            "WHERE status='active' AND id NOT IN "
+            "(SELECT asset_id FROM node_assets WHERE node_id=?)",
+            (node_id,),
+        )
+        candidate_list = [dict(r) for r in candidates]
+        print(f"[AnalyzeAppend] 已有素材: {len(existing_assets)}, 候选素材: {len(candidate_list)}", flush=True)
+
+        if not candidate_list:
+            print(f"[AnalyzeAppend] 无候选素材，跳过 AI 调用", flush=True)
+            return {"ok": True, "added": 0}
+
+        # Build prompt and call AI
+        from quickmedia.aggregation.prompts import build_append_prompt
+        from quickmedia.ai_worker import AIWorker
+        from quickmedia.config import Config
+
+        config_dir = app.extra["config_dir"]
+        cfg = Config(config_dir=config_dir)
+        worker = AIWorker(db=db, config=cfg)
+        adapter = worker._get_adapter("text")
+
+        prompt = build_append_prompt(node_info, existing_assets, candidate_list)
+        response = adapter.chat(prompt)
+
+        # Parse JSON response
+        import json, re
+        try:
+            match = re.search(r"\{[^{}]*\"asset_ids\"[^{}]*\}", response, re.DOTALL)
+            if match:
+                parsed = json.loads(match.group())
+                asset_ids = parsed.get("asset_ids", [])
+            else:
+                asset_ids = []
+        except Exception:
+            asset_ids = []
+
+        # Add matching assets to node
+        added = 0
+        for aid in asset_ids:
+            try:
+                db.execute(
+                    "INSERT OR IGNORE INTO node_assets (node_id, asset_id) VALUES (?,?)",
+                    (node_id, int(aid)),
+                )
+                added += 1
+            except Exception:
+                pass
+
+        from quickmedia.api.server import broadcast_graph_changed
+        await broadcast_graph_changed()
+        print(f"[AnalyzeAppend] 完成: 添加 {added} 个素材到节点 {node_info['name']}", flush=True)
+        return {"ok": True, "added": added}
+

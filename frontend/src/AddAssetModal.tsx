@@ -20,9 +20,10 @@ interface Props {
   nodeName: string;
   onClose: () => void;
   onAdded: () => void;
+  mode?: "add" | "remove";
 }
 
-function AddAssetModal({ nodeId, nodeName, onClose, onAdded }: Props) {
+function AddAssetModal({ nodeId, nodeName, onClose, onAdded, mode = "add" }: Props) {
   const [allAssets, setAllAssets] = useState<Asset[]>([]);
   const [filtered, setFiltered] = useState<Asset[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -30,13 +31,17 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded }: Props) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/assets?limit=500")
+    const url = mode === "remove"
+      ? `/api/nodes/${nodeId}/assets?limit=500`
+      : "/api/assets?limit=500";
+    fetch(url)
       .then((r) => r.json())
       .then((d) => {
-        setAllAssets(d.items || []);
-        setFiltered(d.items || []);
+        const items = d.items || [];
+        setAllAssets(items);
+        setFiltered(items);
       });
-  }, []);
+  }, [nodeId, mode]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -71,17 +76,24 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded }: Props) {
   const submit = () => {
     if (selected.size === 0) return;
     setLoading(true);
-    fetch(`/api/nodes/${nodeId}/assets`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ asset_ids: [...selected] }),
-    })
-      .then((r) => r.json())
-      .then(() => {
-        onAdded();
-        onClose();
+    if (mode === "remove") {
+      // Batch unassign: call DELETE for each selected asset
+      Promise.all(
+        [...selected].map((aid) =>
+          fetch(`/api/nodes/${nodeId}/assets/${aid}`, { method: "DELETE" })
+        )
+      )
+        .then(() => { onAdded(); onClose(); })
+        .finally(() => setLoading(false));
+    } else {
+      fetch(`/api/nodes/${nodeId}/assets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asset_ids: [...selected] }),
       })
-      .finally(() => setLoading(false));
+        .then(() => { onAdded(); onClose(); })
+        .finally(() => setLoading(false));
+    }
   };
 
   const docI = (a: Asset) => {
@@ -96,7 +108,7 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded }: Props) {
       <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(250,249,245,0.7)" }}>
         <div className="rounded-xl p-5 w-[480px] max-h-[80vh] flex flex-col shadow-lg border" style={{ backgroundColor: S.c, borderColor: S.h }}>
           <h3 className="text-sm font-medium mb-3" style={{ color: S.i }}>
-            添加素材到 "{nodeName}"
+            {mode === "remove" ? `从 "${nodeName}" 移除素材` : `添加素材到 "${nodeName}"`}
           </h3>
 
           {/* Search */}
@@ -164,7 +176,9 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded }: Props) {
               className="text-xs px-3 py-1.5 rounded-md font-medium"
               style={{ backgroundColor: selected.size > 0 ? S.r : S.s, color: selected.size > 0 ? S.w : S.ms, cursor: selected.size > 0 ? "pointer" : "not-allowed" }}
             >
-              {loading ? "添加中..." : `确认添加 (${selected.size})`}
+              {mode === "remove"
+                ? (loading ? "移除中..." : `确认移除 (${selected.size})`)
+                : (loading ? "添加中..." : `确认添加 (${selected.size})`)}
             </button>
           </div>
         </div>

@@ -37,12 +37,25 @@
 - 扁平结构（无层级），取并集筛选
 - AI 标签确认/删除
 
-### 素材聚合（v12）
+### 素材聚合（v12-v14）
 - AI 自动聚类：全量分析 / 全量追加 / 追加分析
 - 聚合节点多对多关联（素材可属于多个节点）
 - 侧边栏双 Tab：搜索筛选 / 聚合节点
-- 节点管理：重命名、编辑描述、删除、手动添加素材
+- 节点管理：新建、重命名、编辑描述、删除
+- 手动添加/移除素材（多选批量操作）
+- 节点分析追加：AI 自动匹配未连接素材到节点
 - 选中节点状态持久（跨 Tab 保留，主内容区清除条）
+- 全量分析确认（防止误删已有节点）
+
+### 云图（v13）
+- 力导向图可视化节点-素材关系
+- 视图切换三按钮：☁ 云图 / ▦ 网格 / ☰ 列表
+- 聚合节点按素材数量缩放 + 颜色深度梯度
+- 节点圆圈内显示素材数量
+- 素材节点按类型着色，zoom 自适应缩略图
+- 展开/折叠素材节点、共享边（粗细=共享素材数）
+- 未分配节点（蓝色虚线）
+- 搜索高亮 + WebSocket 增量推送
 
 ### 筛选
 - 类型筛选（图片/视频/音频/文档），数量实时反映当前结果集
@@ -53,9 +66,9 @@
 - 批量选择 + 重新分析
 - 排序（名称/大小/时间）
 
-### MCP 工具（v11）
+### MCP 工具（v11/v14）
 - FastMCP 驱动，stdio 传输
-- 10 个工具：search_assets / get_asset / list_assets / find_similar / add_asset / delete_asset / list_prompts / get_prompt / list_resources / read_resource
+- 21 个工具：素材管理（6）+ 聚合节点管理（8）+ 聚合分析 + 扫描 + 标签管理 + 统计 + 重分析
 - Hermes / Claude Desktop / Codex CLI 均可用
 
 ### Web UI
@@ -209,14 +222,18 @@ quickmedia/
 │   ├── database.py       # SQLite + 迁移
 │   ├── scanner.py        # 文件扫描器
 │   ├── search.py         # 语义搜索
-│   ├── mcp_server.py     # MCP 服务
+│   ├── mcp_server.py     # MCP 服务（21 工具）
 │   ├── ai.py             # AI 分析器
 │   ├── cli.py            # CLI 入口
 │   └── ...
 ├── frontend/             # React 前端
 │   └── src/
 │       ├── App.tsx       # 主组件
+│       ├── GraphView.tsx # 云图视图
 │       ├── NodePanel.tsx # 聚合节点面板
+│       ├── AddAssetModal.tsx  # 添加/移除素材弹框
+│       ├── Toast.tsx      # 消息提示
+│       ├── ConfirmModal.tsx # 确认弹框
 │       └── ...
 ├── tests/                # Pytest 测试
 └── docs/v*/              # 版本文档（plan/PRD/design/tasks）

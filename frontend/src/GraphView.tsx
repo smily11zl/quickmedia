@@ -217,8 +217,8 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
           // Dynamic: match node radius + 60px margin
           const aggNode = typeof link.source === "object" ? link.source : link.target;
           const count = aggNode?.count || 1;
-          const radius = Math.max(10, Math.min(40, count * 4));
-          return radius + 60;
+          const radius = Math.max(12, Math.min(55, count * 5));
+          return radius + 80;
         });
         fgRef.current?.d3Force?.("center")?.strength?.(0);
         fgRef.current?.d3Force?.("charge")?.strength?.(-20);
@@ -244,12 +244,30 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
     }
     ctx.globalAlpha = alpha;
     if (node.isAgg) {
-      const r = node.isUnassigned ? 16 : Math.max(10, Math.min(40, (node.count || 1) * 4));
+      const r = node.isUnassigned ? 16 : Math.max(12, Math.min(55, (node.count || 1) * 5));
       ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI);
-      ctx.fillStyle = node.isUnassigned ? "#8698b0" : "#e8623a"; ctx.fill();
+      // Color depth by radius: smaller=lighter coral, larger=darker
+      if (node.isUnassigned) {
+        ctx.fillStyle = "#8698b0";
+      } else {
+        const depth = (r - 12) / 43;
+        const l = 55 - depth * 25; const s = 65 + depth * 15;
+        ctx.fillStyle = `hsl(14, ${s}%, ${l}%)`;
+      }
+      ctx.fill();
       if (node.isUnassigned) { ctx.setLineDash([4, 3]); ctx.strokeStyle = "#6a7a90"; ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]); }
+      // Label below
       ctx.font = `${Math.max(10, 12 / scale)}px Inter, sans-serif`; ctx.fillStyle = "#3d3d3a"; ctx.textAlign = "center";
       ctx.fillText(node.label, x, y + r + 14 / scale);
+      // Count inside circle
+      if (node.count) {
+        const fontSize = Math.max(10, Math.min(22, node.isUnassigned ? 12 : r * 0.6));
+        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
+        ctx.fillStyle = node.isUnassigned ? "#e0e7f0" : "#ffffff";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(String(node.count), x, y + 1);
+        ctx.textBaseline = "alphabetic";
+      }
     } else {
       const color = ASSET_COLORS[node.assetType || ""] || "#c97a5e";
       const assetId = parseInt(String(node.id).replace("asset-", ""));
@@ -289,7 +307,7 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
         nodePointerAreaPaint={(node, color, ctx) => {
           const n = node as FgNode;
           const r = n.isAgg
-            ? (n.isUnassigned ? 16 : Math.max(10, Math.min(40, (n.count || 1) * 4)))
+            ? (n.isUnassigned ? 16 : Math.max(12, Math.min(55, (n.count || 1) * 5)))
             : 5;
           ctx.beginPath(); ctx.arc(node.x!, node.y!, r, 0, 2 * Math.PI); ctx.fillStyle = color; ctx.fill();
         }}

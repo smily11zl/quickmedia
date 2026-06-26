@@ -230,3 +230,36 @@ def _build_append(assets: list[dict], nodes: list[dict]) -> str:
     for a in assets:
         parts.append(_asset_text(a))
     return "\n".join(parts)
+
+
+def build_append_prompt(
+    node_info: dict[str, str],
+    existing_assets: list[dict],
+    candidates: list[dict],
+) -> str:
+    """Build a prompt for analyzing which candidate assets should join a node.
+
+    Args:
+        node_info: {"name": str, "description": str}
+        existing_assets: Assets already in the node [{filename, ai_summary}, ...]
+        candidates: Candidate assets [{id, filename, asset_type, ai_summary}, ...]
+    """
+    parts = [
+        "你是一个素材分类助手。有一个聚合节点，请判断哪些候选素材应该加入它。",
+        f"节点名称: {node_info.get('name', '')}",
+        f"节点描述: {node_info.get('description', '')}",
+    ]
+    if existing_assets:
+        parts.append(f"该节点当前包含 {len(existing_assets)} 个素材，内容特征为:")
+        for a in existing_assets[:10]:
+            summary = a.get("ai_summary", "") or a.get("visual_description", "") or a.get("filename", "")
+            parts.append(f"  - {a.get('filename', '')}: {summary[:80]}")
+    parts.append("")
+    parts.append(f"以下有 {len(candidates)} 个候选素材，请找出应该加入此节点的:")
+    for c in candidates[:200]:
+        summary = c.get("ai_summary", "") or c.get("visual_description", "") or ""
+        parts.append(f"  [{c['id']}] {c.get('filename', '')} ({c.get('asset_type', '')}) {summary[:60]}")
+    parts.append("")
+    parts.append("仅返回 JSON: {\"asset_ids\": [id1, id2, ...]}")
+    parts.append("如果没有匹配素材，返回 {\"asset_ids\": []}")
+    return "\n".join(parts)

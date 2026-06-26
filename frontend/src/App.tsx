@@ -4,6 +4,8 @@ import SettingsModal from "./SettingsModal";
 import SimilarPanel from "./SimilarPanel";
 import NodePanel from "./NodePanel";
 import GraphView from "./GraphView";
+import Toast from "./Toast";
+import ConfirmModal from "./ConfirmModal";
 
 interface Asset {
   id: number; filename: string; asset_type: string; size: number;
@@ -73,9 +75,11 @@ function App() {
   const graphInitRef = useRef(false);
   const dr=useRef<HTMLTextAreaElement>(null);
   const [counts, setCounts] = useState({image: 0, video: 0, audio: 0, document: 0});
+  const [toast, setToast] = useState<{ message: string; type?: "info" | "error" } | null>(null);
+  const [confirmDeleteAsset, setConfirmDeleteAsset] = useState<Asset | null>(null);
 
   const ckCfg=()=>{Promise.all([fetch("/api/config/watch-paths").then(r=>r.json()),fetch("/api/task-models").then(r=>r.json())]).then(([wp,tm])=>{const hasWp=wp.paths&&wp.paths.length>0;const hasTm=!!(tm&&Object.values(tm).every((x:any)=>x.model));setMC(!hasWp||!hasTm);});};
-  useEffect(()=>{fetch("/api/formats").then(r=>r.json()).then(sfmts);fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0)sso(true);});ckCfg();setInterval(ckCfg,30000);},[]);
+  useEffect(()=>{fetch("/api/formats").then(r=>r.json()).then(sfmts);ckCfg();setInterval(ckCfg,30000);},[]);
   useEffect(()=>{fetch("/api/tags").then(r=>r.json()).then(stg);},[]);
   useEffect(()=>{fetch("/api/queue/status").then(r=>r.json()).then(setQStat);const i=setInterval(()=>fetch("/api/queue/status").then(r=>r.json()).then(setQStat),5000);return ()=>clearInterval(i);},[]);
 
@@ -223,15 +227,15 @@ function App() {
         </div>
         </>
         ) : (
-          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} />
+          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} />
         )}
         <div className="mt-auto pt-4 flex flex-col gap-1 relative" style={{borderTop:`1px solid ${S.h}`}}>
           <button onClick={()=>sscm(!scm)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
           {scm&&<div className="fixed inset-0 z-[5]" onClick={()=>sscm(false)}/>}
           {scm&&<div className="absolute bottom-full left-0 right-0 mb-1 p-2 rounded border shadow-sm z-10 flex flex-col gap-0.5" style={{borderColor:S.h,backgroundColor:S.c}}>
-            <button onClick={()=>{sscm(false);fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0){alert("请先配置扫描文件夹");sso(true);}else{fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{alert(d.message);fa();})}})}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📂 扫描配置路径</button>
-            <button onClick={()=>{sscm(false);fetch("/api/file-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-file",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{alert(d.message);fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📄 选择文件</button>
-            <button onClick={()=>{sscm(false);fetch("/api/folder-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{alert(d.message);fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📁 选择文件夹</button>
+            <button onClick={()=>{sscm(false);fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0){setToast({message:"请先配置扫描文件夹",type:"error"});sso(true);}else{fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();})}})}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📂 扫描配置路径</button>
+            <button onClick={()=>{sscm(false);fetch("/api/file-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-file",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📄 选择文件</button>
+            <button onClick={()=>{sscm(false);fetch("/api/folder-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📁 选择文件夹</button>
           </div>}
           <button onClick={()=>sso(true)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>⚙ 设置{missingConfig?<span className="w-2 h-2 rounded-full inline-block ml-1" style={{backgroundColor:"#c64545"}}></span>:null}</button>
         </div>
@@ -319,7 +323,7 @@ function App() {
         </div>
       </main>
       {sel&&<aside className="w-80 border-l overflow-y-auto p-4 flex flex-col gap-3" style={{borderColor:S.h,backgroundColor:S.c}}>
-        <div className="flex justify-between items-center"><h2 className="text-sm font-medium truncate flex-1" style={{fontFamily:"'Inter',sans-serif",color:S.i}}>{sel.filename}</h2><button onClick={()=>{if(confirm(`确认删除 ${sel.filename}？`))delA(sel.id)}} className="text-xs px-1.5 py-0.5 rounded" style={{color:S.r}} title="删除">🗑</button><button onClick={()=>sl(null)} className="text-lg leading-none px-1" style={{color:S.ms}}>✕</button></div>
+        <div className="flex justify-between items-center"><h2 className="text-sm font-medium truncate flex-1" style={{fontFamily:"'Inter',sans-serif",color:S.i}}>{sel.filename}</h2><button onClick={()=>setConfirmDeleteAsset(sel)} className="text-xs px-1.5 py-0.5 rounded" style={{color:S.r}} title="删除">🗑</button><button onClick={()=>sl(null)} className="text-lg leading-none px-1" style={{color:S.ms}}>✕</button></div>
         {sel.thumbnail_status==="done"?<img src={`/api/thumbnails/${sel.id}?t=${sel.modified_at||''}`} className="w-full rounded-lg" style={{border:`1px solid ${S.h}`}}/>:<div className="w-full aspect-square rounded-lg flex items-center justify-center" style={{backgroundColor:S.s}}><span className="text-5xl">{sel.asset_type==="video"?"🎬":sel.asset_type==="audio"?"🎵":sel.asset_type==="document"?docI(sel):"📄"}</span></div>}
         <div><div className="text-[11px] mb-0.5" style={{color:S.ms}}>路径 <span onClick={()=>fetch("/api/finder/open",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:sel.path})})} className="cursor-pointer ml-1" title="在 Finder 中打开">📂</span></div><p className="text-xs break-all" style={{color:S.b}}>{sel.path}</p></div>
         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -348,6 +352,17 @@ function App() {
       {so && <SettingsModal onClose={() => {sso(false);ckCfg();}} initialTab="folders" onModelSave={()=>setTimeout(ckCfg,500)} />}
       {mm && <ModelManager onClose={() => smm(false)} />}
       {cp && <SimilarPanel assetId={cp} onClose={() => scp(null)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {confirmDeleteAsset && (
+        <ConfirmModal
+          title="删除素材"
+          message={`确认删除 ${confirmDeleteAsset.filename}？`}
+          confirmText="删除"
+          confirmColor="error"
+          onConfirm={() => { delA(confirmDeleteAsset.id); setConfirmDeleteAsset(null); }}
+          onCancel={() => setConfirmDeleteAsset(null)}
+        />
+      )}
     </div>
   );
 }
