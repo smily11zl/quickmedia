@@ -28,6 +28,7 @@ DEFAULT_CONFIG = {
         "speech": {"provider": "ollama", "model": "qwen3.5:9b"},
         "video_summary": {"provider": "ollama", "model": "qwen3.5:9b"},
         "embedding": {"provider": "ollama", "model": "qwen3-embedding:8b"},
+        "search_ai": {"provider": "", "model": ""},
     },
     "watch_paths": [],
     "formats": {

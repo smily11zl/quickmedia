@@ -29,9 +29,12 @@ interface Props {
   refreshKey?: number;
   onGraphRefresh?: (newNodeId?: number) => void;
   onGraphFullReload?: () => void;
+  onSelectAsset?: (id: number) => void;
+  selectedAssetId?: number | null;
+  unassigned?: { id: number; filename: string; asset_type: string }[];
 }
 
-function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, onGraphRefresh, onGraphFullReload }: Props) {
+function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, onGraphRefresh, onGraphFullReload, onSelectAsset, selectedAssetId, unassigned }: Props) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [aggStatus, setAggStatus] = useState<AggStatus>({ status: "idle" });
   const lastAggMode = useRef("");
@@ -45,6 +48,20 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
   const [creatingNode, setCreatingNode] = useState(false);
   const [analyzingNodeId, setAnalyzingNodeId] = useState<number | null>(null);
   const [confirmFullAgg, setConfirmFullAgg] = useState(false);
+  const [expandedNodes, setExpandedNodes] = useState(new Set());
+  const [unassignedExpanded, setUnassignedExpanded] = useState(false);
+
+  const refreshNodeAssets = (nodeId: number) => {
+
+    setNodeAssets(prev => { const m = new Map(prev); m.delete(nodeId); return m; });
+    expandedNodes.forEach(nid => {
+      fetch('/api/nodes/' + nid + '/assets').then(r => r.json()).then(d => {
+        setNodeAssets(prev => new Map(prev.set(nid, d.items || [])));
+      });
+    });
+    fetchNodes();
+  };
+  const [nodeAssets, setNodeAssets] = useState(new Map());
 
   const fetchNodes = () => {
     fetch("/api/nodes")
@@ -52,7 +69,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
       .then(setNodes);
   };
 
-  useEffect(() => { fetchNodes(); }, [refreshKey]);
+  useEffect(() => { fetchNodes(); setNodeAssets(new Map()); expandedNodes.forEach(nid => { fetch('/api/nodes/' + nid + '/assets').then(r => r.json()).then(d => { setNodeAssets(prev => new Map(prev.set(nid, d.items || []))); }); }); }, [refreshKey]);
 
   const fetchStatus = () => {
     fetch("/api/aggregation/status")
@@ -70,6 +87,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
   // Refetch nodes when aggregation completes
   useEffect(() => {
     if (aggStatus.task?.status === "done") {
+      setNodeAssets(new Map()); // clear all caches
       fetchNodes();
       if (lastAggMode.current === "full") {
         onGraphFullReload?.();
@@ -111,6 +129,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           if (selectedNodeId === confirmDelete) onSelectNode(null);
           setDeletingNodeId(null);
           onGraphRefresh?.();
+          setNodeAssets(prev => { const m = new Map(prev); m.delete(confirmDelete); return m; }); expandedNodes.forEach(nid => { if (nid !== confirmDelete) fetch('/api/nodes/' + nid + '/assets').then(r => r.json()).then(d => { setNodeAssets(prev => new Map(prev.set(nid, d.items || []))); }); });
         }, 300);
       } else {
         setDeletingNodeId(null);
@@ -176,6 +195,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           if (selectedNodeId === nodeId && onRefreshAssets) {
             onRefreshAssets(nodeId);
           }
+          setNodeAssets(prev => { const m = new Map(prev); m.delete(nodeId); return m; }); expandedNodes.forEach(nid => { fetch('/api/nodes/' + nid + '/assets').then(r => r.json()).then(d => { setNodeAssets(prev => new Map(prev.set(nid, d.items || []))); }); });
         } else {
           setToast({ message: "分析失败", type: "error" });
         }
@@ -185,6 +205,14 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
         setToast({ message: "分析失败", type: "error" });
       });
   };
+
+  
+  // Auto-refresh grid/list when selected node assets change
+  useEffect(() => {
+    if (selectedNodeId && nodeAssets.has(selectedNodeId) && onRefreshAssets) {
+      onRefreshAssets(selectedNodeId);
+    }
+  }, [nodeAssets]);
 
   const isRunning = aggStatus.task?.status === "pending" || aggStatus.task?.status === "processing";
   const isFailed = aggStatus.task?.status === "failed";
@@ -281,43 +309,228 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
             transition: "opacity 0.3s ease",
             pointerEvents: deletingNodeId === node.id ? "none" : "auto",
           }}>
-            <button
-              onClick={() => { if (node.id === selectedNodeId) onSelectNode(null); else onSelectNode(node.id, node.name); }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setCtxMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });
-              }}
-              className="w-full text-left px-3 py-1.5 rounded-md text-sm hover:bg-opacity-50 transition-colors"
-              style={{
-                fontFamily: "'Inter', sans-serif",
-                backgroundColor: selectedNodeId === node.id ? S.d : S.s,
-                color: S.i,
-                borderLeft: selectedNodeId === node.id ? `3px solid ${S.r}` : "3px solid transparent",
-              }}
-            >
-              <div className="flex justify-between items-center">
-                <span className="truncate">{node.name}</span>
-                <div className="flex items-center gap-1">
-                  {analyzingNodeId === node.id && (
-                    <span
-                      className="inline-block rounded-full border-2 border-t-transparent animate-spin"
-                      style={{ width: 14, height: 14, borderColor: `${S.r} transparent ${S.r} ${S.r}` }}
-                      title="分析中..."
-                    />
-                  )}
-                  <span className="text-[10px] opacity-50" style={{ color: S.ms }}>
-                    ({node.asset_count})
-                  </span>
+            <div className="flex items-center">
+              <button
+                data-testid="expand-arrow"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedNodes(prev => {
+                    const next = new Set(prev);
+                    if (next.has(node.id)) {
+                      next.delete(node.id);
+                    } else {
+                      next.add(node.id);
+                      if (!nodeAssets.has(node.id)) {
+                        fetch("/api/nodes/" + node.id + "/assets").then(r => r.json()).then(d => {
+                          setNodeAssets(prevMap => new Map(prevMap.set(node.id, d.items || [])));
+                        });
+                      }
+                    }
+                    return next;
+                  });
+                }}
+                className="text-[11px] px-0.5 hover:opacity-70"
+                style={{ color: S.ms, cursor: "pointer", background: "none", border: "none" }}
+                title="展开/折叠"
+              >
+                {expandedNodes.has(node.id) ? "▼" : "▶"}
+              </button>
+              <button
+                onClick={() => { if (node.id === selectedNodeId) onSelectNode(null); else onSelectNode(node.id, node.name); }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setCtxMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });
+                }}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  try {
+                    const raw = e.dataTransfer.getData("text/plain");
+
+                    const data = JSON.parse(raw);
+                    if (data.source_node_id === node.id) return;
+                    // Check if already in this node
+                    const existing = nodeAssets.get(node.id);
+                    if (existing && existing.some((a: any) => a.id === data.asset_id)) {
+                      setToast({ message: "\u8282\u70b9\uff1a" + node.name + "\u5df2\u6536\u5f55\u7d20\u6750" + data.filename, type: "info" });
+                      return;
+                    }
+                    fetch("/api/nodes/" + node.id + "/assets", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ asset_ids: [data.asset_id] }),
+                    }).then(r => r.json()).then(d => {
+                      if (d.ok) {
+                        setToast({ message: "\u5df2\u5206\u914d\u5230\u8282\u70b9\uff1a" + node.name, type: "info" });
+                        // Refresh source and target caches
+                        if (data.source_node_id && data.source_node_id !== "unassigned") {
+                          fetch("/api/nodes/" + data.source_node_id + "/assets").then(r => r.json()).then(d2 => {
+                            setNodeAssets(prev => new Map(prev.set(data.source_node_id, d2.items || [])));
+                          });
+                        } else {
+                          // source was unassigned - graph will refresh
+                        }
+                        fetch("/api/nodes/" + node.id + "/assets").then(r => r.json()).then(d2 => {
+                          setNodeAssets(prev => new Map(prev.set(node.id, d2.items || [])));
+                        });
+                        fetchNodes();
+                        onGraphRefresh?.();
+                        if (selectedNodeId === node.id && onRefreshAssets) onRefreshAssets(node.id);
+                        if (data.source_node_id && selectedNodeId === data.source_node_id && onRefreshAssets) onRefreshAssets(data.source_node_id);
+                      }
+                    });
+                  } catch {}
+                }}
+                className="flex-1 min-w-0 text-left pl-1 py-1.5 rounded-md text-sm hover:bg-opacity-50 transition-colors"
+                style={{
+                  fontFamily: "'Inter', sans-serif",
+                  backgroundColor: selectedNodeId === node.id ? S.d : S.s,
+                  color: S.i,
+                  borderLeft: selectedNodeId === node.id ? `3px solid ${S.r}` : "3px solid transparent",
+                }}
+              >
+                <div className="flex justify-between items-center">
+                  <span className="truncate">{node.name}</span>
+                  <div className="flex items-center gap-1">
+                    {analyzingNodeId === node.id && (
+                      <span
+                        className="inline-block rounded-full border-2 border-t-transparent animate-spin"
+                        style={{ width: 14, height: 14, borderColor: `${S.r} transparent ${S.r} ${S.r}` }}
+                        title="分析中..."
+                      />
+                    )}
+                    <span className="text-[10px]" style={{ color: S.ms }}>
+                      ({node.asset_count})
+                    </span>
+                  </div>
                 </div>
+                {node.description && (
+                  <p className="text-[10px] truncate mt-0.5" style={{ color: S.ms }}>
+                    {node.description}
+                  </p>
+                )}
+              </button>
+            </div>
+            {expandedNodes.has(node.id) && (
+              <div className="ml-5 mt-0.5">
+                {!nodeAssets.has(node.id) ? (
+                  <span className="text-[10px]" style={{ color: S.ms }}>加载中...</span>
+                ) : nodeAssets.get(node.id)!.length === 0 ? (
+                  <span className="text-[10px]" style={{ color: S.ms }}>暂无素材</span>
+                ) : (
+                  nodeAssets.get(node.id)!.map((a: any) => (
+                    <div key={a.id} onClick={() => onSelectAsset?.(a.id)}
+                      className="flex items-center gap-1.5 py-0.5 px-1 rounded cursor-pointer hover:brightness-95"
+                      style={{ color: S.i, backgroundColor: selectedAssetId === a.id ? S.rb : "transparent" }}
+                      title={a.filename}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", JSON.stringify({
+                          asset_id: a.id,
+                          source_node_id: node.id,
+                          filename: a.filename,
+                        }));
+                        e.dataTransfer.effectAllowed = "move";
+
+                      }}
+                    >
+                      <span className="text-[10px] flex-shrink-0" style={{ color: S.ms }}>
+                        {a.asset_type === "image" ? "图片" : a.asset_type === "video" ? "视频" : a.asset_type === "audio" ? "音频" : "文档"}
+                      </span>
+                      <span className="text-[10px] truncate">{a.filename}</span>
+                    </div>
+                  ))
+                )}
               </div>
-              {node.description && (
-                <p className="text-[10px] truncate mt-0.5" style={{ color: S.ms }}>
-                  {node.description}
-                </p>
-              )}
-            </button>
+            )}
           </div>
         ))}
+        {/* Unassigned virtual node */}
+        {unassigned && (
+          <div style={{
+            borderTop: "1px dashed " + S.h,
+            marginTop: 4,
+            paddingTop: 4,
+          }}>
+            <div className="flex items-center">
+              <button
+                onClick={() => setUnassignedExpanded(prev => !prev)}
+                className="text-[11px] px-0.5 hover:opacity-70"
+                style={{ color: S.ms, cursor: "pointer", background: "none", border: "none" }}
+                title="展开/折叠"
+              >
+                {unassignedExpanded ? "\u25bc" : "\u25b6"}
+              </button>
+              <div className="flex-1 text-left pl-1 py-1.5 rounded-md text-sm" style={{ color: S.ms, fontStyle: "italic", opacity: 0.8 }}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  try {
+                    const raw = e.dataTransfer.getData("text/plain");
+
+                    const data = JSON.parse(raw);
+                    if (data.source_node_id === "unassigned") return;
+                    // Disconnect from ALL nodes containing this asset
+                    Promise.all(
+                      Array.from(nodeAssets.keys()).map(nid => 
+                        fetch("/api/nodes/" + nid + "/assets/" + data.asset_id, { method: "DELETE" })
+                          .catch(() => {})
+                      )
+                    ).then(() => {
+                      // Also delete from source_node_id if not already covered
+                      if (data.source_node_id && !nodeAssets.has(data.source_node_id)) {
+                        return fetch("/api/nodes/" + data.source_node_id + "/assets/" + data.asset_id, { method: "DELETE" }).catch(() => {});
+                      }
+                    }).then(() => {
+                      setToast({ message: "\u5df2\u53d6\u6d88\u5206\u914d", type: "info" });
+                      setNodeAssets(new Map()); // clear all caches
+                      expandedNodes.forEach(nid => {
+                        fetch("/api/nodes/" + nid + "/assets").then(r => r.json()).then(d => {
+                          setNodeAssets(prev => new Map(prev.set(nid, d.items || [])));
+                        });
+                      });
+                      fetchNodes();
+                      onGraphRefresh?.();
+                      if (data.source_node_id && selectedNodeId === data.source_node_id && onRefreshAssets) onRefreshAssets(data.source_node_id);
+                    });
+                  } catch {}
+                }}
+              >
+                <span>未分配</span>
+                <span className="text-[10px] ml-1" style={{ color: S.ms }}>({unassigned.length})</span>
+              </div>
+            </div>
+            {unassignedExpanded && (
+              <div className="ml-5 mt-0.5">
+                {unassigned.length === 0 ? (
+                  <span className="text-[10px]" style={{ color: S.ms }}>暂无素材</span>
+                ) : (
+                  unassigned.map((a) => (
+                    <div key={a.id} onClick={() => onSelectAsset?.(a.id)}
+                      className="flex items-center gap-1.5 py-0.5 px-1 rounded cursor-pointer hover:brightness-95"
+                      style={{ color: S.i, backgroundColor: selectedAssetId === a.id ? S.rb : "transparent" }}
+                      title={a.filename}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", JSON.stringify({
+                            asset_id: a.id,
+                            source_node_id: "unassigned",
+                            filename: a.filename,
+                          }));
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
+                      >
+                      <span className="text-[10px] flex-shrink-0" style={{ color: S.ms }}>
+                        {a.asset_type === "image" ? "图片" : a.asset_type === "video" ? "视频" : a.asset_type === "audio" ? "音频" : "文档"}
+                      </span>
+                      <span className="text-[10px] truncate">{a.filename}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {nodes.length === 0 && !isRunning && (
           <p className="text-xs text-center py-4" style={{ color: S.ms }}>
             暂无聚合节点，点击"全量分析"开始
@@ -378,7 +591,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                 setCtxMenu(null);
               }}
               className="w-full text-left px-3 py-1.5 text-xs hover:bg-opacity-50"
-              style={{ fontFamily: "'Inter', sans-serif", color: S.m }}
+              style={{ fontFamily: "'Inter', sans-serif", color: S.i }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = S.s)}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             >
@@ -405,7 +618,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                 setCtxMenu(null);
               }}
               className="w-full text-left px-3 py-1.5 text-xs hover:bg-opacity-50"
-              style={{ fontFamily: "'Inter', sans-serif", color: S.m }}
+              style={{ fontFamily: "'Inter', sans-serif", color: S.i }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = S.s)}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             >
@@ -421,7 +634,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           <div className="fixed inset-0 z-40" onClick={() => { setEditNode(null); setCreatingNode(false); }} />
           <div
             className="fixed inset-0 z-50 flex items-center justify-center"
-            style={{ backgroundColor: "rgba(250,249,245,0.7)" }}
+            style={{ backgroundColor: "rgba(0,0,0,0.15)" }}
           >
             <div
               className="rounded-xl p-5 w-80 shadow-lg border"
@@ -497,8 +710,8 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
         <AddAssetModal
           nodeId={addModal.nodeId}
           nodeName={addModal.nodeName}
-          onClose={() => setAddModal(null)}
-          onAdded={() => { fetchNodes(); onGraphRefresh?.(); }}
+          onClose={() => { setAddModal(null); if (addModal) { setNodeAssets(prev => { const m = new Map(prev); m.delete(addModal.nodeId); return m; }); expandedNodes.forEach(nid => { fetch('/api/nodes/' + nid + '/assets').then(r => r.json()).then(d => { setNodeAssets(prev => new Map(prev.set(nid, d.items || []))); }); }); fetchNodes(); if (selectedNodeId === addModal.nodeId && onRefreshAssets) onRefreshAssets(addModal.nodeId); } }}
+          onAdded={() => { fetchNodes(); onGraphRefresh?.(); if (selectedNodeId === addModal?.nodeId && onRefreshAssets) onRefreshAssets(addModal.nodeId); }}
         />
       )}
       {removeModal && (
@@ -506,7 +719,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           nodeId={removeModal.nodeId}
           nodeName={removeModal.nodeName}
           mode="remove"
-          onClose={() => setRemoveModal(null)}
+          onClose={() => { const rnid = removeModal?.nodeId; setRemoveModal(null); if (rnid) refreshNodeAssets(rnid); if (selectedNodeId === rnid && onRefreshAssets) onRefreshAssets(rnid); }}
           onAdded={() => {
             fetchNodes();
             onGraphRefresh?.();

@@ -83,7 +83,7 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded, mode = "add" }: Pro
           fetch(`/api/nodes/${nodeId}/assets/${aid}`, { method: "DELETE" })
         )
       )
-        .then(() => { onAdded(); onClose(); })
+        .then(() => { onClose(); })
         .finally(() => setLoading(false));
     } else {
       fetch(`/api/nodes/${nodeId}/assets`, {
@@ -91,7 +91,7 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded, mode = "add" }: Pro
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ asset_ids: [...selected] }),
       })
-        .then(() => { onAdded(); onClose(); })
+        .then(() => { onClose(); })
         .finally(() => setLoading(false));
     }
   };

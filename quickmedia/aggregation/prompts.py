@@ -21,7 +21,7 @@ def build_prompt(mode: str, assets: list[dict], nodes: list[dict] = None) -> str
 
 def _asset_text(asset: dict) -> str:
     """Format a single asset as a text line for the prompt."""
-    desc = asset.get("visual_description") or asset.get("ai_summary") or ""
+    desc = asset.get("video_summary") or asset.get("visual_description") or asset.get("ai_summary") or ""
     tags = [t["name"] for t in asset.get("tags", [])]
     return (
         f"  [{asset['id']}] {asset['filename']} ({asset['asset_type']})\n"
@@ -280,12 +280,12 @@ def build_append_prompt(
     if existing_assets:
         parts.append(f"该节点当前包含 {len(existing_assets)} 个素材，内容特征为:")
         for a in existing_assets[:10]:
-            summary = a.get("ai_summary", "") or a.get("visual_description", "") or a.get("filename", "")
+            summary = a.get("video_summary") or a.get("ai_summary", "") or a.get("visual_description", "") or a.get("filename", "")
             parts.append(f"  - {a.get('filename', '')}: {summary[:80]}")
     parts.append("")
     parts.append(f"以下有 {len(candidates)} 个候选素材，请找出应该加入此节点的:")
     for c in candidates[:200]:
-        summary = c.get("ai_summary", "") or c.get("visual_description", "") or ""
+        summary = c.get("video_summary") or c.get("ai_summary", "") or c.get("visual_description", "") or ""
         parts.append(f"  [{c['id']}] {c.get('filename', '')} ({c.get('asset_type', '')}) {summary[:60]}")
     parts.append("")
     parts.append("仅返回 JSON: {\"asset_ids\": [id1, id2, ...]}")

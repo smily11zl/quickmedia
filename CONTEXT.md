@@ -218,7 +218,7 @@ Provider 配置在 `config.yaml` 的 `providers` 字段（URL + 模型列表）�
 
 ### Task Model Binding（任务模型绑定）
 
-将分析任务类型（vision / text / speech / video_summary）绑定到具体 provider + model。配置在 `config.yaml` 的 `task_models` 字段。
+将 AI 任务类型（vision / text / speech / video_summary / search_ai）绑定到具体 provider + model。配置在 `config.yaml` 的 `task_models` 字段。search_ai 为 V15 新增的搜索任务类型，用于 AI 搜索模式。
 
 ### Model Capabilities（模型能力）
 
@@ -242,9 +242,12 @@ Ollama 请求顶层的布尔参数，控制是否输出思考过程。`think: fa
 
 ### 搜索模式
 
-- **综合** — 关键词匹配 + 语义搜索 RRF 融合排序（默认）
-- **语义** — 纯 embedding 向量相似度搜索，不做关键词融合（v9 改为独立模式）
-- **匹配** — jieba 中文分词后的关键词 LIKE 搜索，按匹配度排序
+- **AI** — 纯 LLM 单次调用，将全量素材（id+filename+type+tags）与用户自然语言查询一起送入模型，由模型直接返回相关 asset_ids。不经过关键词索引或向量检索。需要单独配置模型（task_models.search_ai），未配置时不可用（红点标记，默认回退到语义（K聚合））
+- **语义（K聚合）** — 关键词匹配 + 语义搜索 RRF 融合排序
+- **语义（纯向量）** — 纯 embedding 向量相似度搜索，不做关键词融合
+- **关键词** — jieba 中文分词后的关键词 LIKE 搜索，按匹配度排序
+
+默认搜索模式：AI 搜索（若已配置模型），否则语义（K聚合）。
 
 ### RRF（Reciprocal Rank Fusion）
 
@@ -507,3 +510,17 @@ WebSocket 推送事件：后端数据变更（聚合完成、节点增删改、�
 ### 颜色深度梯度
 
 聚合节点颜色根据素材数量变化：素材少的浅珊瑚 → 素材多的深珊瑚。通过 HSL 动态计算饱和度和亮度。
+
+## V15 — AI 搜索 + 节点树状列表
+
+### 节点树状列表（Node Tree List）
+
+聚合节点侧边栏的树形展示结构。每个节点前有独立箭头控件（▶/▼），点击展开/折叠节点内素材列表。默认全部折叠。展开后按需加载素材（get_node API），显示类型图标 + 文件名。点击素材打开右侧详情面板（复用 selA）。支持拖放素材到其他树节点或云图。节点素材发生变更（拖放、手动增删、分析追加、聚合完成）时精准刷新已展开节点。
+
+### 未分配虚拟节点（树状列表）
+
+节点树状列表中的虚拟条目，始终位于列表末尾。展示未分配到任何聚合节点的素材数量和列表。视觉上与云图未分配节点区分（灰色/虚线风格）。可展开/折叠查看素材，支持：展开后拖出素材到其他树节点（分配），从其他节点拖入素材到此节点（取消分配），从网格/云图拖素材到此节点（取消分配）。与云图中的未分配节点共享同一数据源（/api/graph.unassigned），拖放操作通过后端幂等处理。
+
+### AI 搜索 Prompt 配置
+
+`search_ai` prompt 模板位于 `~/.asset-manager/prompts.yaml`，与现有分析 prompt 相同的结构（system_format / default / custom / presets）。system_format 要求 LLM 输出 `{"asset_ids": [1,5,23]}`，无匹配返回 `{"asset_ids": []}`。prompts.yaml 首次启动自动从 DEFAULT_PROMPTS 生成，后续升级合并系统字段、保留用户 custom。

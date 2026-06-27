@@ -133,7 +133,7 @@ mcp = FastMCP("quickmedia")
 
 @mcp.tool()
 def search_assets(query: str, mode: str = "combined", limit: int = 10) -> list[AssetBasic]:
-    """搜索素材。mode: keyword(关键词) | semantic(语义) | combined(综合RRF)。
+    """搜索素材。mode: keyword(关键词) | semantic(语义) | combined(综合RRF) | ai(AI搜索)。
 
     返回 AssetBasic 字段:
     - id: 素材ID
@@ -147,6 +147,10 @@ def search_assets(query: str, mode: str = "combined", limit: int = 10) -> list[A
     - rrf_score: RRF综合得分(越大越相关, combined模式)
     """
     db, cfg, data_dir = init_db()
+    if mode == "ai":
+        from quickmedia.search import search_ai_assets
+        result = search_ai_assets(query, db, cfg, data_dir)
+        return [AssetBasic(**r) for r in result] if result else []
     from quickmedia.search import search_assets as do_search
     result = do_search(query, mode, limit, db, cfg, data_dir)
     return [AssetBasic(**r) for r in result] if result else []

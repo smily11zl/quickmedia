@@ -24,6 +24,7 @@ const TASK_LABELS: Record<string, string> = {
   speech: "语音分析",
   video_summary: "视频总结",
   embedding: "向量化",
+  search_ai: "AI 搜索",
 };
 
 const TASK_HINTS: Record<string, string> = {
@@ -32,6 +33,7 @@ const TASK_HINTS: Record<string, string> = {
   speech: "分析语音转写文本的摘要和主题",
   video_summary: "综合画面描述和语音内容生成总结",
   embedding: "使用 search_terms 生成独立向量用于语义搜索。每个搜索词存一个向量，Top-K 聚合匹配。⚠️ 勿切换模型",
+  search_ai: "按用户自然语言描述，从素材库中匹配相关素材。需要大上下文模型（如 DeepSeek V4）。",
 };
 
 const BUILTIN_PROVIDERS: ProviderInfo[] = [
@@ -48,8 +50,8 @@ function saveProviders(providers: Record<string, ProviderData>, taskModels: Reco
     .then(r => r.ok === true);
 }
 
-export default function ModelManager({ onClose, standalone = true, onModelsSaved }: { onClose: () => void; standalone?: boolean; onModelsSaved?: () => void }) {
-  const [tab, setTab] = useState<"providers" | "tasks">("providers");
+export default function ModelManager({ onClose, standalone = true, onModelsSaved, initialTab }: { onClose: () => void; standalone?: boolean; onModelsSaved?: () => void; initialTab?: string }) {
+  const [tab, setTab] = useState<"providers" | "tasks">((initialTab as any) || "providers");
   const [selProvider, setSelProvider] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState<Record<string, {name:string;capabilities:Record<string,string[]>}[]>>({});

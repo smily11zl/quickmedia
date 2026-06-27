@@ -296,7 +296,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
 
 
     @app.get("/api/search")
-    def search(q: str = Query(..., min_length=1), mode: str = "keyword"):
+    def search(q: str = Query("", min_length=0), mode: str = "keyword"):
         print(f"[Search] mode={mode} q={repr(q)}", flush=True)
         _db = _get_db(app)
 
@@ -307,6 +307,21 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 if t in cnt:
                     cnt[t] += 1
             return cnt
+
+        # Handle empty query
+        if not q.strip():
+            return {"items": [], "counts": {"image": 0, "video": 0, "audio": 0, "document": 0}}
+
+        # AI mode: LLM-based search
+        if mode == "ai":
+            try:
+                from quickmedia.search import search_ai_assets
+                cfg = Config(config_dir=app.extra["config_dir"])
+                items = search_ai_assets(q, _db, cfg, app.extra["config_dir"])
+                return {"items": items, "counts": _count_by_type(items)}
+            except Exception as e:
+                print(f"[AI search] error: {e}", flush=True)
+                return {"items": [], "counts": {"image": 0, "video": 0, "audio": 0, "document": 0}}
 
         # Tokenize query for keyword search
         try:
@@ -905,7 +920,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         pc = PromptConfig(config_dir=app.extra["config_dir"])
         analysis_type = body.get("type", "")
         custom = body.get("custom", "")
-        if analysis_type not in ("vision", "text", "speech", "video_summary"):
+        if analysis_type not in ("vision", "text", "speech", "video_summary", "search_ai"):
             raise HTTPException(status_code=400, detail="Invalid analysis type")
         pc.save(analysis_type, custom)
         return {"ok": True}

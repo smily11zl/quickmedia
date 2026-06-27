@@ -43,7 +43,8 @@ function App() {
   const [tf,stf]=useState<string|null>(null);
   const [gf,sgf]=useState<number|null>(null);
   const [q,sq]=useState("");
-  const [smode,ssmode]=useState<"keyword"|"semantic"|"combined">("combined");
+  const [smode,ssmode]=useState<"ai"|"keyword"|"semantic"|"combined">("combined");
+  const [aiSearchReady, setAiSearchReady] = useState(false);
   const [slc,sslc]=useState(false);
   const [cp,scp]=useState<number|null>(null);
   const [sel,sl]=useState<Asset|null>(null);
@@ -51,6 +52,7 @@ function App() {
   const [dv,sd]=useState("");
   const [nt,sn]=useState("");
   const [so,sso]=useState(false);
+  const [settingsTab, setSettingsTab] = useState<string>("basic");
   const [mm,smm]=useState(false);
   const [vw,sv]=useState<"graph"|"grid"|"list">("grid");
   const [sb,ssb]=useState<"name"|"size"|"date">("name");
@@ -79,16 +81,17 @@ function App() {
   const [toast, setToast] = useState<{ message: string; type?: "info" | "error" } | null>(null);
   const [confirmDeleteAsset, setConfirmDeleteAsset] = useState<Asset | null>(null);
 
-  const ckCfg=()=>{Promise.all([fetch("/api/config/watch-paths").then(r=>r.json()),fetch("/api/task-models").then(r=>r.json())]).then(([wp,tm])=>{const hasWp=wp.paths&&wp.paths.length>0;const hasTm=!!(tm&&Object.values(tm).every((x:any)=>x.model));setMC(!hasWp||!hasTm);});};
+  const ckCfg=()=>{Promise.all([fetch("/api/config/watch-paths").then(r=>r.json()),fetch("/api/task-models").then(r=>r.json())]).then(([wp,tm])=>{const hasWp=wp.paths&&wp.paths.length>0;const hasTm=!!(tm&&Object.values(tm).every((x:any)=>x.model));setMC(!hasWp||!hasTm);const sa=tm?.search_ai;const ready=!!(sa?.provider && sa?.model);setAiSearchReady(ready);if(ready&&!q){ssmode("ai");}});};
   useEffect(()=>{fetch("/api/formats").then(r=>r.json()).then(sfmts);ckCfg();setInterval(ckCfg,30000);},[]);
   useEffect(()=>{fetch("/api/tags").then(r=>r.json()).then(stg);},[]);
   useEffect(()=>{fetch("/api/queue/status").then(r=>r.json()).then(setQStat);const i=setInterval(()=>fetch("/api/queue/status").then(r=>r.json()).then(setQStat),5000);return ()=>clearInterval(i);},[]);
 
   const doSearch=()=>{
     if(!q.trim()){sq("");sr([]);sds(false);fa();return;}
+    if(smode==="ai"){sslc(true);setSelectedNodeId(null);setSelectedNodeName("");fetch(`/api/search?q=${encodeURIComponent(q)}&mode=ai`).then(r=>r.json()).then(d=>{const items=d.items||[];sa(items);if(d.counts)setCounts(d.counts);sr(items);sds(true);}).catch(()=>setToast({message:"AI \u641c\u7d22\u5931\u8d25",type:"error"})).finally(()=>sslc(false));return;}
     sslc(true);
     setSelectedNodeId(null); setSelectedNodeName("");
-    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);}}).finally(()=>sslc(false));
+    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);}}).catch(()=>{if(smode==="ai")setToast({message:"AI \u641c\u7d22\u5931\u8d25",type:"error"});}).finally(()=>sslc(false));
   };
   const fa=()=>{const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>{sa(d.items); if(d.counts)setCounts(d.counts);});};
   useEffect(()=>{if(didSearch||selectedNodeId)return;fa();},[tf,ff,af,df,mf,tgf]);useEffect(()=>{const u=async()=>{const r=await fetch("/api/assets?limit=500");const d=await r.json();const m:Record<number,any>={};d.items.forEach((a:any)=>m[a.id]=a);sa((p:any[])=>{let c=false;const n=p.map(a=>{const f=m[a.id];if(f&&a.ai_status!==f.ai_status){c=true;return{...a,ai_status:f.ai_status,analyzed_at:f.analyzed_at};}return a;});return c?n:p;});};const i=setInterval(u,3000);return ()=>clearInterval(i);},[]);
@@ -163,10 +166,11 @@ function App() {
             {q&&<button onClick={()=>{sq("");sr([]);sds(false);fa();}} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{color:S.ms}}>✕</button>}
           </div>
           <div className="flex gap-1">
-            <select value={smode} onChange={e=>ssmode(e.target.value as any)} className="flex-1 text-[11px] px-1 py-1.5 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
-              <option value="combined">综合</option>
-              <option value="semantic">语义</option>
-              <option value="keyword">匹配</option>
+            <select value={smode} onChange={e=>{const v=e.target.value;if(v==="ai"&&!aiSearchReady){setToast({message:"AI \u641c\u7d22\u672a\u914d\u7f6e\u6a21\u578b\uff0c\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u7ed1\u5b9a",type:"info"});setSettingsTab("models");sso(true);return;}ssmode(v as any);}} className="flex-1 text-[11px] px-1 py-1.5 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
+              <option value="ai">AI {!aiSearchReady?'🔴':''}</option>
+              <option value="combined">语义（K聚合）</option>
+              <option value="semantic">语义（纯向量）</option>
+              <option value="keyword">关键词</option>
             </select>
             <button onClick={doSearch} className="text-[11px] px-3 py-1 rounded-md" style={{backgroundColor:S.r,color:S.w}}>搜索</button>
           </div>
@@ -228,7 +232,7 @@ function App() {
         </div>
         </>
         ) : (
-          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} refreshKey={nodeRefreshKey} onGraphRefresh={(newNodeId?:number)=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);if(newNodeId)setExpandedNodes((prev:Set<number>)=>new Set(prev).add(newNodeId));else setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));});}} onGraphFullReload={()=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));setGraphKey(k=>k+1);});}} />
+          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} refreshKey={nodeRefreshKey} onGraphRefresh={(newNodeId?:number)=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);if(newNodeId)setExpandedNodes((prev:Set<number>)=>new Set(prev).add(newNodeId));else setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));});}} onGraphFullReload={()=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));setGraphKey(k=>k+1);});}} onSelectAsset={(aid:number)=>{selA(aid);}} selectedAssetId={sel?.id} unassigned={graphData.unassigned} />
         )}
         <div className="mt-auto pt-4 flex flex-col gap-1 relative" style={{borderTop:`1px solid ${S.h}`}}>
           <button onClick={()=>sscm(!scm)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
@@ -346,7 +350,7 @@ function App() {
         <div className={`absolute inset-0 overflow-y-auto px-6 pb-6${vw==="graph"?" hidden":""}`}>
         {vw==="grid"?(
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {fs.map(a=>(<div key={a.id} onClick={()=>selA(a.id)} className="rounded-xl overflow-hidden cursor-pointer transition-shadow hover:shadow-sm relative" style={{backgroundColor:S.c,border:sel?.id===a.id?`2px solid ${S.r}`:`1px solid ${S.h}`}}>
+            {fs.map(a=>(<div key={a.id} onClick={()=>selA(a.id)} draggable onDragStart={(e)=>{e.dataTransfer.setData("text/plain",JSON.stringify({asset_id:a.id,source_node_id:null,filename:a.filename}));e.dataTransfer.effectAllowed="move";}} className="rounded-xl overflow-hidden cursor-pointer transition-shadow hover:shadow-sm relative" style={{backgroundColor:S.c,border:sel?.id===a.id?`2px solid ${S.r}`:`1px solid ${S.h}`}}>
               <div className="aspect-square flex flex-col items-center justify-center relative" style={{backgroundColor:S.s}}>
                 {a.thumbnail_status==="done"?<img src={`/api/thumbnails/${a.id}?t=${a.modified_at||''}`} className="w-full h-full object-cover"/>:a.asset_type==="image"?<span className="text-sm animate-pulse" style={{color:S.m}}>生成中...</span>:<>
                   <span className="text-4xl">{a.asset_type==="video"?"🎬":a.asset_type==="audio"?"🎵":a.asset_type==="document"?docI(a):"📄"}</span>
@@ -361,7 +365,7 @@ function App() {
           </div>
         ):(
           <div className="flex flex-col gap-0.5">
-            {fs.map(a=>(<div key={a.id} onClick={()=>selA(a.id)} className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer" style={{backgroundColor:sel?.id===a.id?S.d:"transparent",border:sel?.id===a.id?`1px solid ${S.r}`:`1px solid transparent`}}>
+            {fs.map(a=>(<div key={a.id} onClick={()=>selA(a.id)} draggable onDragStart={(e)=>{e.dataTransfer.setData("text/plain",JSON.stringify({asset_id:a.id,source_node_id:null,filename:a.filename}));e.dataTransfer.effectAllowed="move";}} className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer" style={{backgroundColor:sel?.id===a.id?S.d:"transparent",border:sel?.id===a.id?`1px solid ${S.r}`:`1px solid transparent`}}>
               <span className="text-lg">{a.asset_type==="video"?"🎬":a.asset_type==="audio"?"🎵":a.asset_type==="image"?"🖼️":"📄"}</span>
               <span className="text-sm flex-1 truncate" style={{color:S.i}}>{hl(a.filename)}</span>
               <span className="w-10 text-center">{aiT(a.ai_status)}</span>
@@ -402,7 +406,7 @@ function App() {
           <div className="flex gap-2"><input type="text" placeholder="新标签..." value={nt} onChange={e=>sn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&adT()} className="flex-1 text-xs px-2 py-1 rounded-md outline-none" style={{fontFamily:"'Inter',sans-serif",border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/><button onClick={adT} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>添加</button></div>
         </div>
       </aside>}
-      {so && <SettingsModal onClose={() => {sso(false);ckCfg();}} initialTab="folders" onModelSave={()=>setTimeout(ckCfg,500)} />}
+      {so && <SettingsModal onClose={() => {sso(false);ckCfg();}} initialTab={settingsTab} initialModelTab={settingsTab==="models"?"tasks":undefined} onModelSave={()=>setTimeout(ckCfg,500)} />}
       {mm && <ModelManager onClose={() => smm(false)} />}
       {cp && <SimilarPanel assetId={cp} onClose={() => scp(null)} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}

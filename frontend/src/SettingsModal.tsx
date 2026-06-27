@@ -5,9 +5,10 @@ const S = {c:"#faf9f5",h:"#e6dfd8",d:"#efe9de",s:"#f5f0e8",i:"#141413",b:"#3d3d3
 
 interface Props { initialTab?: string; onModelSave?: () => void;
   onClose: () => void;
+  initialModelTab?: string;
 }
 
-export default function SettingsModal({ onClose, initialTab, onModelSave }: Props) {
+export default function SettingsModal({ onClose, initialTab, onModelSave, initialModelTab }: Props) {
   const [tab, setTab] = useState<"basic" | "models" | "prompts" | "folders">((initialTab as any)||"basic");
   const [cfn, setCfn] = useState(1);
   const [cto, setCto] = useState(300);
@@ -15,7 +16,7 @@ export default function SettingsModal({ onClose, initialTab, onModelSave }: Prop
   const [initCto, setInitCto] = useState(300);
   const [os, setOs] = useState("");
 
-  const [pt, setPt] = useState<"vision"|"text"|"speech"|"video_summary"|"video_vision">("vision");
+  const [pt, setPt] = useState<"vision"|"text"|"speech"|"video_summary"|"video_vision"|"search_ai">("vision");
   const [pd, setPd] = useState<any>(null);
   const [pe, setPe] = useState("");
   const [initPe, setInitPe] = useState("");
@@ -114,7 +115,7 @@ export default function SettingsModal({ onClose, initialTab, onModelSave }: Prop
 
           {tab === "models" && (
             <div className="-mx-5 -my-4">
-              <ModelManager onClose={() => {}} standalone={false} onModelsSaved={()=>{fetch("/api/task-models").then(r=>r.json()).then(d=>{const has=!!(d&&Object.values(d).every((x:any)=>x.model));setTabDots(prev=>({...prev,models:!has}));}).then(()=>{if(onModelSave)onModelSave();});}} />
+              <ModelManager onClose={() => {}} standalone={false} initialTab={initialModelTab} onModelsSaved={()=>{fetch("/api/task-models").then(r=>r.json()).then(d=>{const has=!!(d&&Object.values(d).every((x:any)=>x.model));setTabDots(prev=>({...prev,models:!has}));}).then(()=>{if(onModelSave)onModelSave();});}} />
             </div>
           )}
 
@@ -122,10 +123,10 @@ export default function SettingsModal({ onClose, initialTab, onModelSave }: Prop
           {tab === "prompts" && (
             <div className="flex flex-col gap-3">
               <div className="flex gap-1">
-                {(["vision","text","speech","video_vision","video_summary"] as const).map(t => (
+                {(["vision","text","speech","video_vision","video_summary","search_ai"] as const).map(t => (
                   <button key={t} onClick={() => { setPt(t); const v = pd?.[t]?.custom || pd?.[t]?.default || ""; setPe(v); setInitPe(v); }}
                     className="text-[10px] px-2 py-1 rounded" style={{backgroundColor: pt===t ? S.r : "transparent", color: pt===t ? S.w : S.ms}}>
-                    {t==="vision"?"图片":t==="text"?"文档":t==="speech"?"语音":t==="video_summary"?"视频综合":t==="video_vision"?"视频视觉":"向量化"}
+                    {t==="vision"?"图片":t==="text"?"文档":t==="speech"?"语音":t==="video_summary"?"视频综合":t==="video_vision"?"视频视觉":t==="search_ai"?"搜索":"..."}
                   </button>
                 ))}
               </div>
