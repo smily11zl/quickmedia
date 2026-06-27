@@ -31,7 +31,7 @@ export default function ConfirmModal({
       <div className="fixed inset-0 z-40" onClick={onCancel} />
       <div
         className="fixed inset-0 z-50 flex items-center justify-center"
-        style={{ backgroundColor: "rgba(0,0,0,0.3)" }}
+        style={{ backgroundColor: "rgba(0,0,0,0.15)" }}
       >
         <div
           className="rounded-xl p-5 w-80 shadow-lg border"

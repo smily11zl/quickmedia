@@ -39,98 +39,21 @@ def register_aggregation_routes(app):
 
         def run_task():
             from quickmedia.database import Database
-            from quickmedia.config import Config
-            from quickmedia.aggregation.worker import (
-                mark_processing, mark_done, mark_failed,
-                get_all_assets, get_all_nodes, save_aggregation_result,
-            )
-            from quickmedia.aggregation.prompts import build_prompt
-            from quickmedia.providers import ProviderRegistry
+            from quickmedia.aggregation.worker import mark_processing, mark_done, mark_failed
 
             task_db = Database(db_path)
             try:
                 mark_processing(task_db, task_id)
                 print(f"[Aggregation] 开始任务 #{task_id}: mode={mode}", flush=True)
 
-                assets = get_all_assets(task_db)
-                nodes = get_all_nodes(task_db) if mode != "full" else None
-                unassigned = []
+                from quickmedia.aggregation.core import run_aggregation as _run
+                node_count, assigned = _run(mode, task_db, config_dir)
 
-                # For append/full_append modes, only count unassigned assets
-                if mode in ("append", "full_append"):
-                    assigned_ids = set()
-                    for n in (nodes or []):
-                        for aid in n.get("asset_ids", []):
-                            assigned_ids.add(aid)
-                    unassigned = [a for a in assets if a["id"] not in assigned_ids]
-                    if mode == "append":
-                        assets = unassigned
-
-                print(f"[Aggregation] 素材数: {len(assets)}, 已有节点数: {len(nodes) if nodes else 0}", flush=True)
-
-                # Skip AI call if no new/unassigned assets to process
-                if mode in ("append", "full_append") and len(unassigned) == 0:
-                    print(f"[Aggregation] 任务 #{task_id}: 无新素材，跳过分析", flush=True)
-                    mark_done(task_db, task_id)
-                    import asyncio
-                    from quickmedia.api.server import broadcast_graph_changed
-                    asyncio.run(broadcast_graph_changed())
-                    return
-
-                prompt = build_prompt(mode, assets, nodes)
-                print(f"[Aggregation] prompt 长度: {len(prompt)} 字符", flush=True)
-
-                config = Config(config_dir=config_dir)
-                user_models = os.path.join(config_dir, "models.yaml")
-                registry = ProviderRegistry(config, user_models)
-                binding = registry.get_task_binding("text")
-                provider_name = binding["provider"] if binding else "ollama"
-                model = binding["model"] if binding else ""
-                url = registry.get_provider_url(provider_name) or ""
-
-                print(f"[Aggregation] 调用 AI: provider={provider_name} model={model}", flush=True)
-
-                # Reuse existing adapters
-                if provider_name == "ollama":
-                    from quickmedia.ai import OllamaAdapter
-                    adapter = OllamaAdapter(base_url=url, model=model, timeout=300)
-                else:
-                    from quickmedia.openai_adapter import OpenAIAdapter
-                    env_path = os.path.join(config_dir, ".env")
-                    api_key = ""
-                    if os.path.isfile(env_path):
-                        with open(env_path) as f:
-                            for line in f:
-                                if provider_name.upper() + "_API_KEY" in line:
-                                    api_key = line.split("=", 1)[1].strip()
-                                    break
-                    adapter = OpenAIAdapter(base_url=url, api_key=api_key, model=model,
-                                            provider_name=provider_name, timeout=300)
-
-                content = adapter.chat(prompt)
-                print(f"[Aggregation] AI 响应已接收", flush=True)
-
-                # Parse JSON from response (may be wrapped in markdown code block)
-                content = content.strip()
-                if content.startswith("```"):
-                    content = content.split("\n", 1)[1] if "\n" in content else content
-                    if content.endswith("```"):
-                        content = content[:-3]
-                result = json.loads(content)
-                node_count = len(result.get("nodes", []))
-                print(f"[Aggregation] 解析结果: {node_count} 个节点", flush=True)
-
-                # Full mode: clear old nodes before saving new ones
-                if mode == "full":
-                    task_db.execute("DELETE FROM node_assets")
-                    task_db.execute("DELETE FROM nodes")
-
-                save_aggregation_result(task_db, result)
                 mark_done(task_db, task_id)
                 import asyncio
                 from quickmedia.api.server import broadcast_graph_changed
                 asyncio.run(broadcast_graph_changed())
-                print(f"[Aggregation] 任务 #{task_id} 完成: 已保存 {node_count} 个节点", flush=True)
+                print(f"[Aggregation] 任务 #{task_id} 完成: 新节点 {node_count}, 追加 {assigned} 个关联", flush=True)
 
             except Exception as e:
                 print(f"[Aggregation] 任务 #{task_id} 失败: {e}", flush=True)

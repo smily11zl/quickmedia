@@ -471,7 +471,6 @@ def run_aggregation(mode: str) -> ActionResult:
     - ok: 操作是否成功
     - message: 结果消息(含生成的节点数)
     """
-    import json as _json, re as _re, os as _os2
     from datetime import datetime
     db, _, _ = init_db()
     if mode not in ("full", "full_append", "append"):
@@ -482,15 +481,8 @@ def run_aggregation(mode: str) -> ActionResult:
     if running:
         return ActionResult(ok=False, error="已有聚合任务进行中")
 
-    from quickmedia.aggregation.worker import (
-        mark_processing, mark_done, mark_failed,
-        get_all_assets, get_all_nodes, save_aggregation_result,
-    )
-    from quickmedia.aggregation.prompts import build_prompt
-    from quickmedia.providers import ProviderRegistry
-    from quickmedia.config import Config
+    from quickmedia.aggregation.worker import mark_processing, mark_done, mark_failed
 
-    data_dir = get_data_dir()
     db.execute(
         "INSERT INTO aggregation_queue (mode, status, created_at) VALUES (?,?,?)",
         (mode, "pending", datetime.now().isoformat()),
@@ -499,62 +491,13 @@ def run_aggregation(mode: str) -> ActionResult:
 
     try:
         mark_processing(db, task_id)
-        assets = get_all_assets(db)
-        nodes = get_all_nodes(db) if mode != "full" else None
-        unassigned = []
-        if mode in ("append", "full_append"):
-            assigned = set()
-            for n in (nodes or []):
-                for a in db.execute(
-                    "SELECT asset_id FROM node_assets WHERE node_id=?", (n["id"],)
-                ):
-                    assigned.add(a["asset_id"])
-            unassigned = [a for a in assets if a["id"] not in assigned]
-        if mode == "append" and not unassigned:
-            mark_done(db, task_id)
-            return ActionResult(ok=True, message="无新素材，跳过分析")
-
-        cfg = Config(config_dir=data_dir)
-        models_path = _os2.path.join(data_dir, "models.yaml")
-        registry = ProviderRegistry(cfg, models_path)
-        binding = registry.get_task_binding("text")
-        if not binding:
-            return ActionResult(ok=False, error="未配置 text 模型")
-        provider = registry.get_provider(binding["provider"]) or {}
-        url = provider.get("url", "")
-        api_key = ""
-        env_path = _os2.path.join(data_dir, ".env")
-        if _os2.path.isfile(env_path):
-            with open(env_path) as f:
-                for line in f:
-                    if "=" in line and not line.startswith("#"):
-                        k, v = line.split("=", 1)
-                        if k == f"{binding['provider'].upper()}_API_KEY":
-                            api_key = v.strip()
-        from quickmedia.openai_adapter import OpenAIAdapter
-        adapter = OpenAIAdapter(
-            base_url=url, api_key=api_key,
-            model=binding["model"], timeout=300,
-            provider_name=binding["provider"],
-        )
-        target = unassigned if mode in ("append", "full_append") else assets
-        prompt = build_prompt(mode, target, nodes)
-        response = adapter.chat(prompt)
-        try:
-            match = _re.search(r'\{[^{}]*"nodes"[^{}]*\}', response, _re.DOTALL)
-            if match:
-                result = _json.loads(match.group())
-            else:
-                result = {}
-        except Exception:
-            result = {}
-        if mode == "full":
-            db.execute("DELETE FROM node_assets")
-            db.execute("DELETE FROM nodes")
-        save_aggregation_result(db, result)
-        node_count = len(result.get("nodes", []))
+        from quickmedia.aggregation.core import run_aggregation as _run
+        node_count, assigned = _run(mode, db, get_data_dir())
         mark_done(db, task_id)
-        return ActionResult(ok=True, message=f"聚合完成，生成 {node_count} 个节点")
+        msg = "聚合完成"
+        if node_count > 0: msg += f"，新建 {node_count} 个节点"
+        if assigned > 0: msg += f"，追加 {assigned} 个关联"
+        return ActionResult(ok=True, message=msg)
     except Exception as e:
         mark_failed(db, task_id, str(e))
         return ActionResult(ok=False, error=str(e))
