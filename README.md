@@ -78,13 +78,26 @@
 
 ## 安装
 
+### 快速安装（macOS/Linux）
+
+```bash
+chmod +x scripts/setup.sh && ./scripts/setup.sh
+```
+
 ### 基础环境
 
 - Python 3.11+
 - ffmpeg（视频元数据、缩略图提取）
 
 ```bash
+# macOS
 brew install ffmpeg
+
+# Linux (Debian/Ubuntu)
+sudo apt install ffmpeg
+
+# Windows
+# 下载 https://ffmpeg.org/download.html 或 winget install ffmpeg
 ```
 
 ### Python 包安装
@@ -120,8 +133,19 @@ cd frontend && npm install && npm run build && cd ..
 需要 Ollama 或其他兼容服务。未配置时 AI 分析/搜索功能不可用，素材管理、扫描功能正常。
 
 ```bash
+# macOS
 brew install ollama
 ollama serve &
+
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Windows
+# 下载 https://ollama.com/download/windows
+```
+
+拉取模型：
+```bash
 ollama pull qwen3.5:9b              # 视觉/文本分析
 ollama pull qwen3-embedding:8b      # 语义搜索嵌入
 ```
@@ -251,3 +275,5 @@ cd frontend && npm run dev
 # 前端测试
 cd frontend && npx vitest run
 ```
+
+> ⚠️ 修改前端代码后，必须运行 `npm run build` 并将 `frontend/dist/` 提交到 Git。仓库内的 dist 是其他用户直接使用的构建产物，不更新会导致其他用户看到旧版 UI。

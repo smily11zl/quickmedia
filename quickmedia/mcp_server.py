@@ -132,7 +132,7 @@ mcp = FastMCP("quickmedia")
 
 
 @mcp.tool()
-def search_assets(query: str, mode: str = "combined", limit: int = 10) -> list[AssetBasic]:
+def search_assets(query: str, mode: str = "ai", limit: int = 10) -> list[AssetBasic]:
     """搜索素材。mode: keyword(关键词) | semantic(语义) | combined(综合RRF) | ai(AI搜索)。
 
     返回 AssetBasic 字段:
