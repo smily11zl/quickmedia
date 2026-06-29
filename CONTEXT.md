@@ -165,7 +165,7 @@ AI 生成的标签以虚线边框展示。用户点击确认后变为实线，�
 
 ### AI Prompt 配置（AI Prompt Configuration）
 
-AI 分析使用的 prompt 模板通过 `~/.asset-manager/prompts.yaml` 配置。包含四个分析类型（vision / text / speech / video_summary），每个类型结构：
+AI 分析使用的 prompt 模板通过 `~/.asset-manager/prompts.yaml` 配置。包含分析/聚合/搜索三种类别共 10 个类型，每个类型结构：
 
 - `system_format` — 系统固定追加的 JSON 格式指令，不可通过 UI 编辑
 - `default` — 默认 prompt 模板（编号示例格式，用户可参考修改）
@@ -218,7 +218,7 @@ Provider 配置在 `config.yaml` 的 `providers` 字段（URL + 模型列表）�
 
 ### Task Model Binding（任务模型绑定）
 
-将 AI 任务类型（vision / text / speech / video_summary / search_ai）绑定到具体 provider + model。配置在 `config.yaml` 的 `task_models` 字段。search_ai 为 V15 新增的搜索任务类型，用于 AI 搜索模式。
+将 AI 任务类型（vision / text / speech / video_summary / search_ai / aggregation）绑定到具体 provider + model。配置在 `config.yaml` 的 `task_models` 字段。search_ai 为 V15 新增的搜索任务类型，aggregation 为 V16 新增的聚合任务类型。
 
 ### Model Capabilities（模型能力）
 
@@ -360,7 +360,7 @@ Anthropic 制定的 AI Agent 工具调用协议。Hermes 内置 MCP 客户端，
 
 ### 聚合模型
 
-复用现有 text 分析模型配置，不额外设置。
+通过 `task_models.aggregation` 配置 provider + model。未配置时聚合任务执行失败。
 
 ### 节点交互
 
@@ -374,6 +374,10 @@ Anthropic 制定的 AI Agent 工具调用协议。Hermes 内置 MCP 客户端，
 侧边栏顶部增加 Tab 切换：
 - Tab 1：搜索与筛选（现有功能）
 - Tab 2：聚合节点（NodePanel 组件）
+
+### 聚合 Prompt 配置
+
+四种聚合 prompt 模板（full / full_append / append / analyze_append）迁入 `prompts.yaml`，与 vision/text/search_ai 等相同 custom/default/system_format 结构。模板可用占位符：`{assets}` 素材列表、`{nodes}` 已有节点、`{node_name}` 节点名、`{node_description}` 节点描述、`{existing_assets}` 已有素材摘要、`{candidates}` 候选素材。设置面板 AI 提示词 Tab 分为三组：分析 / 聚合 / 搜索。
 
 ### 代码组织
 

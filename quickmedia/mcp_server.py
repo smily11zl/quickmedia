@@ -679,7 +679,7 @@ def analyze_append_node(node_id: int) -> ActionResult:
 
     # Get existing assets
     node_assets = db.execute(
-        "SELECT filename, ai_summary, visual_description FROM assets a "
+        "SELECT a.id, filename, ai_summary, visual_description, video_summary FROM assets a "
         "JOIN node_assets na ON a.id=na.asset_id WHERE na.node_id=?",
         (node_id,),
     )
@@ -702,9 +702,9 @@ def analyze_append_node(node_id: int) -> ActionResult:
     from quickmedia.providers import ProviderRegistry
     models_path = os.path.join(data_dir, "models.yaml")
     registry = ProviderRegistry(cfg, models_path)
-    binding = registry.get_task_binding("text")
+    binding = registry.get_task_binding("aggregation")
     if not binding:
-        return ActionResult(ok=False, error="未配置 text 模型")
+        return ActionResult(ok=False, error="未配置聚合模型，请在设置中绑定")
     provider = registry.get_provider(binding["provider"]) or {}
     url = provider.get("url", "")
     api_key = ""

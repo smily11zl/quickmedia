@@ -25,6 +25,7 @@ const TASK_LABELS: Record<string, string> = {
   video_summary: "视频总结",
   embedding: "向量化",
   search_ai: "AI 搜索",
+  aggregation: "聚合分析",
 };
 
 const TASK_HINTS: Record<string, string> = {
@@ -34,6 +35,7 @@ const TASK_HINTS: Record<string, string> = {
   video_summary: "综合画面描述和语音内容生成总结",
   embedding: "使用 search_terms 生成独立向量用于语义搜索。每个搜索词存一个向量，Top-K 聚合匹配。⚠️ 勿切换模型",
   search_ai: "按用户自然语言描述，从素材库中匹配相关素材。需要大上下文模型（如 DeepSeek V4）。",
+  aggregation: "分析全库素材生成聚合节点（全量/追加/节点分析追加）。需要较好的文本理解能力。",
 };
 
 const BUILTIN_PROVIDERS: ProviderInfo[] = [

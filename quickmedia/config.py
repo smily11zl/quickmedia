@@ -29,6 +29,7 @@ DEFAULT_CONFIG = {
         "video_summary": {"provider": "ollama", "model": "qwen3.5:9b"},
         "embedding": {"provider": "ollama", "model": "qwen3-embedding:8b"},
         "search_ai": {"provider": "", "model": ""},
+        "aggregation": {"provider": "", "model": ""},
     },
     "watch_paths": [],
     "formats": {

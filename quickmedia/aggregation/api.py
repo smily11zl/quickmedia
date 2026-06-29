@@ -26,6 +26,8 @@ def register_aggregation_routes(app):
         )
         if running:
             raise HTTPException(status_code=409, detail="已有聚合任务进行中")
+        # Clean old task records before starting new one
+        db.execute("DELETE FROM aggregation_queue")
         db.execute(
             "INSERT INTO aggregation_queue (mode, status, created_at) VALUES (?,?,?)",
             (mode, "pending", datetime.now().isoformat()),
@@ -49,7 +51,7 @@ def register_aggregation_routes(app):
                 from quickmedia.aggregation.core import run_aggregation as _run
                 node_count, assigned = _run(mode, task_db, config_dir)
 
-                mark_done(task_db, task_id)
+                mark_done(task_db, task_id, node_count, assigned)
                 import asyncio
                 from quickmedia.api.server import broadcast_graph_changed
                 asyncio.run(broadcast_graph_changed())
@@ -57,9 +59,7 @@ def register_aggregation_routes(app):
 
             except Exception as e:
                 print(f"[Aggregation] 任务 #{task_id} 失败: {e}", flush=True)
-                err_db = Database(db_path)
-                mark_failed(err_db, task_id, str(e))
-                err_db.close()
+                mark_failed(task_db, task_id, str(e))
             finally:
                 task_db.close()
 
@@ -74,6 +74,13 @@ def register_aggregation_routes(app):
             return {"status": "idle"}
         t = dict(task[0])
         return {"status": t.get("status", "idle"), "task": t}
+
+    @app.post("/api/aggregation/status/reset")
+    def aggregation_status_reset():
+        """Clear all failed tasks from queue."""
+        db = _get_db(app)
+        db.execute("DELETE FROM aggregation_queue WHERE status='failed'")
+        return {"ok": True}
 
     @app.get("/api/nodes")
     def list_nodes():
@@ -205,7 +212,7 @@ def register_aggregation_routes(app):
 
         # Get existing assets in this node
         node_assets = db.execute(
-            "SELECT filename, ai_summary, visual_description FROM assets a "
+            "SELECT a.id, filename, ai_summary, visual_description, video_summary FROM assets a "
             "JOIN node_assets na ON a.id=na.asset_id WHERE na.node_id=?",
             (node_id,),
         )
@@ -233,7 +240,10 @@ def register_aggregation_routes(app):
         config_dir = app.extra["config_dir"]
         cfg = Config(config_dir=config_dir)
         worker = AIWorker(db=db, config=cfg)
-        adapter = worker._get_adapter("text")
+        try:
+            adapter = worker._get_adapter("aggregation")
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         prompt = build_append_prompt(node_info, existing_assets, candidate_list)
         response = adapter.chat(prompt)

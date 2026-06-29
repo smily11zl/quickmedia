@@ -17,9 +17,11 @@ def _get_adapter(config_dir: str):
     cfg = Config(config_dir=config_dir)
     models_path = os.path.join(config_dir, "models.yaml")
     registry = ProviderRegistry(cfg, models_path)
-    binding = registry.get_task_binding("text")
-    provider_name = binding["provider"] if binding else "ollama"
-    model = binding["model"] if binding else ""
+    binding = registry.get_task_binding("aggregation")
+    if not binding or not binding.get("provider") or not binding.get("model"):
+        return None, "", ""
+    provider_name = binding["provider"]
+    model = binding["model"]
 
     url = registry.get_provider_url(provider_name) or ""
 
@@ -106,6 +108,8 @@ def run_aggregation(mode: str, db, config_dir: str) -> tuple[int, int]:
     print(f"[Aggregation] 素材数: {len(assets)}, 已有节点数: {len(nodes) if nodes else 0}", flush=True)
 
     adapter, provider_name, model = _get_adapter(config_dir)
+    if not adapter:
+        raise RuntimeError("聚合任务需要配置模型，请在设置中绑定")
     print(f"[Aggregation] 调用 AI: provider={provider_name} model={model}", flush=True)
 
     prompt = build_prompt(mode, assets, nodes)

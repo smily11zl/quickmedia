@@ -32,9 +32,10 @@ interface Props {
   onSelectAsset?: (id: number) => void;
   selectedAssetId?: number | null;
   unassigned?: { id: number; filename: string; asset_type: string }[];
+  onOpenSettings?: (tab: string) => void;
 }
 
-function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, onGraphRefresh, onGraphFullReload, onSelectAsset, selectedAssetId, unassigned }: Props) {
+function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, onGraphRefresh, onGraphFullReload, onSelectAsset, selectedAssetId, unassigned, onOpenSettings }: Props) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [aggStatus, setAggStatus] = useState<AggStatus>({ status: "idle" });
   const lastAggMode = useRef("");
@@ -89,6 +90,13 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
     if (aggStatus.task?.status === "done") {
       setNodeAssets(new Map()); // clear all caches
       fetchNodes();
+      const nc = aggStatus.task?.nodes_created || 0;
+      const as = aggStatus.task?.assigned || 0;
+      if (nc > 0 || as > 0) {
+        setToast({ message: `聚合完成: ${nc > 0 ? `新节点 ${nc} 个` : ""}${nc > 0 && as > 0 ? ", " : ""}${as > 0 ? `追加 ${as} 个关联` : ""}`, type: "info" });
+      } else {
+        setToast({ message: "聚合完成，无新节点或追加", type: "info" });
+      }
       if (lastAggMode.current === "full") {
         onGraphFullReload?.();
       } else {
@@ -197,7 +205,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           }
           setNodeAssets(prev => { const m = new Map(prev); m.delete(nodeId); return m; }); expandedNodes.forEach(nid => { fetch('/api/nodes/' + nid + '/assets').then(r => r.json()).then(d => { setNodeAssets(prev => new Map(prev.set(nid, d.items || []))); }); });
         } else {
-          setToast({ message: "分析失败", type: "error" });
+          setToast({ message: d.detail || "分析失败", type: "error" });
         }
       })
       .catch(() => {
@@ -298,6 +306,10 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           style={{ backgroundColor: "#fee2e2", color: "#991b1b" }}
         >
           聚合失败: {aggStatus.task?.error || "未知错误"}
+          <button onClick={() => { fetch("/api/aggregation/status/reset", {method: "POST"}).then(() => setAggStatus({status: "idle"})); }} className="ml-1 text-xs px-1 rounded" style={{color: "#991b1b"}}>✕</button>
+          {aggStatus.task?.error?.includes("配置模型") && (
+            <button onClick={() => onOpenSettings?.("models")} className="ml-2 underline text-xs" style={{color: "#991b1b"}}>⚙ 去配置</button>
+          )}
         </div>
       )}
 

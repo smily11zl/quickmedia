@@ -232,7 +232,7 @@ function App() {
         </div>
         </>
         ) : (
-          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} refreshKey={nodeRefreshKey} onGraphRefresh={(newNodeId?:number)=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);if(newNodeId)setExpandedNodes((prev:Set<number>)=>new Set(prev).add(newNodeId));else setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));});}} onGraphFullReload={()=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));setGraphKey(k=>k+1);});}} onSelectAsset={(aid:number)=>{selA(aid);}} selectedAssetId={sel?.id} unassigned={graphData.unassigned} />
+          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} refreshKey={nodeRefreshKey} onGraphRefresh={(newNodeId?:number)=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);if(newNodeId)setExpandedNodes((prev:Set<number>)=>new Set(prev).add(newNodeId));else setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));});}} onGraphFullReload={()=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));setGraphKey(k=>k+1);});}} onSelectAsset={(aid:number)=>{selA(aid);}} onOpenSettings={(tab:string)=>{setSettingsTab(tab);sso(true);}} selectedAssetId={sel?.id} unassigned={graphData.unassigned} />
         )}
         <div className="mt-auto pt-4 flex flex-col gap-1 relative" style={{borderTop:`1px solid ${S.h}`}}>
           <button onClick={()=>sscm(!scm)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
@@ -286,7 +286,7 @@ function App() {
             selectedNodeId={selectedNodeId}
             selectedNodeName={selectedNodeName}
             onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}}
-            onSelectAsset={(aid:number)=>{selA(aid);}}
+            onSelectAsset={(aid:number)=>{selA(aid);}} onOpenSettings={(tab:string)=>{setSettingsTab(tab);sso(true);}}
             searchResults={searchResults}
             filteredAssets={fs}
             hasActiveFilter={!!(tf||ff.size>0||af.size>0||tgf.size>0||(q&&didSearch)||selectedNodeId)}

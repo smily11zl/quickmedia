@@ -11,11 +11,11 @@ def mark_processing(db, task_id: int) -> None:
     )
 
 
-def mark_done(db, task_id: int) -> None:
-    """Mark a task as completed."""
+def mark_done(db, task_id: int, nodes_created: int = 0, assigned: int = 0) -> None:
+    """Mark a task as completed with result counts."""
     db.execute(
-        "UPDATE aggregation_queue SET status='done', completed_at=? WHERE id=?",
-        (datetime.now().isoformat(), task_id),
+        "UPDATE aggregation_queue SET status='done', completed_at=?, nodes_created=?, assigned=? WHERE id=?",
+        (datetime.now().isoformat(), nodes_created, assigned, task_id),
     )
 
 

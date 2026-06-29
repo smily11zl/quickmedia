@@ -615,3 +615,99 @@ Cytoscape.js 力导向图可视化。聚合节点和素材作为图节点渲染�
 - 树状列表拖放跨组件（NodePanel ↔ GraphView ↔ 网格）通过 HTML5 DnD 实现，与现有云图拖放统一
 - 未分配节点拖放取消分配后端幂等设计：DELETE 已存在的关联返回 ok，不存在的也返回 ok
 - prompts.yaml 新增 key 自动合并逻辑 PromptConfig._load() 已内置，无需改加载代码
+
+---
+
+## v16 — 聚合 Prompt 自定义
+
+### Problem Statement
+
+聚合节点生成质量取决于 prompt 指令。当前四种聚合 prompt（全量/全量追加/追加/节点分析追加）全部硬编码在 `aggregation/prompts.py` 中，用户无法根据素材特点调整聚合策略。此外，聚合任务复用了"文档分析"的模型配置（`task_models.text`），无法独立选择更适合聚合的模型。
+
+### Solution
+
+将 4 种聚合 prompt 迁入 `prompts.yaml`，与已有的 vision/text/search_ai 等统一管理。新增 `task_models.aggregation` 独立模型绑定，不再复用 text。设置面板 AI 提示词 Tab 按三组展示：分析 / 聚合 / 搜索。
+
+### Key Features
+
+**聚合 Prompt 配置**
+- 新增 4 个 prompt 类型：`aggregation_full`、`aggregation_full_append`、`aggregation_append`、`aggregation_analyze_append`
+- 与现有 prompt 类型相同结构：system_format / default / custom / presets
+- system_format 固定 JSON 输出格式约束，custom 非空优先于 default
+- 模板可用占位符：`{assets}` 素材列表、`{nodes}` 已有节点、`{node_name}` 节点名、`{node_description}` 节点描述、`{existing_assets}` 已有素材摘要、`{candidates}` 候选素材
+- 设置面板每个编辑区下方显示可用占位符说明
+- DEFAULT_PROMPTS 硬编码模板，启动自动同步至 prompts.yaml，升级合并系统字段、保留用户 custom
+
+**聚合模型绑定**
+- 新增 `task_models.aggregation` 独立配置项
+- 不再复用 `task_models.text`（文档分析）
+- 未配置时聚合任务执行失败
+- 设置面板模型管理 → 任务配置中显示"聚合"绑定行
+
+**设置面板 Prompt Tab 分组**
+- 三组：分析（图片/文档/语音/视频视觉/视频综合）、聚合（全量聚合/全量追加/追加分析/节点追加）、搜索（搜索）
+- 分组方式一致，每组内按钮同行展示
+
+### User Stories
+
+1. 作为素材库用户，我想自定义聚合策略（如优先按项目分类而非主题），适配我的素材库
+2. 作为素材库用户，我想为聚合单独配置模型，和文档分析使用不同的 AI
+3. 作为素材库用户，我想知道 prompt 模板中可用的占位符变量及其含义
+4. 作为素材库用户，修改聚合 prompt 后立即生效，聚合分析使用我最新的指令
+5. 作为素材库用户，设置面板 prompt 按分组展示更清晰，不需要在大量选项里翻找
+
+### Implementation Decisions
+
+**后端 — Prompt Config**
+- `DEFAULT_PROMPTS` 新增 4 个聚合条目
+- 每个条目：system_format（JSON 格式约束） + default（完整指令） + custom 空 + presets 空
+- `PromptConfig._load()` 自动合并（已有逻辑，无需修改）
+- `PUT /api/prompts` validator 扩展为接受全部 10 个 type
+
+**后端 — Aggregation Prompts 重构**
+- `aggregation/prompts.py` 的 `_build_full()`、`_build_full_append()`、`_build_append()`、`build_append_prompt()` 改为从 `PromptConfig` 读取模板
+- 模板通过占位符注入动态数据：`{assets}`、`{nodes}`、`{node_name}`、`{node_description}`、`{existing_assets}`、`{candidates}`
+- `_asset_text()` 继续由代码生成（素材文本格式不进入模板）
+
+**后端 — 聚合模型绑定**
+- `aggregation/core.py` 的 `_get_adapter()` 从 `get_task_binding("text")` 改为 `get_task_binding("aggregation")`
+- `DEFAULT_CONFIG.task_models` 新增 `"aggregation": {"provider": "", "model": ""}`
+- `_fill_missing_task_models()` 自动同步（已有逻辑）
+
+**前端 — SettingsModal Prompts Tab**
+- 按钮列表分为三组，每组加标题
+- 分析组：vision, text, speech, video_vision, video_summary
+- 聚合组：aggregation_full, aggregation_full_append, aggregation_append, aggregation_analyze_append
+- 搜索组：search_ai
+- 每个编辑区 textarea 下方显示灰色占位符说明
+- 占位符说明从硬编码映射获取（不依赖后端）
+
+**前端 — ModelManager**
+- `TASK_LABELS` 和 `TASK_HINTS` 新增 `aggregation: "聚合分析"`
+
+**CONTEXT.md 更新**
+- 聚合模型：独立 task_models.aggregation
+- 聚合 Prompt 配置：术语新增
+- Task Model Binding：加 aggregation
+- AI Prompt 配置：更新类型计数
+
+### Testing Decisions
+
+- **最高 seam**：`GET/PUT /api/prompts` — aggregation_full 等 4 个新 type 的读写
+- **次高 seam**：`POST /api/aggregation/run` — 聚合使用 PromptConfig 读取模板
+- **配置 seam**：`DEFAULT_PROMPTS` 新增条目结构校验 + `PromptConfig.get_prompt("aggregation_full")` 拼接
+- **前端 seam**：SettingsModal prompts Tab 三组布局 + 占位符说明渲染
+- **先验测试**：`tests/test_v15.py`（prompts API）、`tests/test_v12.py`（聚合 prompt 测试）
+
+### Out of Scope
+
+- 不修改 `_asset_text()` 的素材格式化逻辑
+- 不修改聚合 Worker/线程的调度逻辑
+- 预设模板（presets）初始为空，后续版本再扩展
+- 不修改 MCP 端的聚合工具
+
+### Further Notes
+
+- 聚合 prompt 模板很长（full 模式 ~100 行），推荐在 Web UI 编辑而非手动改文件
+- `PromptConfig._load()` 已内置合并逻辑，DEFAULT_PROMPTS 新增 key 自动同步
+- `_fill_missing_task_models()` 自动填充 aggregation 到用户 config.yaml

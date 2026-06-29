@@ -63,7 +63,9 @@ class AIWorker:
                         k, v = line.split("=", 1)
                         self._env[k] = v
         binding = self._registry.get_task_binding(task_type)
-        if not binding:
+        if not binding or not binding.get("provider") or not binding.get("model"):
+            if task_type == "aggregation":
+                raise RuntimeError("聚合任务需要配置模型，请在设置中绑定")
             # video_vision falls back to vision model
             if task_type == "video_vision":
                 binding = self._registry.get_task_binding("vision")

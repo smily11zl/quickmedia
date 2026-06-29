@@ -239,6 +239,14 @@
 - 跨组件拖放联动（NodePanel ↔ GraphView ↔ 网格/列表）
 - 树列表变更刷新联动（聚合完成/节点增删/分析追加后即时更新）
 
+## v16 — 聚合 Prompt 自定义 ✅
+
+- 4 种聚合 prompt 迁入 prompts.yaml（full / full_append / append / analyze_append）
+- 独立 task_models.aggregation 模型绑定（不再复用 text）
+- 设置面板 AI 提示词三组：分析 / 聚合 / 搜索
+- 模板支持 6 个占位符变量（{assets}, {nodes}, {node_name}, {node_description}, {existing_assets}, {candidates}）
+- 每个编辑区显示可用占位符说明
+
 ## 待定
 
 - 云图拖放素材到聚合节点（自动连线，不刷新全图）

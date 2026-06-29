@@ -920,7 +920,9 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         pc = PromptConfig(config_dir=app.extra["config_dir"])
         analysis_type = body.get("type", "")
         custom = body.get("custom", "")
-        if analysis_type not in ("vision", "text", "speech", "video_summary", "search_ai"):
+        if analysis_type not in ("vision", "text", "speech", "video_summary", "search_ai",
+                                  "aggregation_full", "aggregation_full_append",
+                                  "aggregation_append", "aggregation_analyze_append"):
             raise HTTPException(status_code=400, detail="Invalid analysis type")
         pc.save(analysis_type, custom)
         return {"ok": True}

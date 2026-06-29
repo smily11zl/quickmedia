@@ -93,12 +93,14 @@ CREATE TABLE IF NOT EXISTS asset_search_terms (
 );
 
 CREATE TABLE IF NOT EXISTS aggregation_queue (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    mode         TEXT NOT NULL,
-    status       TEXT DEFAULT 'pending',
-    error        TEXT,
-    created_at   TEXT DEFAULT (datetime('now')),
-    completed_at TEXT
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    mode           TEXT NOT NULL,
+    status         TEXT DEFAULT 'pending',
+    error          TEXT,
+    nodes_created  INTEGER DEFAULT 0,
+    assigned       INTEGER DEFAULT 0,
+    created_at     TEXT DEFAULT (datetime('now')),
+    completed_at   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS nodes (
@@ -126,6 +128,7 @@ class Database:
         self.conn.execute("PRAGMA foreign_keys = ON")
         self._migrate_v9()
         self._migrate_v12()
+        self._migrate_v16()
         self._init_schema()
 
     def _migrate_v9(self) -> None:
@@ -136,6 +139,17 @@ class Database:
                 self.conn.execute("ALTER TABLE assets RENAME COLUMN ai_description TO visual_description")
                 # Rebuild FTS5 index to pick up the new column name
                 self.conn.execute("INSERT INTO assets_fts(assets_fts) VALUES('rebuild')")
+        except Exception:
+            pass
+
+    def _migrate_v16(self) -> None:
+        """V16: add nodes_created and assigned columns."""
+        try:
+            cols = [r["name"] for r in self.conn.execute("PRAGMA table_info(aggregation_queue)").fetchall()]
+            if "nodes_created" not in cols:
+                self.conn.execute("ALTER TABLE aggregation_queue ADD COLUMN nodes_created INTEGER DEFAULT 0")
+            if "assigned" not in cols:
+                self.conn.execute("ALTER TABLE aggregation_queue ADD COLUMN assigned INTEGER DEFAULT 0")
         except Exception:
             pass
 
