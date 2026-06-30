@@ -247,6 +247,14 @@
 - 模板支持 6 个占位符变量（{assets}, {nodes}, {node_name}, {node_description}, {existing_assets}, {candidates}）
 - 每个编辑区显示可用占位符说明
 
+## v17 — 多语言国际化 🔄
+
+- 前端中/英切换（react-i18next，自动检测浏览器语言）
+- DEFAULT_PROMPTS 中英文模板
+- PromptConfig 根据语言选择 default（不影响 custom）
+- README 英文默认 + README.zh.md 中文版
+- 设置面板"基础"Tab 语言选择下拉框
+
 ## 待定
 
 - 云图拖放素材到聚合节点（自动连线，不刷新全图）

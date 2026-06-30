@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 const S = {c:"#faf9f5",h:"#e6dfd8",d:"#efe9de",s:"#f5f0e8",i:"#141413",b:"#3d3d3a",m:"#6c6a64",ms:"#8e8b82",r:"#cc785c",rb:"rgba(204,120,92,0.08)",w:"#fff"};
 
@@ -13,6 +14,7 @@ interface Asset {
 const f=(b:number)=>{for(const u of["B","KB","MB","GB"]){if(b<1024)return `${b}${u}`;b=Math.floor(b/1024);}return `${b}TB`;};
 
 export default function SimilarPanel({ assetId, onClose }: { assetId: number; onClose: () => void }) {
+  const { t } = useTranslation();
   const [items, setItems] = useState<Asset[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -27,19 +29,19 @@ export default function SimilarPanel({ assetId, onClose }: { assetId: number; on
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{backgroundColor: "rgba(0,0,0,0.3)"}} onClick={onClose}>
       <div className="w-full max-w-4xl max-h-[85vh] min-h-[300px] rounded-xl shadow-2xl flex flex-col overflow-hidden" style={{backgroundColor: S.c}} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-3" style={{borderBottom: `1px solid ${S.h}`}}>
-          <h2 className="text-sm font-medium" style={{color: S.i}}>相似素材</h2>
-          <button onClick={onClose} className="text-xs px-2 py-1 rounded" style={{color: S.ms, backgroundColor: S.s}}>✕ 关闭</button>
+          <h2 className="text-sm font-medium" style={{color: S.i}}>{t("similar.title")}</h2>
+          <button onClick={onClose} className="text-xs px-2 py-1 rounded" style={{color: S.ms, backgroundColor: S.s}}>✕ {t("common.close")}</button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {loading && (
             <div className="flex items-center justify-center h-32">
-              <p className="text-sm" style={{color: S.m}}>正在搜索相似素材...</p>
+              <p className="text-sm" style={{color: S.m}}>{t("similar.searching")}</p>
             </div>
           )}
           {!loading && items && items.length === 0 && (
             <div className="flex flex-col items-center justify-center h-48">
               <p className="text-3xl mb-2">🔍</p>
-              <p className="text-sm" style={{color: S.m}}>未找到相似素材</p>
+              <p className="text-sm" style={{color: S.m}}>{t("similar.not_found")}</p>
             </div>
           )}
           {!loading && items && items.length > 0 && (

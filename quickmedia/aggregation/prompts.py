@@ -1,7 +1,7 @@
 """Prompt building functions for V12 aggregation."""
 
 
-def build_prompt(mode: str, assets: list[dict], nodes: list[dict] = None) -> str:
+def build_prompt(mode: str, assets: list[dict], nodes: list[dict] = None, language: str = "zh") -> str:
     """Build an aggregation prompt based on mode.
 
     Args:
@@ -11,11 +11,11 @@ def build_prompt(mode: str, assets: list[dict], nodes: list[dict] = None) -> str
         nodes: Existing nodes for full_append/append modes
     """
     if mode == "full":
-        return _build_full(assets)
+        return _build_full(assets, language)
     elif mode == "full_append":
-        return _build_full_append(assets, nodes or [])
+        return _build_full_append(assets, nodes or [], language)
     elif mode == "append":
-        return _build_append(assets, nodes or [])
+        return _build_append(assets, nodes or [], language)
     raise ValueError(f"Unknown aggregation mode: {mode}")
 
 
@@ -30,24 +30,24 @@ def _asset_text(asset: dict) -> str:
     )
 
 
-def _build_full(assets: list[dict]) -> str:
+def _build_full(assets: list[dict], language: str = "zh") -> str:
     """Build full aggregation prompt from PromptConfig template."""
     from quickmedia.prompt_config import PromptConfig
     from quickmedia.config import Config
     cfg = Config()
-    pc = PromptConfig(cfg.config_dir)
+    pc = PromptConfig(cfg.config_dir, language or "zh")
     base = pc.get_prompt("aggregation_full")
     asset_text = "\n".join(_asset_text(a) for a in assets)
     if "{assets}" in base:
         return base.replace("{assets}", asset_text)
     return base + "\n\n素材列表：\n" + asset_text
 
-def _build_full_append(assets: list[dict], nodes: list[dict]) -> str:
+def _build_full_append(assets: list[dict], nodes: list[dict], language: str = "zh") -> str:
     """Build full_append aggregation prompt from PromptConfig template."""
     from quickmedia.prompt_config import PromptConfig
     from quickmedia.config import Config
     cfg = Config()
-    pc = PromptConfig(cfg.config_dir)
+    pc = PromptConfig(cfg.config_dir, language or "zh")
     base = pc.get_prompt("aggregation_full_append")
     node_text = "\n".join(
         f"  [{n['id']}] {n['name']}: {n.get('description','')} (素材: {n.get('asset_ids',[])}))"
@@ -59,12 +59,12 @@ def _build_full_append(assets: list[dict], nodes: list[dict]) -> str:
     return base
 
 
-def _build_append(assets: list[dict], nodes: list[dict]) -> str:
+def _build_append(assets: list[dict], nodes: list[dict], language: str = "zh") -> str:
     """Build append aggregation prompt from PromptConfig template."""
     from quickmedia.prompt_config import PromptConfig
     from quickmedia.config import Config
     cfg = Config()
-    pc = PromptConfig(cfg.config_dir)
+    pc = PromptConfig(cfg.config_dir, language or "zh")
     base = pc.get_prompt("aggregation_append")
     node_text = "\n".join(
         f"  [{n['id']}] {n['name']}: {n.get('description','')} (素材: {n.get('asset_ids',[])}))"
@@ -79,12 +79,13 @@ def build_append_prompt(
     node_info: dict[str, str],
     existing_assets: list[dict],
     candidates: list[dict],
+    language: str = "zh",
 ) -> str:
     """Build analyze-append prompt from PromptConfig template."""
     from quickmedia.prompt_config import PromptConfig
     from quickmedia.config import Config
     cfg = Config()
-    pc = PromptConfig(cfg.config_dir)
+    pc = PromptConfig(cfg.config_dir, language or "zh")
     base = pc.get_prompt("aggregation_analyze_append")
     
     existing_text = ""

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import ConfirmModal from "./ConfirmModal";
 
 const S = {c:"#faf9f5",h:"#e6dfd8",d:"#efe9de",s:"#f5f0e8",i:"#141413",b:"#3d3d3a",m:"#6c6a64",ms:"#8e8b82",r:"#cc785c",rb:"rgba(204,120,92,0.08)",w:"#fff"};
@@ -18,25 +19,6 @@ interface ProviderInfo {
   url: string;
 }
 
-const TASK_LABELS: Record<string, string> = {
-  vision: "图片分析",
-  text: "文档分析",
-  speech: "语音分析",
-  video_summary: "视频总结",
-  embedding: "向量化",
-  search_ai: "AI 搜索",
-  aggregation: "聚合分析",
-};
-
-const TASK_HINTS: Record<string, string> = {
-  vision: "分析图片/视频帧的内容、标签和文字",
-  text: "分析文档类素材的摘要和关键词",
-  speech: "分析语音转写文本的摘要和主题",
-  video_summary: "综合画面描述和语音内容生成总结",
-  embedding: "使用 search_terms 生成独立向量用于语义搜索。每个搜索词存一个向量，Top-K 聚合匹配。⚠️ 勿切换模型",
-  search_ai: "按用户自然语言描述，从素材库中匹配相关素材。需要大上下文模型（如 DeepSeek V4）。",
-  aggregation: "分析全库素材生成聚合节点（全量/追加/节点分析追加）。需要较好的文本理解能力。",
-};
 
 const BUILTIN_PROVIDERS: ProviderInfo[] = [
   {name: "ollama", url: "http://localhost:11434/v1"},
@@ -58,6 +40,27 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState<Record<string, {name:string;capabilities:Record<string,string[]>}[]>>({});
   const [testStatus, setTestStatus] = useState<Record<string, string>>({});
+  const { t } = useTranslation();
+
+  const TASK_LABELS: Record<string, string> = {
+    vision: t("model.task_vision"),
+    text: t("model.task_text"),
+    speech: t("model.task_speech"),
+    video_summary: t("model.task_video_summary"),
+    embedding: t("model.task_embedding"),
+    search_ai: t("model.task_search_ai"),
+    aggregation: t("model.task_aggregation"),
+  };
+
+  const TASK_HINTS: Record<string, string> = {
+    vision: t("model.hint_vision"),
+    text: t("model.hint_text"),
+    speech: t("model.hint_speech"),
+    video_summary: t("model.hint_video_summary"),
+    embedding: t("model.hint_embedding"),
+    search_ai: t("model.hint_search_ai"),
+    aggregation: t("model.hint_aggregation"),
+  };
   const [msg, setMsg] = useState("");
   const [editUrl, setEditUrl] = useState<string | null>(null);
   const [editUrlVal, setEditUrlVal] = useState("");
@@ -91,7 +94,7 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
     const updated = {...editProviders, [selProvider]: {url: info.url, api_key: apiKey}};
     setEditProviders(updated);
     saveProviders(updated, editTaskModels).then(ok => {
-      setMsg(ok ? "已添加" : "添加失败");
+      setMsg(ok ? t("model.added") : t("model.add_failed"));
       setTimeout(() => setMsg(""), ok ? 2000 : 3000);
     });
     fetch(`/api/providers/${selProvider}/models`).then(r => r.json()).then(r2 => {
@@ -116,7 +119,7 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
     }
     setEditTaskModels(tm);
     saveProviders(updated, tm).then(ok => {
-      setMsg(ok ? "已删除" : "删除失败");
+      setMsg(ok ? t("model.deleted") : t("model.delete_failed"));
       setTimeout(() => setMsg(""), ok ? 2000 : 3000);
     });
     setConfirmDeleteProvider(null);
@@ -128,7 +131,7 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
     setEditProviders(updated);
     setEditUrl(null);
     saveProviders(updated, editTaskModels).then(ok => {
-      setMsg(ok ? "已保存" : "保存失败");if(ok&&onModelsSaved)onModelsSaved();
+      setMsg(ok ? t("model.saved") : t("model.save_failed"));if(ok&&onModelsSaved)onModelsSaved();
       setTimeout(() => setMsg(""), ok ? 2000 : 3000);
     });
   };
@@ -139,32 +142,32 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
 
   const saveTasks = () => {
     saveProviders(editProviders, editTaskModels).then(ok => {
-      setMsg(ok ? "已保存" : "保存失败");if(ok&&onModelsSaved)onModelsSaved();
+      setMsg(ok ? t("model.saved") : t("model.save_failed"));if(ok&&onModelsSaved)onModelsSaved();
       if (ok) setInitTaskModels({...editTaskModels});
       setTimeout(() => setMsg(""), ok ? 2000 : 3000);
     });
   };
 
   const testProvider = (name: string, url: string) => {
-    setTestStatus({...testStatus, [name]: "测试中..."});
+    setTestStatus({...testStatus, [name]: t("model.testing")});
     fetch("/api/providers/test", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({provider: name, url})})
       .then(r => r.json())
-      .then(r => setTestStatus({...testStatus, [name]: r.ok ? "已连接" : (r.error || "连接失败")}))
-      .catch(() => setTestStatus({...testStatus, [name]: "连接失败"}));
+      .then(r => setTestStatus({...testStatus, [name]: r.ok ? t("model.connected") : (r.error || t("model.connection_failed"))}))
+      .catch(() => setTestStatus({...testStatus, [name]: t("model.connection_failed")}));
   };
 
   const providerModels = (provider: string): {name:string;capabilities:Record<string,string[]>}[] => models[provider] || [];
 
   const capLabel = (caps: Record<string,string[]>) => {
-    const labels: Record<string,string> = {image:"图片", text:"文字", audio:"语音", document:"文档", video:"视频", embedding:"向量"};
-    if (!caps || typeof caps !== 'object') return "通用";
+    const labels: Record<string,string> = {image:t("model.cap_image"), text:t("model.cap_text"), audio:t("model.cap_audio"), document:t("model.cap_document"), video:t("model.cap_video"), embedding:t("model.cap_embedding")};
+    if (!caps || typeof caps !== 'object') return t("model.cap_general");
     const parts: string[] = [];
     for (const [k, fmts] of Object.entries(caps)) {
       const label = labels[k] || k;
       if (fmts && fmts.length > 0) parts.push(label + "(" + fmts.join(",") + ")");
       else parts.push(label);
     }
-    return parts.join(" / ") || "通用";
+    return parts.join(" / ") || t("model.cap_general");
   };
 
   const tasksDirty = JSON.stringify(editTaskModels) !== JSON.stringify(initTaskModels);
@@ -173,28 +176,28 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
     <div className={`w-full p-4 flex flex-col gap-4 ${standalone ? 'overflow-y-auto' : ''}`} style={{borderColor: S.h, backgroundColor: S.c}}>
       {standalone && (
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium" style={{color: S.i}}>模型管理</h2>
-          <button onClick={onClose} className="text-xs px-2 py-1 rounded" style={{color: S.ms, backgroundColor: S.s}}>✕ 关闭</button>
+          <h2 className="text-sm font-medium" style={{color: S.i}}>{t("model.title")}</h2>
+          <button onClick={onClose} className="text-xs px-2 py-1 rounded" style={{color: S.ms, backgroundColor: S.s}}>✕ {t("model.close")}</button>
         </div>
       )}
 
       <div className="flex gap-1 p-0.5 rounded-md" style={{backgroundColor: S.s}}>
-        <button onClick={() => setTab("providers")} className="flex-1 text-xs py-1 rounded" style={{backgroundColor: tab === "providers" ? S.c : "transparent", color: tab === "providers" ? S.i : S.ms}}>Provider 管理</button>
-        <button onClick={() => setTab("tasks")} className="flex-1 text-xs py-1 rounded" style={{backgroundColor: tab === "tasks" ? S.c : "transparent", color: tab === "tasks" ? S.i : S.ms}}>任务配置</button>
+        <button onClick={() => setTab("providers")} className="flex-1 text-xs py-1 rounded" style={{backgroundColor: tab === "providers" ? S.c : "transparent", color: tab === "providers" ? S.i : S.ms}}>{t("model.tab_providers_label")}</button>
+        <button onClick={() => setTab("tasks")} className="flex-1 text-xs py-1 rounded" style={{backgroundColor: tab === "tasks" ? S.c : "transparent", color: tab === "tasks" ? S.i : S.ms}}>{t("model.tab_tasks")}</button>
       </div>
 
       {tab === "providers" && (
         <div className="flex flex-col gap-3">
           {availableProviders.length > 0 && (
             <div className="p-2 rounded-md border" style={{borderColor: S.h, backgroundColor: S.s}}>
-              <h3 className="text-[11px] font-medium mb-2" style={{color: S.ms}}>添加 Provider</h3>
+              <h3 className="text-[11px] font-medium mb-2" style={{color: S.ms}}>{t("model.add_provider")}</h3>
               <div className="flex gap-1.5">
                 <select value={selProvider} onChange={e => setSelProvider(e.target.value)} className="text-[10px] px-2 py-1.5 rounded flex-1 outline-none" style={{border: `1px solid ${S.h}`, color: S.i, backgroundColor: S.c}}>
-                  <option value="">选择 provider</option>
+                  <option value="">{t("model.select_provider")}</option>
                   {availableProviders.map(p => <option key={p.name} value={p.name}>{p.name} — {p.url}</option>)}
                 </select>
                 <input placeholder="API Key" value={apiKey} onChange={e => setApiKey(e.target.value)} className="text-[10px] px-2 py-1 rounded flex-1 outline-none" style={{border: `1px solid ${S.h}`, color: S.i, backgroundColor: S.c}} />
-                <button onClick={() => addProvider()} className="text-[10px] px-3 py-1 rounded" style={{backgroundColor: S.d, color: S.b}}>添加</button>
+                <button onClick={() => addProvider()} className="text-[10px] px-3 py-1 rounded" style={{backgroundColor: S.d, color: S.b}}>{t("model.add")}</button>
               </div>
             </div>
           )}
@@ -206,9 +209,9 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium" style={{color: S.i}}>{name}</span>
                     <div className="flex gap-1">
-                      <button onClick={() => testProvider(name, p.url)} className="text-[10px] px-2 py-0.5 rounded" style={{backgroundColor: S.d, color: S.b}}>测试</button>
+                      <button onClick={() => testProvider(name, p.url)} className="text-[10px] px-2 py-0.5 rounded" style={{backgroundColor: S.d, color: S.b}}>{t("model.test")}</button>
                       {name !== "ollama" && (
-                        <button onClick={() => removeProvider(name)} className="text-[10px] px-2 py-0.5 rounded" style={{backgroundColor: S.rb, color: S.r}}>删除</button>
+                        <button onClick={() => removeProvider(name)} className="text-[10px] px-2 py-0.5 rounded" style={{backgroundColor: S.rb, color: S.r}}>{t("model.remove")}</button>
                       )}
                     </div>
                   </div>
@@ -224,7 +227,7 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
                     </p>
                   )}
                   {p.api_key && <p className="text-[10px]" style={{color: S.ms}}>Key: {p.api_key.slice(0,4)}****{p.api_key.slice(-4)}</p>}
-                  {testStatus[name] && <p className="text-[10px] mt-0.5" style={{color: testStatus[name] === "已连接" ? "#5db872" : testStatus[name] === "测试中..." ? S.m : "#c64545"}}>{testStatus[name]}</p>}
+                  {testStatus[name] && <p className="text-[10px] mt-0.5" style={{color: testStatus[name] === t("model.connected") ? "#5db872" : testStatus[name] === t("model.testing") ? S.m : "#c64545"}}>{testStatus[name]}</p>}
                 </div>
               ))}
             </div>
@@ -236,7 +239,7 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
       {tab === "tasks" && (
         <div className="flex flex-col gap-3">
           {Object.keys(editProviders).length === 0 && (
-            <p className="text-[10px]" style={{color: S.ms}}>请先在 Provider 管理中添加 provider</p>
+            <p className="text-[10px]" style={{color: S.ms}}>{t("model.no_providers")}</p>
           )}
           <div className="grid grid-cols-2 gap-2">
             {Object.entries(TASK_LABELS).map(([taskType, label]) => {
@@ -248,12 +251,12 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
                 <div className="text-[9px] mt-0.5" style={{color: S.ms}}>{TASK_HINTS[taskType]}</div>
                   <div className="flex items-center gap-2 mt-1">
                     <select value={binding.provider} onChange={e => updateTask(taskType, e.target.value, "")} className="text-[10px] px-1 py-0.5 rounded flex-1 outline-none" style={{border: `1px solid ${S.h}`, color: S.i, backgroundColor: S.c}}>
-                      <option value="">选择 provider</option>
+                      <option value="">{t("model.select_provider")}</option>
                       {Object.keys(editProviders).map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                     <div className="relative flex-1">
                       <button onClick={() => setOpenModelPicker(openModelPicker === taskType ? null : taskType)} className="w-full text-left text-[10px] px-2 py-1 rounded flex items-center justify-between outline-none" style={{border: `1px solid ${S.h}`, color: binding.model ? S.i : S.ms, backgroundColor: S.c}}>
-                        <span>{binding.model || "选择模型"}</span>
+                        <span>{binding.model || t("model.select_model")}</span>
                         <span className="text-[8px]" style={{color: S.ms}}>▼</span>
                       </button>
                       {openModelPicker === taskType && (<>
@@ -274,16 +277,16 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
             })}
           </div>
           <div className="flex gap-2 items-center">
-            <button onClick={saveTasks} className="text-xs px-3 py-1.5 rounded-md" style={{backgroundColor: tasksDirty ? S.r : S.d, color: tasksDirty ? S.w : S.ms, cursor: tasksDirty ? "pointer" : "default"}}>保存配置</button>
+            <button onClick={saveTasks} className="text-xs px-3 py-1.5 rounded-md" style={{backgroundColor: tasksDirty ? S.r : S.d, color: tasksDirty ? S.w : S.ms, cursor: tasksDirty ? "pointer" : "default"}}>{t("model.save_config")}</button>
             {msg && <span className="text-[10px]" style={{color: msg.includes("失败") ? "#c64545" : S.m}}>{msg}</span>}
           </div>
         </div>
       )}
       {confirmDeleteProvider && (
         <ConfirmModal
-          title="删除 Provider"
-          message={`确定删除 provider "${confirmDeleteProvider}"？`}
-          confirmText="删除"
+          title={t("model.delete_provider")}
+          message={t("model.delete_provider_msg", {name: confirmDeleteProvider})}
+          confirmText={t("model.remove")}
           confirmColor="error"
           onConfirm={doRemoveProvider}
           onCancel={() => setConfirmDeleteProvider(null)}

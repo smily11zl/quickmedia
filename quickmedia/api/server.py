@@ -1,7 +1,7 @@
 """QuickMedia FastAPI server."""
 
 import os
-from fastapi import FastAPI, Query, HTTPException, Body, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, Query, HTTPException, Body, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -52,6 +52,16 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Read language cookie for AI prompts
+    @app.middleware("http")
+    async def detect_language(request: Request, call_next):
+        from quickmedia.prompt_config import set_current_language
+        lang = request.cookies.get("qm_lang", "zh")
+        set_current_language(lang)
+        response = await call_next(request)
+        return response
+
     app.extra["db_path"] = db.conn.execute(
         "PRAGMA database_list"
     ).fetchall()[0][2]
@@ -558,7 +568,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             path = _parse_osascript_path(result.stdout)
             if path:
                 return {"path": path}
-            return {"error": "未选择文件夹", "path": None}
+            return {"error": "no_folder_selected", "path": None}
         except FileNotFoundError:
             return {"error": "仅支持 macOS", "path": None}
         except Exception as e:
@@ -576,7 +586,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             path = _parse_osascript_path(result.stdout)
             if path:
                 return {"path": path}
-            return {"error": "未选择文件", "path": None}
+            return {"error": "no_file_selected", "path": None}
         except FileNotFoundError:
             return {"error": "仅支持 macOS", "path": None}
         except Exception as e:
@@ -595,7 +605,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         aid = scanner.scan_file(path)
         if aid:
             return {"ok": True, "asset_id": aid, "message": f"已添加 {os.path.basename(path)}"}
-        return {"ok": False, "error": "添加失败"}
+        return {"ok": False, "error": "add_failed"}
 
     @app.post("/api/scan-folder")
     def scan_single_folder(body: dict):
@@ -912,9 +922,10 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     # ── Prompts ──────────────────────────────────────────────────
 
     @app.get("/api/prompts")
-    def get_prompts():
+    def get_prompts(request: Request):
         from quickmedia.prompt_config import PromptConfig
-        pc = PromptConfig(config_dir=app.extra["config_dir"])
+        lang = request.cookies.get("qm_lang", "zh")
+        pc = PromptConfig(config_dir=app.extra["config_dir"], language=lang)
         return pc.get_all()
 
     @app.put("/api/prompts")

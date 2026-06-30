@@ -94,9 +94,10 @@ class VisionAnalyzer:
     def _build_prompt(self) -> str:
         if self._prompt_config:
             return self._prompt_config.get_prompt(self._prompt_type)
-        from quickmedia.prompt_config import DEFAULT_PROMPTS
-        fmt = "".join(DEFAULT_PROMPTS[self._prompt_type]["system_format"])
-        default = "".join(DEFAULT_PROMPTS[self._prompt_type]["default"])
+        from quickmedia.prompt_config import get_default_prompts, get_current_language as _get_current_lang
+        dc = get_default_prompts(self._prompt_config.language if self._prompt_config else _get_current_lang())
+        fmt = "".join(dc[self._prompt_type]["system_format"])
+        default = "".join(dc[self._prompt_type]["default"])
         return f"{default}\n\n{fmt}"
 
     @staticmethod
@@ -155,9 +156,10 @@ class TextAnalyzer:
         if self._prompt_config:
             prompt = self._prompt_config.get_prompt("text") + f"\n\n文档内容：\n{text[:4000]}"
         else:
-            from quickmedia.prompt_config import DEFAULT_PROMPTS
-            fmt = "".join(DEFAULT_PROMPTS["text"]["system_format"])
-            default = "".join(DEFAULT_PROMPTS["text"]["default"])
+            from quickmedia.prompt_config import get_default_prompts, get_current_language as _get_current_lang
+            dc = get_default_prompts(self._prompt_config.language if self._prompt_config else _get_current_lang())
+            fmt = "".join(dc["text"]["system_format"])
+            default = "".join(dc["text"]["default"])
             prompt = f"{default}\n\n{fmt}\n\n文档内容：\n{text[:4000]}"
         response = self.adapter.chat(prompt)
         return self._parse_response(response)
@@ -167,9 +169,10 @@ class TextAnalyzer:
         if self._prompt_config:
             prompt = self._prompt_config.get_prompt("text")
         else:
-            from quickmedia.prompt_config import DEFAULT_PROMPTS
-            fmt = "".join(DEFAULT_PROMPTS["text"]["system_format"])
-            default = "".join(DEFAULT_PROMPTS["text"]["default"])
+            from quickmedia.prompt_config import get_default_prompts, get_current_language as _get_current_lang
+            dc = get_default_prompts(self._prompt_config.language if self._prompt_config else _get_current_lang())
+            fmt = "".join(dc["text"]["system_format"])
+            default = "".join(dc["text"]["default"])
             prompt = f"{default}\n\n{fmt}"
         response = self.adapter.chat_with_file(prompt, file_path)
         return self._parse_response(response)
@@ -197,9 +200,9 @@ class TextAnalyzer:
         if self._prompt_config:
             prompt = self._prompt_config.get_prompt("speech") + f"\n\n语音转录：\n{transcript[:4000]}"
         else:
-            from quickmedia.prompt_config import DEFAULT_PROMPTS
-            fmt = "".join(DEFAULT_PROMPTS["speech"]["system_format"])
-            default = "".join(DEFAULT_PROMPTS["speech"]["default"])
+            from quickmedia.prompt_config import get_default_prompts, get_current_language as _get_current_lang
+            fmt = "".join(dc["speech"]["system_format"])
+            default = "".join(dc["speech"]["default"])
             prompt = f"{default}\n\n{fmt}\n\n语音转录：\n{transcript[:4000]}"
         response = self.adapter.chat(prompt)
         return self._parse_response(response)

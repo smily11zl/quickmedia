@@ -44,8 +44,8 @@ class AIWorker:
 
     def _pc(self):
         """Reload PromptConfig from disk on each analysis."""
-        from quickmedia.prompt_config import PromptConfig
-        return PromptConfig(self._config_dir) if getattr(self, "_config_dir", None) else None
+        from quickmedia.prompt_config import PromptConfig, get_current_language
+        return PromptConfig(self._config_dir, get_current_language()) if getattr(self, "_config_dir", None) else None
     def _get_adapter(self, task_type: str):
         """Create an adapter for the given task type based on task_models config."""
         # Re-read config from disk to pick up live changes
@@ -65,7 +65,7 @@ class AIWorker:
         binding = self._registry.get_task_binding(task_type)
         if not binding or not binding.get("provider") or not binding.get("model"):
             if task_type == "aggregation":
-                raise RuntimeError("聚合任务需要配置模型，请在设置中绑定")
+                raise RuntimeError("aggregation_no_model")
             # video_vision falls back to vision model
             if task_type == "video_vision":
                 binding = self._registry.get_task_binding("vision")

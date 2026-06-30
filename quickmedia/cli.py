@@ -35,9 +35,15 @@ def main(config_dir: str | None = None):
     elif command == "mcp":
         _cmd_mcp(cfg)
     elif command in ("-h", "--help"):
+        # Support --lang zh for Chinese help
+        if "--lang" in sys.argv:
+            li = sys.argv.index("--lang")
+            if li + 1 < len(sys.argv) and sys.argv[li + 1] == "zh":
+                _print_usage_zh()
+                return
         _print_usage()
     else:
-        print(f"未知命令: {command}")
+        print(f"Unknown command: {command}")
         _print_usage()
 
 
@@ -49,7 +55,27 @@ def _cmd_mcp(cfg):
     mcp_main()
 
 
-def _print_usage():
+def _print_usage() -> None:
+    """Print CLI usage in English."""
+    print("""QuickMedia — Local Asset Manager
+
+Usage:
+  quickmedia stats      Show asset library stats
+  quickmedia scan       Scan assets
+  quickmedia list       List assets
+  quickmedia search     Search assets
+  quickmedia tag        Manage tags
+  quickmedia edit       Edit asset info
+  quickmedia serve      Start Web UI
+  quickmedia paths      Manage watch paths
+  quickmedia config     View/modify config
+
+Options:
+  --lang zh             Show help in Chinese
+""")
+
+def _print_usage_zh() -> None:
+    """Print CLI usage in Chinese."""
     print("""QuickMedia — 本地素材管理工具
 
 用法:
@@ -62,8 +88,10 @@ def _print_usage():
   quickmedia serve      启动 Web UI
   quickmedia paths      管理监控路径
   quickmedia config     查看/修改配置
-""")
 
+选项:
+  --lang zh             显示中文帮助
+""")
 
 def _cmd_stats(db_path: str):
     """Display asset statistics."""

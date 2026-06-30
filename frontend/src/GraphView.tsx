@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect, useMemo, useState, memo } from "react";
+import { useTranslation } from "react-i18next";
 import ForceGraph2D, { type NodeObject } from "react-force-graph-2d";
 import { forceCollide } from "d3-force";
 
@@ -26,9 +27,6 @@ interface Props {
 const ASSET_COLORS: Record<string, string> = {
   image: "#5b9ecf", video: "#c95a8a", audio: "#7eb84a", document: "#c89e40",
 };
-const ASSET_LABELS: Record<string, string> = {
-  image: "图片", video: "视频", audio: "音频", document: "文档",
-};
 
 interface FgNode extends NodeObject {
   label: string;
@@ -41,6 +39,8 @@ interface FgNode extends NodeObject {
 }
 
 function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr, filteredAssets, hasActiveFilter, expandedNodes, onExpandedChange, onReload, onAssetDrop }: Props) {
+  const { t } = useTranslation();
+  const ASSET_LABELS: Record<string, string> = { image: t("asset.type_image"), video: t("asset.type_video"), audio: t("asset.type_audio"), document: t("asset.type_document") };
   const fgRef = useRef<any>(null);
   const expandedRef = useRef(expandedNodes);
   expandedRef.current = expandedNodes;
@@ -138,7 +138,7 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
 
     // ── Unassigned node (pinned far right) ──
     if (graphData.unassigned.length > 0) {
-      if (!nm.has("unassigned")) nm.set("unassigned", { id: "unassigned", label: "未分配", isAgg: true, isUnassigned: true, count: graphData.unassigned.length, x: 700, y: -200 } as FgNode);
+      if (!nm.has("unassigned")) nm.set("unassigned", { id: "unassigned", label: t("common.unassigned"), isAgg: true, isUnassigned: true, count: graphData.unassigned.length, x: 700, y: -200 } as FgNode);
       else nm.get("unassigned")!.count = graphData.unassigned.length;
     } else { nm.delete("unassigned"); }
 
@@ -200,7 +200,7 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
 
     if (newHash !== prevHash) {
       const aggNodes = Array.from(nm.values()).filter((n) => n.isAgg && n.id !== "unassigned");
-      console.log("聚合节点坐标:", aggNodes.map((n) => `${n.label} (${n.x?.toFixed(0)}, ${n.y?.toFixed(0)})`).join(" | "));
+      console.log("Aggregation node pos:", aggNodes.map((n) => `${n.label} (${n.x?.toFixed(0)}, ${n.y?.toFixed(0)})`).join(" | "));
       savedZoom.current = fgRef.current?.zoom?.() || 1;
       try { fgRef.current?.d3Force?.("collision", forceCollide().radius((d: any) => d.isAgg ? 30 : 15)); } catch {}
       setGraphVersion((v) => v + 1);
@@ -301,7 +301,7 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
 
   const handleNodeClick = useCallback((node: FgNode) => {
     if (node.isAgg) {
-      if (node.id === "unassigned") { onSelectNode(null, "未分配"); }
+      if (node.id === "unassigned") { onSelectNode(null, t("common.unassigned")); }
       else if (String(node.id).startsWith("node-")) {
         const nid = parseInt(String(node.id).replace("node-", ""));
         const next = new Set(expandedRef.current);
@@ -399,9 +399,9 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
         cooldownTicks={100} d3VelocityDecay={0.4} d3AlphaDecay={0.015}
       />
       <div style={{ position: "absolute", top: 8, right: 8, zIndex: 10, background: "rgba(250,249,245,0.92)", padding: "8px 12px", borderRadius: 6, border: `1px solid ${S.h}`, fontSize: 12, color: S.m, lineHeight: "20px" }}>
-        <div style={{ fontWeight: 600, color: S.i, marginBottom: 4 }}>图例</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", background: "#e8623a" }} />聚合节点（大小=素材数）</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", border: "2px dashed #6a7a90", background: "#8698b0" }} />未分配节点</div>
+        <div style={{ fontWeight: 600, color: S.i, marginBottom: 4 }}>{t("graph.legend")}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", background: "#e8623a" }} />{t("graph.aggregation_node")}（{t("graph.node_size")}={t("graph.asset_count")}）</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", border: "2px dashed #6a7a90", background: "#8698b0" }} />{t("graph.unassigned_node")}</div>
         {Object.entries(ASSET_COLORS).map(([t, c]) => <div key={t} style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: c }} />{ASSET_LABELS[t] || t}</div>)}
       </div>
       <div style={{ position: "absolute", bottom: 8, left: 8, zIndex: 10, display: "flex", gap: 4 }}>

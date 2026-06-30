@@ -25,7 +25,7 @@ def register_aggregation_routes(app):
             "SELECT 1 FROM aggregation_queue WHERE status IN ('pending','processing')"
         )
         if running:
-            raise HTTPException(status_code=409, detail="已有聚合任务进行中")
+            raise HTTPException(status_code=409, detail="aggregation_running")
         # Clean old task records before starting new one
         db.execute("DELETE FROM aggregation_queue")
         db.execute(
@@ -97,7 +97,7 @@ def register_aggregation_routes(app):
         db = _get_db(app)
         name = body.get("name", "").strip()
         if not name:
-            raise HTTPException(status_code=400, detail="节点名不能为空")
+            raise HTTPException(status_code=400, detail="node_name_required")
         db.execute(
             "INSERT INTO nodes (name, description) VALUES (?,?)",
             (name, body.get("description", "")),
@@ -112,7 +112,7 @@ def register_aggregation_routes(app):
         db = _get_db(app)
         existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
         if not existing:
-            raise HTTPException(status_code=404, detail="节点不存在")
+            raise HTTPException(status_code=404, detail="node_not_found")
         name = body.get("name", "").strip()
         if name:
             db.execute(
@@ -128,7 +128,7 @@ def register_aggregation_routes(app):
         db = _get_db(app)
         existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
         if not existing:
-            raise HTTPException(status_code=404, detail="节点不存在")
+            raise HTTPException(status_code=404, detail="node_not_found")
         db.execute("DELETE FROM node_assets WHERE node_id=?", (node_id,))
         db.execute("DELETE FROM nodes WHERE id=?", (node_id,))
         from quickmedia.api.server import broadcast_graph_changed
@@ -140,7 +140,7 @@ def register_aggregation_routes(app):
         db = _get_db(app)
         existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
         if not existing:
-            raise HTTPException(status_code=404, detail="节点不存在")
+            raise HTTPException(status_code=404, detail="node_not_found")
         asset_ids = body.get("asset_ids", [])
         for aid in asset_ids:
             try:
@@ -170,7 +170,7 @@ def register_aggregation_routes(app):
         db = _get_db(app)
         existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
         if not existing:
-            raise HTTPException(status_code=404, detail="节点不存在")
+            raise HTTPException(status_code=404, detail="node_not_found")
         rows = db.execute(
             "SELECT a.* FROM assets a "
             "JOIN node_assets na ON a.id=na.asset_id "
@@ -205,7 +205,7 @@ def register_aggregation_routes(app):
         db = _get_db(app)
         existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
         if not existing:
-            raise HTTPException(status_code=404, detail="节点不存在")
+            raise HTTPException(status_code=404, detail="node_not_found")
         node_row = db.execute("SELECT * FROM nodes WHERE id=?", (node_id,))[0]
         node_info = dict(node_row)
         print(f"[AnalyzeAppend] 节点: {node_info['name']} (id={node_id})", flush=True)
@@ -245,7 +245,8 @@ def register_aggregation_routes(app):
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
-        prompt = build_append_prompt(node_info, existing_assets, candidate_list)
+        from quickmedia.prompt_config import get_current_language
+        prompt = build_append_prompt(node_info, existing_assets, candidate_list, get_current_language())
         response = adapter.chat(prompt)
 
         # Parse JSON response

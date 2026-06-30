@@ -303,7 +303,7 @@ def delete_asset(asset_id: int = 0, asset_ids: list[int] = None) -> ActionResult
     from quickmedia.asset_ops import delete_asset_full
     ids = asset_ids if asset_ids else [asset_id] if asset_id else []
     if not ids:
-        return ActionResult(ok=False, error="请提供 asset_id 或 asset_ids")
+        return ActionResult(ok=False, error="missing_asset_id")
     results = [delete_asset_full(db, cfg, aid) for aid in ids]
     errors = [r for r in results if not r.get("ok")]
     if errors:
@@ -375,7 +375,7 @@ def create_node(name: str, description: str = "") -> ActionResult:
     """
     db, _, _ = init_db()
     if not name.strip():
-        return ActionResult(ok=False, error="节点名不能为空")
+        return ActionResult(ok=False, error="node_name_required")
     db.execute(
         "INSERT INTO nodes (name, description) VALUES (?,?)",
         (name.strip(), description),
@@ -395,7 +395,7 @@ def update_node(node_id: int, name: str, description: str = "") -> ActionResult:
     db, _, _ = init_db()
     existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
     if not existing:
-        return ActionResult(ok=False, error="节点不存在")
+        return ActionResult(ok=False, error="node_not_found")
     db.execute(
         "UPDATE nodes SET name=?, description=? WHERE id=?",
         (name.strip(), description, node_id),
@@ -414,7 +414,7 @@ def delete_node(node_id: int) -> ActionResult:
     db, _, _ = init_db()
     existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
     if not existing:
-        return ActionResult(ok=False, error="节点不存在")
+        return ActionResult(ok=False, error="node_not_found")
     db.execute("DELETE FROM node_assets WHERE node_id=?", (node_id,))
     db.execute("DELETE FROM nodes WHERE id=?", (node_id,))
     return ActionResult(ok=True, message="已删除节点")
@@ -431,7 +431,7 @@ def add_assets_to_node(node_id: int, asset_ids: list[int]) -> ActionResult:
     db, _, _ = init_db()
     existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
     if not existing:
-        return ActionResult(ok=False, error="节点不存在")
+        return ActionResult(ok=False, error="node_not_found")
     added = 0
     for aid in asset_ids:
         try:
@@ -456,7 +456,7 @@ def remove_assets_from_node(node_id: int, asset_ids: list[int]) -> ActionResult:
     db, _, _ = init_db()
     existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
     if not existing:
-        return ActionResult(ok=False, error="节点不存在")
+        return ActionResult(ok=False, error="node_not_found")
     removed = 0
     for aid in asset_ids:
         db.execute(
@@ -521,7 +521,7 @@ def trigger_scan() -> ActionResult:
     scanner = Scanner(db=db, config=cfg)
     watch_paths = cfg.get("watch_paths") or []
     if not watch_paths:
-        return ActionResult(ok=False, error="未配置监控路径")
+        return ActionResult(ok=False, error="no_watch_paths")
     total_new = 0
     for wp in watch_paths:
         path = _os3.path.expanduser(wp.get("path", "").replace(":", "/"))
@@ -570,7 +570,7 @@ def reanalyze_asset(asset_id: int) -> ActionResult:
     db, cfg, _ = init_db()
     existing = db.execute("SELECT 1 FROM assets WHERE id=?", (asset_id,))
     if not existing:
-        return ActionResult(ok=False, error="素材不存在")
+        return ActionResult(ok=False, error="asset_not_found")
     # Clear old auto tags
     db.execute("DELETE FROM asset_tags WHERE asset_id=? AND source='auto'", (asset_id,))
     # Re-enqueue AI tasks
@@ -601,7 +601,7 @@ def add_asset_tag(asset_id: int, tag_name: str) -> ActionResult:
     db, _, _ = init_db()
     existing = db.execute("SELECT 1 FROM assets WHERE id=?", (asset_id,))
     if not existing:
-        return ActionResult(ok=False, error="素材不存在")
+        return ActionResult(ok=False, error="asset_not_found")
     # Find or create tag
     tag = db.execute("SELECT id FROM tags WHERE name=?", (tag_name,))
     if not tag:
@@ -627,10 +627,10 @@ def remove_asset_tag(asset_id: int, tag_name: str) -> ActionResult:
     db, _, _ = init_db()
     existing = db.execute("SELECT 1 FROM assets WHERE id=?", (asset_id,))
     if not existing:
-        return ActionResult(ok=False, error="素材不存在")
+        return ActionResult(ok=False, error="asset_not_found")
     tag = db.execute("SELECT id FROM tags WHERE name=?", (tag_name,))
     if not tag:
-        return ActionResult(ok=False, error="标签不存在")
+        return ActionResult(ok=False, error="tag_not_found")
     db.execute(
         "DELETE FROM asset_tags WHERE asset_id=? AND tag_id=? AND source='manual'",
         (asset_id, tag[0]["id"]),
@@ -672,7 +672,7 @@ def analyze_append_node(node_id: int) -> ActionResult:
     db, cfg, data_dir = init_db()
     existing = db.execute("SELECT 1 FROM nodes WHERE id=?", (node_id,))
     if not existing:
-        return ActionResult(ok=False, error="节点不存在")
+        return ActionResult(ok=False, error="node_not_found")
 
     node_row = db.execute("SELECT * FROM nodes WHERE id=?", (node_id,))[0]
     node_info = dict(node_row)
@@ -704,7 +704,7 @@ def analyze_append_node(node_id: int) -> ActionResult:
     registry = ProviderRegistry(cfg, models_path)
     binding = registry.get_task_binding("aggregation")
     if not binding:
-        return ActionResult(ok=False, error="未配置聚合模型，请在设置中绑定")
+        return ActionResult(ok=False, error="aggregation_no_binding")
     provider = registry.get_provider(binding["provider"]) or {}
     url = provider.get("url", "")
     api_key = ""

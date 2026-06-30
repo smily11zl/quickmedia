@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 const S = {c:"#faf9f5",h:"#e6dfd8",d:"#efe9de",s:"#f5f0e8",i:"#141413",b:"#3d3d3a",m:"#6c6a64",ms:"#8e8b82",r:"#cc785c",rb:"rgba(204,120,92,0.08)",w:"#fff"};
 
@@ -24,6 +25,7 @@ interface Props {
 }
 
 function AddAssetModal({ nodeId, nodeName, onClose, onAdded, mode = "add" }: Props) {
+  const { t } = useTranslation();
   const [allAssets, setAllAssets] = useState<Asset[]>([]);
   const [filtered, setFiltered] = useState<Asset[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -108,14 +110,14 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded, mode = "add" }: Pro
       <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(250,249,245,0.7)" }}>
         <div className="rounded-xl p-5 w-[480px] max-h-[80vh] flex flex-col shadow-lg border" style={{ backgroundColor: S.c, borderColor: S.h }}>
           <h3 className="text-sm font-medium mb-3" style={{ color: S.i }}>
-            {mode === "remove" ? `从 "${nodeName}" 移除素材` : `添加素材到 "${nodeName}"`}
+            {mode === "remove" ? t("add_asset.remove_from", {name: nodeName}) : t("add_asset.add_to", {name: nodeName})}
           </h3>
 
           {/* Search */}
           <div className="relative mb-3">
             <input
               type="text"
-              placeholder="搜索素材..."
+              placeholder={t("add_asset.search_placeholder")}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="w-full px-3 py-1.5 text-sm rounded-md outline-none border"
@@ -129,10 +131,10 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded, mode = "add" }: Pro
           {/* Select toolbar */}
           <div className="flex items-center gap-2 mb-2">
             <button onClick={selectAll} className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: S.s, color: S.m }}>
-              {selected.size === filtered.length && filtered.length > 0 ? "取消全选" : "全选"}
+              {selected.size === filtered.length && filtered.length > 0 ? t("add_asset.deselect_all") : t("add_asset.select_all")}
             </button>
             <span className="text-[10px]" style={{ color: S.ms }}>
-              已选 {selected.size} / {filtered.length}
+              {t("add_asset.selected_count", {selected: selected.size, total: filtered.length})}
             </span>
           </div>
 
@@ -160,7 +162,7 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded, mode = "add" }: Pro
                 </div>
               ))}
               {filtered.length === 0 && (
-                <p className="text-xs text-center py-4" style={{ color: S.ms }}>无匹配素材</p>
+                <p className="text-xs text-center py-4" style={{ color: S.ms }}>{t("add_asset.no_match")}</p>
               )}
             </div>
           </div>
@@ -168,7 +170,7 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded, mode = "add" }: Pro
           {/* Buttons */}
           <div className="flex gap-2 justify-end">
             <button onClick={onClose} className="text-xs px-3 py-1.5 rounded-md" style={{ backgroundColor: S.s, color: S.m }}>
-              取消
+              {t("common.cancel")}
             </button>
             <button
               onClick={submit}
@@ -177,8 +179,8 @@ function AddAssetModal({ nodeId, nodeName, onClose, onAdded, mode = "add" }: Pro
               style={{ backgroundColor: selected.size > 0 ? S.r : S.s, color: selected.size > 0 ? S.w : S.ms, cursor: selected.size > 0 ? "pointer" : "not-allowed" }}
             >
               {mode === "remove"
-                ? (loading ? "移除中..." : `确认移除 (${selected.size})`)
-                : (loading ? "添加中..." : `确认添加 (${selected.size})`)}
+                ? (loading ? t("add_asset.removing") : t("add_asset.confirm_remove", {count: selected.size}))
+                : (loading ? t("add_asset.adding") : t("add_asset.confirm_add", {count: selected.size}))}
             </button>
           </div>
         </div>

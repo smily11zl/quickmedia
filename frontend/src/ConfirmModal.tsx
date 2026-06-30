@@ -1,4 +1,5 @@
 const S = { c: "#faf9f5", h: "#e6dfd8", i: "#141413", m: "#6c6a64", ms: "#8e8b82", r: "#cc785c", w: "#fff" };
+import { useTranslation } from "react-i18next";
 const CORAL = "#cc785c";
 const ERROR = "#c64545";
 const DISABLED = "#e6dfd8";
@@ -17,13 +18,14 @@ interface Props {
 export default function ConfirmModal({
   title,
   message,
-  confirmText = "确认",
-  cancelText = "取消",
+  confirmText = "",
+  cancelText = "",
   confirmColor = "coral",
   loading = false,
   onConfirm,
   onCancel,
 }: Props) {
+  const { t } = useTranslation();
   const color = confirmColor === "error" ? ERROR : CORAL;
 
   return (
@@ -55,7 +57,7 @@ export default function ConfirmModal({
                 backgroundColor: S.c,
               }}
             >
-              {cancelText}
+              {(cancelText || t("common.cancel"))}
             </button>
             <button
               onClick={onConfirm}
@@ -68,7 +70,7 @@ export default function ConfirmModal({
                 color: S.w,
               }}
             >
-              {loading ? "处理中..." : confirmText}
+              {loading ? t("common.processing") : confirmText}
             </button>
           </div>
         </div>

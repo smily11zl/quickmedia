@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import ModelManager from "./ModelManager";
 import SettingsModal from "./SettingsModal";
 import SimilarPanel from "./SimilarPanel";
@@ -25,7 +27,7 @@ interface TagInfo { id: number; name: string; count: number; }
 const f=(b:number)=>{for(const u of["B","KB","MB","GB"]){if(b<1024)return `${b}${u}`;b=Math.floor(b/1024);}return `${b}TB`;};
 const S={c:"#faf9f5",h:"#e6dfd8",d:"#efe9de",s:"#f5f0e8",i:"#141413",b:"#3d3d3a",m:"#6c6a64",ms:"#8e8b82",r:"#cc785c",rb:"rgba(204,120,92,0.08)",w:"#fff"};
 const docI=(a:Asset)=>{const x=a.filename.split(".").pop()?.toLowerCase()||"";const m:Record<string,string>={pdf:"📕",md:"📝",txt:"📝",csv:"📊",json:"📋",xlsx:"📊",docx:"📄"};return m[x]||"📄";};
-const aiT=(s?:string)=>{if(!s||s==="-")return null;const m:{[k:string]:string}={done:"已完成",processing:"分析中...",pending:"等待分析",failed:"失败"};return <span className="text-[10px]" style={{color:S.ms}}>{m[s]||s}</span>;};
+const aiT=(s?:string)=>{if(!s||s==="-")return null;const m:{[k:string]:string}={done:i18n.t("asset.detail_ai_done"),processing:i18n.t("asset.detail_ai_processing"),pending:i18n.t("asset.detail_ai_pending"),failed:i18n.t("asset.detail_ai_failed")};return <span className="text-[10px]" style={{color:S.ms}}>{m[s]||s}</span>;};
 
 const DocPreview = ({id}:{id:number}) => {
   const [txt,setTxt]=useState("");
@@ -71,6 +73,7 @@ function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
   const [selectedNodeName, setSelectedNodeName] = useState<string>("");
   const [scm, sscm] = useState(false);
+  const { t } = useTranslation();
   const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
   const [graphData, setGraphData] = useState({nodes:[] as any[],edges:[] as any[],unassigned:[] as any[]});
   const [graphKey, setGraphKey] = useState(0);
@@ -93,7 +96,7 @@ function App() {
     if(smode==="ai"){sslc(true);setSelectedNodeId(null);setSelectedNodeName("");fetch(`/api/search?q=${encodeURIComponent(q)}&mode=ai`).then(r=>r.json()).then(d=>{const items=d.items||[];sa(items);if(d.counts)setCounts(d.counts);sr(items);sds(true);}).catch(()=>setToast({message:"AI \u641c\u7d22\u5931\u8d25",type:"error"})).finally(()=>sslc(false));return;}
     sslc(true);
     setSelectedNodeId(null); setSelectedNodeName("");
-    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{if(d.warning){setToast({message:d.warning,type:"info"});sslc(false);return;}const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);}}).catch(()=>{if(smode==="ai")setToast({message:"AI 搜索失败",type:"error"});}).finally(()=>sslc(false));
+    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{if(d.warning){setToast({message:d.warning,type:"info"});sslc(false);return;}const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);}}).catch(()=>{if(smode==="ai")setToast({message:t("search.ai_failed"),type:"error"});}).finally(()=>sslc(false));
   };
   const fa=()=>{const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>{sa(d.items); if(d.counts)setCounts(d.counts);});};
   useEffect(()=>{if(didSearch||selectedNodeId)return;fa();},[tf,ff,af,df,mf,tgf]);useEffect(()=>{const u=async()=>{const r=await fetch("/api/assets?limit=500");const d=await r.json();const m:Record<number,any>={};d.items.forEach((a:any)=>m[a.id]=a);sa((p:any[])=>{let c=false;const n=p.map(a=>{const f=m[a.id];if(f&&a.ai_status!==f.ai_status){c=true;return{...a,ai_status:f.ai_status,analyzed_at:f.analyzed_at};}return a;});return c?n:p;});};const i=setInterval(u,3000);return ()=>clearInterval(i);},[]);
@@ -149,7 +152,7 @@ function App() {
   const bRe=()=>{fetch("/api/assets/batch-reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({asset_ids:[...ms]})}).then(()=>{sm(new Set());});};
   const delA=(id:number)=>{fetch(`/api/assets/${id}`,{method:"DELETE"}).then(()=>{sl(null);fa();});};
 
-  const types=[{k:null,l:"全部素材",n:counts.image+counts.video+counts.audio+counts.document},{k:"image",l:"图片",n:counts.image},{k:"video",l:"视频",n:counts.video},{k:"audio",l:"音频",n:counts.audio},{k:"document",l:"文档",n:counts.document}];
+  const types=[{k:null,l:t("asset.filter_all"),n:counts.image+counts.video+counts.audio+counts.document},{k:"image",l:t("asset.type_image"),n:counts.image},{k:"video",l:t("asset.type_video"),n:counts.video},{k:"audio",l:t("asset.type_audio"),n:counts.audio},{k:"document",l:t("asset.type_document"),n:counts.document}];
   const hl=(text:string):any=>{if(!q)return text;const i=text.toLowerCase().indexOf(q.toLowerCase());if(i<0)return text;return <>{text.slice(0,i)}<span style={{color:S.r,fontWeight:600}}>{text.slice(i,i+q.length)}</span>{text.slice(i+q.length)}</>;};
 
   return (
@@ -157,44 +160,44 @@ function App() {
       <aside className="w-64 flex flex-col gap-0.5 p-4 border-r overflow-y-auto" style={{borderColor:S.h}}>
         <h1 style={{fontFamily:"'Tiempos Headline',Garamond,serif",fontSize:22,fontWeight:400,color:S.i}} className="mb-4">QuickMedia</h1>
         <div className="flex gap-0 mb-3">
-          <button onClick={()=>setActiveTab("search")} className="flex-1 text-xs py-1.5 rounded-t-md font-medium" style={{fontFamily:"'Inter',sans-serif",backgroundColor:activeTab==="search"?S.d:"transparent",color:activeTab==="search"?S.i:S.ms,borderBottom:activeTab==="search"?`2px solid ${S.r}`:"2px solid transparent"}}>搜索筛选</button>
-          <button onClick={()=>setActiveTab("nodes")} className="flex-1 text-xs py-1.5 rounded-t-md font-medium" style={{fontFamily:"'Inter',sans-serif",backgroundColor:activeTab==="nodes"?S.d:"transparent",color:activeTab==="nodes"?S.i:S.ms,borderBottom:activeTab==="nodes"?`2px solid ${S.r}`:"2px solid transparent"}}>聚合节点</button>
+          <button onClick={()=>setActiveTab("search")} className="flex-1 text-xs py-1.5 rounded-t-md font-medium" style={{fontFamily:"'Inter',sans-serif",backgroundColor:activeTab==="search"?S.d:"transparent",color:activeTab==="search"?S.i:S.ms,borderBottom:activeTab==="search"?`2px solid ${S.r}`:"2px solid transparent"}}>{t("search.tab_filter")}</button>
+          <button onClick={()=>setActiveTab("nodes")} className="flex-1 text-xs py-1.5 rounded-t-md font-medium" style={{fontFamily:"'Inter',sans-serif",backgroundColor:activeTab==="nodes"?S.d:"transparent",color:activeTab==="nodes"?S.i:S.ms,borderBottom:activeTab==="nodes"?`2px solid ${S.r}`:"2px solid transparent"}}>{t("search.tab_nodes")}</button>
         </div>
         {activeTab==="search" ? (
         <>
         <div className="flex flex-col gap-1 mb-3">
           <div className="relative w-full">
-            <input type="text" placeholder="搜索..." value={q} onChange={e=>sq(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()} className="w-full px-3 py-1.5 text-sm rounded-md outline-none pr-6" style={{fontFamily:"'Inter',sans-serif",backgroundColor:S.c,border:`1px solid ${S.h}`,color:S.i}}/>
+            <input type="text" placeholder={t("search.placeholder")} value={q} onChange={e=>sq(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()} className="w-full px-3 py-1.5 text-sm rounded-md outline-none pr-6" style={{fontFamily:"'Inter',sans-serif",backgroundColor:S.c,border:`1px solid ${S.h}`,color:S.i}}/>
             {q&&<button onClick={()=>{sq("");sr([]);sds(false);fa();}} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{color:S.ms}}>✕</button>}
           </div>
           <div className="flex gap-1">
             <select value={smode} onChange={e=>{const v=e.target.value;if(v==="ai"&&!aiSearchReady){setToast({message:"AI \u641c\u7d22\u672a\u914d\u7f6e\u6a21\u578b\uff0c\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u7ed1\u5b9a",type:"info"});setSettingsTab("models");sso(true);return;}ssmode(v as any);}} className="flex-1 text-[11px] px-1 py-1.5 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
               <option value="ai">AI {!aiSearchReady?'🔴':''}</option>
-              <option value="combined">语义（K聚合）</option>
-              <option value="semantic">语义（纯向量）</option>
-              <option value="keyword">关键词</option>
+              <option value="combined">{t("search.mode_combined")}</option>
+              <option value="semantic">{t("search.mode_semantic")}</option>
+              <option value="keyword">{t("search.mode_keyword")}</option>
             </select>
-            <button onClick={doSearch} className="text-[11px] px-3 py-1 rounded-md" style={{backgroundColor:S.r,color:S.w}}>搜索</button>
+            <button onClick={doSearch} className="text-[11px] px-3 py-1 rounded-md" style={{backgroundColor:S.r,color:S.w}}>{t("common.search")}</button>
           </div>
         </div>
-        <div className="text-xs mb-1" style={{color:S.ms}}>类型</div>
+        <div className="text-xs mb-1" style={{color:S.ms}}>{t("asset.filter_type")}</div>
         {types.map(t=>(<button key={t.l} onClick={()=>{stf(t.k);sgf(null);}} className="text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",backgroundColor:tf===t.k?S.d:"transparent",color:tf===t.k?S.i:S.m,fontWeight:tf===t.k?500:400}}>{t.l}<span className="float-right opacity-50">({t.n})</span></button>))}
-        <div className="text-xs mb-1 mt-3" style={{color:S.ms}}>创建时间</div>
+        <div className="text-xs mb-1 mt-3" style={{color:S.ms}}>{t("asset.filter_created")}</div>
         <div className="flex gap-1 items-center">
           <input type="date" value={df.from} onChange={e=>{sdf({...df,from:e.target.value});}} className="flex-1 px-1 py-0.5 rounded border text-[11px]" style={{borderColor:S.h,color:S.i,backgroundColor:S.c}}/>
           <span className="text-[10px]" style={{color:S.ms}}>~</span>
           <input type="date" value={df.to} onChange={e=>{sdf({...df,to:e.target.value});}} className="flex-1 px-1 py-0.5 rounded border text-[11px]" style={{borderColor:S.h,color:S.i,backgroundColor:S.c}}/>
         </div>
-        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>修改时间</div>
+        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>{t("asset.filter_modified")}</div>
         <div className="flex gap-1 items-center">
           <input type="date" value={mf.from} onChange={e=>{smf({...mf,from:e.target.value});}} className="flex-1 px-1 py-0.5 rounded border text-[11px]" style={{borderColor:S.h,color:S.i,backgroundColor:S.c}}/>
           <span className="text-[10px]" style={{color:S.ms}}>~</span>
           <input type="date" value={mf.to} onChange={e=>{smf({...mf,to:e.target.value});}} className="flex-1 px-1 py-0.5 rounded border text-[11px]" style={{borderColor:S.h,color:S.i,backgroundColor:S.c}}/>
         </div>
-        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>格式</div>
+        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>{t("asset.filter_format")}</div>
         <div className="relative">
           <button onClick={()=>sfop(!fop)} className="w-full flex items-center justify-between px-2 py-1 rounded border text-xs" style={{borderColor:ff.size>0?S.r:S.h,color:ff.size>0?S.r:S.ms,backgroundColor:S.c}}>
-            <span>{ff.size>0?`已选 ${ff.size} 项`:"点击筛选"}</span>
+            <span>{ff.size>0?`已选 ${ff.size} 项`:t("asset.filter_select")}</span>
             {ff.size>0&&<span onClick={e=>{e.stopPropagation();sf(new Set());}} className="ml-1 text-[10px]" style={{color:S.ms}}>✕</span>}
           </button>
           {fop&&<div className="fixed inset-0 z-[5]" onClick={()=>sfop(false)}/>}
@@ -202,21 +205,21 @@ function App() {
             {fmts.map(f=><button key={f} onClick={()=>{const n=new Set(ff);n.has(f)?n.delete(f):n.add(f);sf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(ff.has(f)?"font-medium":"")} style={{color:ff.has(f)?S.r:S.ms,backgroundColor:ff.has(f)?S.rb:"transparent"}}>{f.toUpperCase()}</button>)}
           </div>}
         </div>
-        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>AI 状态</div>
+        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>{t("asset.filter_ai")}</div>
         <div className="relative">
           <button onClick={()=>saop(!aop)} className="w-full flex items-center justify-between px-2 py-1 rounded border text-xs" style={{borderColor:af.size>0?S.r:S.h,color:af.size>0?S.r:S.ms,backgroundColor:S.c}}>
-            <span>{af.size>0?`已选 ${af.size} 项`:"点击筛选"}</span>
+            <span>{af.size>0?`已选 ${af.size} 项`:t("asset.filter_select")}</span>
             {af.size>0&&<span onClick={e=>{e.stopPropagation();saf(new Set());}} className="ml-1 text-[10px]" style={{color:S.ms}}>✕</span>}
           </button>
           {aop&&<div className="fixed inset-0 z-[5]" onClick={()=>saop(false)}/>}
           {aop&&<div className="absolute top-full left-0 right-0 mt-1 p-2 rounded border shadow-sm z-10 flex gap-1 flex-wrap" style={{borderColor:S.h,backgroundColor:S.c}}>
-            {[{k:"done",l:"已完成"},{k:"processing",l:"分析中"},{k:"pending",l:"等待"},{k:"failed",l:"失败"}].map(s=><button key={s.k} onClick={()=>{const n=new Set(af);n.has(s.k)?n.delete(s.k):n.add(s.k);saf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(af.has(s.k)?"font-medium":"")} style={{color:af.has(s.k)?S.r:S.ms,backgroundColor:af.has(s.k)?S.rb:"transparent"}}>{s.l}</button>)}
+            {[{k:"done",l:t("asset.detail_ai_done")},{k:"processing",l:t("asset.detail_ai_processing")},{k:"pending",l:t("asset.detail_ai_pending")},{k:"failed",l:t("asset.detail_ai_failed")}].map(s=><button key={s.k} onClick={()=>{const n=new Set(af);n.has(s.k)?n.delete(s.k):n.add(s.k);saf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(af.has(s.k)?"font-medium":"")} style={{color:af.has(s.k)?S.r:S.ms,backgroundColor:af.has(s.k)?S.rb:"transparent"}}>{s.l}</button>)}
           </div>}
         </div>
-        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>标签</div>
+        <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>{t("asset.filter_tags")}</div>
         <div className="relative">
           <button onClick={()=>stop(!top)} className="w-full flex items-start justify-between px-2 py-1 rounded border text-xs min-h-[28px]" style={{borderColor:tgf.size>0?S.r:S.h,color:tgf.size>0?S.r:S.ms,backgroundColor:S.c}}>
-            <span className="text-left leading-relaxed flex-1">{tgf.size>0?<>{tg.filter(t=>tgf.has(t.id)).map(t=>t.name).join("，")}<span className="ml-1" style={{color:S.ms}}>({tgf.size})</span></>:"点击筛选"}</span>
+            <span className="text-left leading-relaxed flex-1">{tgf.size>0?<>{tg.filter(t=>tgf.has(t.id)).map(t=>t.name).join("，")}<span className="ml-1" style={{color:S.ms}}>({tgf.size})</span></>:t("asset.filter_select")}</span>
             <span className="flex items-center gap-1 ml-1 flex-shrink-0">
               {tgf.size>0&&<span onClick={e=>{e.stopPropagation();stgf(new Set());}} className="text-[10px]" style={{color:S.ms}}>✕</span>}
             </span>
@@ -224,8 +227,8 @@ function App() {
           {top&&<div className="fixed inset-0 z-[5]" onClick={()=>stop(false)}/>}
           {top&&<div className="absolute top-full left-0 right-0 mt-1 p-2 rounded border shadow-sm z-10 max-h-64 overflow-y-auto" style={{borderColor:S.h,backgroundColor:S.c}}>
             <div className="flex justify-between items-center mb-1">
-              <span className="text-[10px]" style={{color:S.ms}}>{tgf.size>0?`已选 ${tgf.size} 个`:"全部标签"}</span>
-              {tgf.size>0&&<button onClick={()=>{stgf(new Set());}} className="text-[10px] px-1.5 py-0.5 rounded" style={{color:S.r,backgroundColor:S.rb}}>清除全部</button>}
+              <span className="text-[10px]" style={{color:S.ms}}>{tgf.size>0?t("filter.selected",{count: tgf.size}):t("filter.all_tags")}</span>
+              {tgf.size>0&&<button onClick={()=>{stgf(new Set());}} className="text-[10px] px-1.5 py-0.5 rounded" style={{color:S.r,backgroundColor:S.rb}}>{t("filter.clear_all")}</button>}
             </div>
             <div className="flex gap-1 flex-wrap">
               {tg.filter(t=>t.count>0).sort((a,b)=>b.count-a.count).map(t=><button key={t.id} onClick={()=>{const n=new Set(tgf);n.has(t.id)?n.delete(t.id):n.add(t.id);stgf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(tgf.has(t.id)?"font-medium":"")} style={{color:tgf.has(t.id)?S.r:S.ms,backgroundColor:tgf.has(t.id)?S.rb:"transparent"}}>{t.name}</button>)}
@@ -237,45 +240,45 @@ function App() {
           <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} refreshKey={nodeRefreshKey} onGraphRefresh={(newNodeId?:number)=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);if(newNodeId)setExpandedNodes((prev:Set<number>)=>new Set(prev).add(newNodeId));else setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));});}} onGraphFullReload={()=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));setGraphKey(k=>k+1);});}} onSelectAsset={(aid:number)=>{selA(aid);}} onOpenSettings={(tab:string)=>{setSettingsTab(tab);sso(true);}} selectedAssetId={sel?.id} unassigned={graphData.unassigned} />
         )}
         <div className="mt-auto pt-4 flex flex-col gap-1 relative" style={{borderTop:`1px solid ${S.h}`}}>
-          <button onClick={()=>sscm(!scm)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 扫描新素材</button>
+          <button onClick={()=>sscm(!scm)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 {t("common.scan")}</button>
           {scm&&<div className="fixed inset-0 z-[5]" onClick={()=>sscm(false)}/>}
           {scm&&<div className="absolute bottom-full left-0 right-0 mb-1 p-2 rounded border shadow-sm z-10 flex flex-col gap-0.5" style={{borderColor:S.h,backgroundColor:S.c}}>
-            <button onClick={()=>{sscm(false);fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0){setToast({message:"请先配置扫描文件夹",type:"error"});sso(true);}else{fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();})}})}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📂 扫描配置路径</button>
-            <button onClick={()=>{sscm(false);fetch("/api/file-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-file",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📄 选择文件</button>
-            <button onClick={()=>{sscm(false);fetch("/api/folder-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📁 选择文件夹</button>
+            <button onClick={()=>{sscm(false);fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0){setToast({message:t("scan.no_folders"),type:"error"});sso(true);}else{fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();})}})}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📂 {t("scan.scan_folder")}</button>
+            <button onClick={()=>{sscm(false);fetch("/api/file-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-file",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📄 {t("scan.select_file")}</button>
+            <button onClick={()=>{sscm(false);fetch("/api/folder-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📁 {t("scan.select_folder")}</button>
           </div>}
-          <button onClick={()=>sso(true)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>⚙ 设置{missingConfig?<span className="w-2 h-2 rounded-full inline-block ml-1" style={{backgroundColor:"#c64545"}}></span>:null}</button>
+          <button onClick={()=>sso(true)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>⚙ {t("common.settings")}{missingConfig?<span className="w-2 h-2 rounded-full inline-block ml-1" style={{backgroundColor:"#c64545"}}></span>:null}</button>
         </div>
       </aside>
-      {slc && <div className="fixed inset-0 z-40 flex items-center justify-center" style={{backgroundColor: "rgba(250,249,245,0.7)"}}><div className="text-center"><div className="animate-spin text-2xl mb-2">⏳</div><p className="text-sm" style={{color: "#6c6a64"}}>搜索中...</p></div></div>}
+      {slc && <div className="fixed inset-0 z-40 flex items-center justify-center" style={{backgroundColor: "rgba(250,249,245,0.7)"}}><div className="text-center"><div className="animate-spin text-2xl mb-2">⏳</div><p className="text-sm" style={{color: "#6c6a64"}}>{t("search.searching")}</p></div></div>}
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="px-6 pt-4 pb-2">
-        {ms.size>0&&<div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{backgroundColor:S.d}}><span className="text-xs" style={{color:S.b}}>已选 {ms.size} 个</span><button onClick={()=>sm(new Set(fs.map(a=>a.id)))} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>全选</button><button onClick={()=>sm(new Set())} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>取消选择</button><button onClick={bRe} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>重新分析已选</button></div>}
+        {ms.size>0&&<div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{backgroundColor:S.d}}><span className="text-xs" style={{color:S.b}}>已选 {ms.size} 个</span><button onClick={()=>sm(new Set(fs.map(a=>a.id)))} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>{t("batch.select_all")}</button><button onClick={()=>sm(new Set())} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>{t("batch.deselect")}</button><button onClick={bRe} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>{t("batch.reanalyze")}</button></div>}
         <div className="flex gap-2 mb-4 items-center">
           <div className="flex gap-1 rounded-md p-0.5" style={{backgroundColor:S.s}}>
-            <button onClick={()=>sv("grid")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="grid"?S.c:"transparent",color:S.i}}>▦ 网格</button>
-            <button onClick={()=>sv("list")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="list"?S.c:"transparent",color:S.i}}>☰ 列表</button>
-            <button onClick={()=>sv("graph")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:(vw as string)==="graph"?S.c:"transparent",color:S.i}}>☁ 云图</button>
+            <button onClick={()=>sv("grid")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="grid"?S.c:"transparent",color:S.i}}>{t("view.grid")}</button>
+            <button onClick={()=>sv("list")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="list"?S.c:"transparent",color:S.i}}>{t("view.list")}</button>
+            <button onClick={()=>sv("graph")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:(vw as string)==="graph"?S.c:"transparent",color:S.i}}>{t("view.graph")}</button>
           </div>
           <select value={sb} onChange={e=>ssb(e.target.value as any)} disabled={!!(q && smode!=="keyword")} className="text-xs px-2 py-1 rounded-md outline-none" style={!!(q && smode!=="keyword")?{border:"1px solid #e8e4dd",color:"#bcb8b2",backgroundColor:"#f5f2ed",cursor:"not-allowed",opacity:0.6}:{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
-            <option value="name">按名称</option><option value="size">按大小</option><option value="date">按时间</option>
+            <option value="name">{t("common.sort_name")}</option><option value="size">{t("common.sort_size")}</option><option value="date">{t("common.sort_date")}</option>
           </select>
-          {qStat.processing_name && <span className="text-[10px]" style={{color: '#e8a55a'}}>分析中: {qStat.processing_name}</span>}
-          {qStat.pending > 0 && <span className="text-[10px]" style={{color: S.ms}}>{qStat.pending} 个待分析</span>}
-          <span className="text-xs ml-auto" style={{color:S.ms}}>{fs.length} 个素材</span>
+          {qStat.processing_name && <span className="text-[10px]" style={{color: '#e8a55a'}}>{t("queue.processing")}: {qStat.processing_name}</span>}
+          {qStat.pending > 0 && <span className="text-[10px]" style={{color: S.ms}}>{t("queue.pending_count",{count: qStat.pending})}</span>}
+          <span className="text-xs ml-auto" style={{color:S.ms}}>{t("common.item_count",{count: fs.length})}</span>
         </div>
         {vw!=="graph"&&selectedNodeId && (
           <div className="flex items-center gap-2 mb-3 px-3 py-1.5 rounded-md" style={{backgroundColor:S.rb, borderLeft:`3px solid ${S.r}`}}>
             <span className="text-xs" style={{color:S.r, fontFamily:"'Inter',sans-serif"}}>
-              📌 节点: "{selectedNodeName}"
+              {t("node_filter.label",{name: selectedNodeName})}
             </span>
             <button
               onClick={()=>{setSelectedNodeId(null);setSelectedNodeName("");fa();}}
               className="text-xs px-2 py-0.5 rounded ml-auto font-medium"
               style={{color:S.r}}
-              title="清除节点筛选"
+              title={t("node_filter.clear_title")}
             >
-              ✕ 清除
+              ✕ {t("node_filter.clear_text")}
             </button>
           </div>
         )}
@@ -341,7 +344,7 @@ function App() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {fs.map(a=>(<div key={a.id} onClick={()=>selA(a.id)} draggable onDragStart={(e)=>{e.dataTransfer.setData("text/plain",JSON.stringify({asset_id:a.id,source_node_id:null,filename:a.filename}));e.dataTransfer.effectAllowed="move";}} className="rounded-xl overflow-hidden cursor-pointer transition-shadow hover:shadow-sm relative" style={{backgroundColor:S.c,border:sel?.id===a.id?`2px solid ${S.r}`:`1px solid ${S.h}`}}>
               <div className="aspect-square flex flex-col items-center justify-center relative" style={{backgroundColor:S.s}}>
-                {a.thumbnail_status==="done"?<img src={`/api/thumbnails/${a.id}?t=${a.modified_at||''}`} className="w-full h-full object-cover"/>:a.asset_type==="image"?<span className="text-sm animate-pulse" style={{color:S.m}}>生成中...</span>:<>
+                {a.thumbnail_status==="done"?<img src={`/api/thumbnails/${a.id}?t=${a.modified_at||''}`} className="w-full h-full object-cover"/>:a.asset_type==="image"?<span className="text-sm animate-pulse" style={{color:S.m}}>{t("common.generating")}</span>:<>
                   <span className="text-4xl">{a.asset_type==="video"?"🎬":a.asset_type==="audio"?"🎵":a.asset_type==="document"?docI(a):"📄"}</span>
                   {a.asset_type==="document" && <DocPreview id={a.id} />}
                 </>}
@@ -364,35 +367,35 @@ function App() {
             </div>))}
           </div>
         )}
-        {fs.length===0&&<div className="text-center mt-20"><p className="text-4xl mb-4">📁</p><p style={{fontFamily:"'Inter',sans-serif",color:S.b}}>暂无素材</p><p className="text-sm mt-2" style={{color:S.m}}>运行 quickmedia scan 来扫描素材</p></div>}
+        {fs.length===0&&<div className="text-center mt-20"><p className="text-4xl mb-4">📁</p><p style={{fontFamily:"'Inter',sans-serif",color:S.b}}>{t("detail.empty_title")}</p><p className="text-sm mt-2" style={{color:S.m}}>t("detail.empty_hint")</p></div>}
         </div>
         </div>
       </main>
       {sel&&<aside className="w-80 border-l overflow-y-auto p-4 flex flex-col gap-3" style={{borderColor:S.h,backgroundColor:S.c}}>
-        <div className="flex justify-between items-center"><h2 className="text-sm font-medium truncate flex-1" style={{fontFamily:"'Inter',sans-serif",color:S.i}}>{sel.filename}</h2><button onClick={()=>setConfirmDeleteAsset(sel)} className="text-xs px-1.5 py-0.5 rounded" style={{color:S.r}} title="删除">🗑</button><button onClick={()=>sl(null)} className="text-lg leading-none px-1" style={{color:S.ms}}>✕</button></div>
+        <div className="flex justify-between items-center"><h2 className="text-sm font-medium truncate flex-1" style={{fontFamily:"'Inter',sans-serif",color:S.i}}>{sel.filename}</h2><button onClick={()=>setConfirmDeleteAsset(sel)} className="text-xs px-1.5 py-0.5 rounded" style={{color:S.r}} title={t("asset.detail_delete_btn")}>🗑</button><button onClick={()=>sl(null)} className="text-lg leading-none px-1" style={{color:S.ms}}>✕</button></div>
         {sel.thumbnail_status==="done"?<img src={`/api/thumbnails/${sel.id}?t=${sel.modified_at||''}`} className="w-full rounded-lg" style={{border:`1px solid ${S.h}`}}/>:<div className="w-full aspect-square rounded-lg flex items-center justify-center" style={{backgroundColor:S.s}}><span className="text-5xl">{sel.asset_type==="video"?"🎬":sel.asset_type==="audio"?"🎵":sel.asset_type==="document"?docI(sel):"📄"}</span></div>}
-        <div><div className="text-[11px] mb-0.5" style={{color:S.ms}}>路径 <span onClick={()=>fetch("/api/finder/open",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:sel.path})})} className="cursor-pointer ml-1" title="在 Finder 中打开">📂</span></div><p className="text-xs break-all" style={{color:S.b}}>{sel.path}</p></div>
+        <div><div className="text-[11px] mb-0.5" style={{color:S.ms}}>{t("asset.detail_path")} <span onClick={()=>fetch("/api/finder/open",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:sel.path})})} className="cursor-pointer ml-1" title={t("asset.detail_open")}>📂</span></div><p className="text-xs break-all" style={{color:S.b}}>{sel.path}</p></div>
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div><span style={{color:S.ms}}>类型</span><p style={{color:S.b}}>{sel.asset_type}</p></div>
-          <div><span style={{color:S.ms}}>大小</span><p style={{color:S.b}}>{f(sel.size)}</p></div>
-          {sel.width&&sel.height&&<div><span style={{color:S.ms}}>尺寸</span><p style={{color:S.b}}>{sel.width}×{sel.height}</p></div>}
-          {sel.duration&&<div><span style={{color:S.ms}}>时长</span><p style={{color:S.b}}>{Math.round(sel.duration)}秒</p></div>}
-          {sel.modified_at&&<div><span style={{color:S.ms}}>修改时间</span><p style={{color:S.b}}>{sel.modified_at.slice(0,10)}</p></div>}
+          <div><span style={{color:S.ms}}>{t("asset.detail_type")}</span><p style={{color:S.b}}>{sel.asset_type}</p></div>
+          <div><span style={{color:S.ms}}>{t("asset.detail_size")}</span><p style={{color:S.b}}>{f(sel.size)}</p></div>
+          {sel.width&&sel.height&&<div><span style={{color:S.ms}}>{t("asset.detail_dimensions")}</span><p style={{color:S.b}}>{sel.width}×{sel.height}</p></div>}
+          {sel.duration&&<div><span style={{color:S.ms}}>{t("asset.detail_duration")}</span><p style={{color:S.b}}>{Math.round(sel.duration)}{t("common.seconds")}</p></div>}
+          {sel.modified_at&&<div><span style={{color:S.ms}}>{t("asset.detail_modified")}</span><p style={{color:S.b}}>{sel.modified_at.slice(0,10)}</p></div>}
         </div>
-        {sel.ai_status&&sel.ai_status!=="-"&&<div className="text-xs flex items-center gap-2"><span style={{color:S.ms}}>AI 状态: </span><span style={{color:sel.ai_status==="done"?"#5db872":sel.ai_status==="processing"?"#e8a55a":sel.ai_status==="failed"?"#c64545":S.m}}>{sel.ai_status==="done"?"已完成":sel.ai_status==="processing"?"分析中...":sel.ai_status==="pending"?"等待分析":sel.ai_status}</span>{sel.ai_status==="failed"?<button onClick={()=>fetch(`/api/assets/${sel.id}/retry-ai`,{method:"POST"}).then(()=>selA(sel.id)).then(()=>fa())} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.r,color:S.w}}>重试</button>:<button onClick={()=>fetch(`/api/assets/${sel.id}/reanalyze`,{method:"POST"}).then(()=>{selA(sel.id);})} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.d,color:S.b}}>重新分析</button>}</div>}
-        {(sel.visual_description||sel.ai_summary||sel.video_summary)&& <div><button onClick={() => scp(sel.id)} className="text-xs px-2 py-1 rounded-md" style={{backgroundColor: S.rb, color: S.r}}>🔍 找相似内容</button></div>}
-        {sel.visual_description&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>AI 描述</div><p className="text-xs" style={{color:S.b}}>{sel.visual_description}</p></div>}
-        {sel.ocr_text&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>OCR 文字</div><p className="text-xs" style={{color:S.b}}>{sel.ocr_text}</p></div>}
-        {sel.transcript&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>语音转录</div><p className="text-xs max-h-32 overflow-y-auto whitespace-pre-wrap" style={{color:S.b}}>{sel.transcript}</p></div>}
-        {sel.ai_summary&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>AI 摘要</div><p className="text-xs" style={{color:S.b}}>{sel.ai_summary}</p></div>}
-        {sel.video_summary&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>综合总结</div><p className="text-xs" style={{color:S.b}}>{sel.video_summary}</p></div>}
+        {sel.ai_status&&sel.ai_status!=="-"&&<div className="text-xs flex items-center gap-2"><span style={{color:S.ms}}>{t("asset.detail_ai_status")}: </span><span style={{color:sel.ai_status==="done"?"#5db872":sel.ai_status==="processing"?"#e8a55a":sel.ai_status==="failed"?"#c64545":S.m}}>{sel.ai_status==="done"?t("asset.detail_ai_done"):sel.ai_status==="processing"?t("asset.detail_ai_processing") + "...":sel.ai_status==="pending"?t("asset.detail_ai_pending"):sel.ai_status}</span>{sel.ai_status==="failed"?<button onClick={()=>fetch(`/api/assets/${sel.id}/retry-ai`,{method:"POST"}).then(()=>selA(sel.id)).then(()=>fa())} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.r,color:S.w}}>{t("asset.detail_ai_retry")}</button>:<button onClick={()=>fetch(`/api/assets/${sel.id}/reanalyze`,{method:"POST"}).then(()=>{selA(sel.id);})} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.d,color:S.b}}>{t("asset.detail_reanalyze")}</button>}</div>}
+        {(sel.visual_description||sel.ai_summary||sel.video_summary)&& <div><button onClick={() => scp(sel.id)} className="text-xs px-2 py-1 rounded-md" style={{backgroundColor: S.rb, color: S.r}}>🔍 {t("asset.detail_similar")}</button></div>}
+        {sel.visual_description&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>{t("asset.detail_ai_desc")}</div><p className="text-xs" style={{color:S.b}}>{sel.visual_description}</p></div>}
+        {sel.ocr_text&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>{t("asset.detail_ocr")}</div><p className="text-xs" style={{color:S.b}}>{sel.ocr_text}</p></div>}
+        {sel.transcript&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>{t("asset.detail_transcript")}</div><p className="text-xs max-h-32 overflow-y-auto whitespace-pre-wrap" style={{color:S.b}}>{sel.transcript}</p></div>}
+        {sel.ai_summary&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>{t("asset.detail_summary")}</div><p className="text-xs" style={{color:S.b}}>{sel.ai_summary}</p></div>}
+        {sel.video_summary&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>{t("asset.detail_video_summary")}</div><p className="text-xs" style={{color:S.b}}>{sel.video_summary}</p></div>}
         <div style={{borderTop:`1px solid ${S.h}`}}/>
-        <div><div className="text-[11px] mb-1" style={{color:S.ms}}>描述</div>
-          {ed?<div><textarea ref={dr} value={dv} onChange={e=>sd(e.target.value)} className="w-full text-sm p-2 rounded-md outline-none resize-none" rows={3} style={{fontFamily:"'Inter',sans-serif",border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/><div className="flex gap-2 mt-1"><button onClick={svD} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>保存</button><button onClick={()=>{se(false);sd(sel.description||"");}} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.d,color:S.b}}>取消</button></div></div>:<p onClick={()=>{se(true);setTimeout(()=>dr.current?.focus(),0);}} className="text-sm cursor-pointer p-2 rounded-md min-h-[2rem]" style={{fontFamily:"'Inter',sans-serif",color:sel.description?S.b:S.ms,backgroundColor:S.s}}>{sel.description||"点击添加描述..."}</p>}
+        <div><div className="text-[11px] mb-1" style={{color:S.ms}}>{t("asset.detail_description")}</div>
+          {ed?<div><textarea ref={dr} value={dv} onChange={e=>sd(e.target.value)} className="w-full text-sm p-2 rounded-md outline-none resize-none" rows={3} style={{fontFamily:"'Inter',sans-serif",border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/><div className="flex gap-2 mt-1"><button onClick={svD} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>{t("asset.detail_save")}</button><button onClick={()=>{se(false);sd(sel.description||"");}} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.d,color:S.b}}>{t("asset.detail_cancel")}</button></div></div>:<p onClick={()=>{se(true);setTimeout(()=>dr.current?.focus(),0);}} className="text-sm cursor-pointer p-2 rounded-md min-h-[2rem]" style={{fontFamily:"'Inter',sans-serif",color:sel.description?S.b:S.ms,backgroundColor:S.s}}>{sel.description||(t("asset.detail_add_desc")+"...")}</p>}
         </div>
-        <div><div className="text-[11px] mb-1" style={{color:S.ms}}>标签</div>
+        <div><div className="text-[11px] mb-1" style={{color:S.ms}}>{t("asset.filter_tags")}</div>
           <div className="flex gap-1.5 flex-wrap mb-2">{sel.tags.map(t=>(<span key={t.id} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium group" style={{fontFamily:"'Inter',sans-serif",border:t.source==="auto"?`1px dashed ${S.r}`:`1px solid ${S.h}`,backgroundColor:t.source==="auto"?S.rb:S.d,color:t.source==="auto"?S.r:S.b,cursor:"pointer"}}>{t.name}{t.source==="auto"?<span onClick={()=>cfT(t.id)} className="text-[10px] opacity-0 group-hover:opacity-100">✓</span>:<span onClick={()=>rmT(t.id)} className="text-[10px] opacity-0 group-hover:opacity-100">✕</span>}</span>))}</div>
-          <div className="flex gap-2"><input type="text" placeholder="新标签..." value={nt} onChange={e=>sn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&adT()} className="flex-1 text-xs px-2 py-1 rounded-md outline-none" style={{fontFamily:"'Inter',sans-serif",border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/><button onClick={adT} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>添加</button></div>
+          <div className="flex gap-2"><input type="text" placeholder={t("asset.detail_new_tag")} value={nt} onChange={e=>sn(e.target.value)} onKeyDown={e=>e.key==="Enter"&&adT()} className="flex-1 text-xs px-2 py-1 rounded-md outline-none" style={{fontFamily:"'Inter',sans-serif",border:`1px solid ${S.h}`,color:S.i,backgroundColor:S.c}}/><button onClick={adT} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>{t("asset.detail_select")}</button></div>
         </div>
       </aside>}
       {so && <SettingsModal onClose={() => {sso(false);ckCfg();}} initialTab={settingsTab} initialModelTab={settingsTab==="models"?"tasks":undefined} onModelSave={()=>setTimeout(ckCfg,500)} />}
@@ -401,9 +404,9 @@ function App() {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       {confirmDeleteAsset && (
         <ConfirmModal
-          title="删除素材"
-          message={`确认删除 ${confirmDeleteAsset.filename}？`}
-          confirmText="删除"
+          title={t("asset.detail_delete")}
+          message={t("asset.detail_delete_confirm", {name: confirmDeleteAsset.filename})}
+          confirmText={t("asset.detail_delete_btn")}
           confirmColor="error"
           onConfirm={() => { delA(confirmDeleteAsset.id); setConfirmDeleteAsset(null); }}
           onCancel={() => setConfirmDeleteAsset(null)}

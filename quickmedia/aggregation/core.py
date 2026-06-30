@@ -109,10 +109,11 @@ def run_aggregation(mode: str, db, config_dir: str) -> tuple[int, int]:
 
     adapter, provider_name, model = _get_adapter(config_dir)
     if not adapter:
-        raise RuntimeError("聚合任务需要配置模型，请在设置中绑定")
+        raise RuntimeError("aggregation_no_model")
     print(f"[Aggregation] 调用 AI: provider={provider_name} model={model}", flush=True)
 
-    prompt = build_prompt(mode, assets, nodes)
+    from quickmedia.prompt_config import get_current_language
+    prompt = build_prompt(mode, assets, nodes, get_current_language())
     print(f"[Aggregation] prompt 长度: {len(prompt)} 字符", flush=True)
 
     response = adapter.chat(prompt)

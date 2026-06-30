@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import AddAssetModal from "./AddAssetModal";
 import Toast from "./Toast";
 import ConfirmModal from "./ConfirmModal";
@@ -37,6 +38,7 @@ interface Props {
 
 function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, onGraphRefresh, onGraphFullReload, onSelectAsset, selectedAssetId, unassigned, onOpenSettings }: Props) {
   const [nodes, setNodes] = useState<Node[]>([]);
+  const { t } = useTranslation();
   const [aggStatus, setAggStatus] = useState<AggStatus>({ status: "idle" });
   const lastAggMode = useRef("");
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: number } | null>(null);
@@ -98,9 +100,9 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
       const nc = aggStatus.task?.nodes_created || 0;
       const as = aggStatus.task?.assigned || 0;
       if (nc > 0 || as > 0) {
-        setToast({ message: `聚合完成: ${nc > 0 ? `新节点 ${nc} 个` : ""}${nc > 0 && as > 0 ? ", " : ""}${as > 0 ? `追加 ${as} 个关联` : ""}`, type: "info" });
+        setToast({ message: (nc > 0 && as > 0 ? t("aggregation.done_both",{nc,as}) : nc > 0 ? t("aggregation.done_nodes",{nc}) : t("aggregation.done_empty")), type: "info" });
       } else {
-        setToast({ message: "聚合完成，无新节点或追加", type: "info" });
+        setToast({ message: t("aggregation.done_empty"), type: "info" });
       }
       if (lastAggMode.current === "full") {
         onGraphFullReload?.();
@@ -123,7 +125,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           lastAggMode.current = mode;
           fetchStatus();
         } else {
-          setToast({ message: d.detail || "提交失败", type: "error" });
+          setToast({ message: d.detail ? t("error." + d.detail, d.detail) : t("aggregation.submit_failed"), type: "error" });
         }
       });
   };
@@ -201,7 +203,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
       .then((d) => {
         setAnalyzingNodeId(null);
         if (d.ok) {
-          setToast({ message: `分析完成，已添加 ${d.added} 个素材`, type: "info" });
+          setToast({ message: t("aggregation.analyze_done",{count: d.added}), type: "info" });
           fetchNodes();
           onGraphRefresh?.();
           // If this node is currently selected, refresh asset list
@@ -210,12 +212,12 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           }
           setNodeAssets(prev => { const m = new Map(prev); m.delete(nodeId); return m; }); expandedNodes.forEach(nid => { fetch('/api/nodes/' + nid + '/assets').then(r => r.json()).then(d => { setNodeAssets(prev => new Map(prev.set(nid, d.items || []))); }); });
         } else {
-          setToast({ message: d.detail || "分析失败", type: "error" });
+          setToast({ message: d.detail ? t("error." + d.detail, d.detail) : t("aggregation.analyze_failed"), type: "error" });
         }
       })
       .catch(() => {
         setAnalyzingNodeId(null);
-        setToast({ message: "分析失败", type: "error" });
+        setToast({ message: t("aggregation.analyze_failed"), type: "error" });
       });
   };
 
@@ -248,7 +250,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
             opacity: isRunning ? 0.6 : 1,
           }}
         >
-          全量分析
+          {t("aggregation.full")}
         </button>
         {nodes.length > 0 && (
           <>
@@ -263,7 +265,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                 opacity: isRunning ? 0.6 : 1,
               }}
             >
-              全量追加
+              {t("aggregation.full_append")}
             </button>
             <button
               onClick={() => runAggregation("append")}
@@ -276,7 +278,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                 opacity: isRunning ? 0.6 : 1,
               }}
             >
-              追加分析
+              {t("aggregation.append")}
             </button>
           </>
         )}
@@ -293,7 +295,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           backgroundColor: "transparent",
         }}
       >
-        + 新建节点
+        + {t("node.new_node")}
       </button>
 
       {/* Status banner */}
@@ -302,7 +304,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           className="text-xs px-2 py-1.5 rounded text-center"
           style={{ backgroundColor: "#fef3c7", color: "#92400e" }}
         >
-          聚合分析中...
+          {t("aggregation.running")}
         </div>
       )}
       {isFailed && (
@@ -310,10 +312,10 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           className="text-xs px-2 py-1.5 rounded"
           style={{ backgroundColor: "#fee2e2", color: "#991b1b" }}
         >
-          聚合失败: {aggStatus.task?.error || "未知错误"}
+          {t("aggregation.failed_prefix")}{aggStatus.task?.error ? t("error." + aggStatus.task.error, aggStatus.task.error) : t("aggregation.unknown_error")}
           <button onClick={() => { fetch("/api/aggregation/status/reset", {method: "POST"}).then(() => setAggStatus({status: "idle"})); }} className="ml-1 text-xs px-1 rounded" style={{color: "#991b1b"}}>✕</button>
-          {aggStatus.task?.error?.includes("配置模型") && (
-            <button onClick={() => onOpenSettings?.("models")} className="ml-2 underline text-xs" style={{color: "#991b1b"}}>⚙ 去配置</button>
+          {aggStatus.task?.error?.includes("aggregation_no_model") && (
+            <button onClick={() => onOpenSettings?.("models")} className="ml-2 underline text-xs" style={{color: "#991b1b"}}>⚙ {t("aggregation.go_config")}</button>
           )}
         </div>
       )}
@@ -348,7 +350,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                 }}
                 className="text-[11px] px-0.5 hover:opacity-70"
                 style={{ color: S.ms, cursor: "pointer", background: "none", border: "none" }}
-                title="展开/折叠"
+                title={t("common.expand_collapse")}
               >
                 {expandedNodes.has(node.id) ? "▼" : "▶"}
               </button>
@@ -369,7 +371,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                     // Check if already in this node
                     const existing = nodeAssets.get(node.id);
                     if (existing && existing.some((a: any) => a.id === data.asset_id)) {
-                      setToast({ message: "\u8282\u70b9\uff1a" + node.name + "\u5df2\u6536\u5f55\u7d20\u6750" + data.filename, type: "info" });
+                      setToast({ message: t("node.toast_added", {node: node.name, asset: data.filename}), type: "info" });
                       return;
                     }
                     fetch("/api/nodes/" + node.id + "/assets", {
@@ -378,7 +380,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                       body: JSON.stringify({ asset_ids: [data.asset_id] }),
                     }).then(r => r.json()).then(d => {
                       if (d.ok) {
-                        setToast({ message: "\u5df2\u5206\u914d\u5230\u8282\u70b9\uff1a" + node.name, type: "info" });
+                        setToast({ message: t("node.toast_assigned", {node: node.name}), type: "info" });
                         // Refresh source and target caches
                         if (data.source_node_id && data.source_node_id !== "unassigned") {
                           fetch("/api/nodes/" + data.source_node_id + "/assets").then(r => r.json()).then(d2 => {
@@ -413,7 +415,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                       <span
                         className="inline-block rounded-full border-2 border-t-transparent animate-spin"
                         style={{ width: 14, height: 14, borderColor: `${S.r} transparent ${S.r} ${S.r}` }}
-                        title="分析中..."
+                        title={t("node.analyzing")}
                       />
                     )}
                     <span className="text-[10px]" style={{ color: S.ms }}>
@@ -431,9 +433,9 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
             {expandedNodes.has(node.id) && (
               <div className="ml-5 mt-0.5">
                 {!nodeAssets.has(node.id) ? (
-                  <span className="text-[10px]" style={{ color: S.ms }}>加载中...</span>
+                  <span className="text-[10px]" style={{ color: S.ms }}>{t("common.loading")}</span>
                 ) : nodeAssets.get(node.id)!.length === 0 ? (
-                  <span className="text-[10px]" style={{ color: S.ms }}>暂无素材</span>
+                  <span className="text-[10px]" style={{ color: S.ms }}>{t("common.noResults")}</span>
                 ) : (
                   nodeAssets.get(node.id)!.map((a: any) => (
                     <div key={a.id} onClick={() => onSelectAsset?.(a.id)}
@@ -452,7 +454,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                       }}
                     >
                       <span className="text-[10px] flex-shrink-0" style={{ color: S.ms }}>
-                        {a.asset_type === "image" ? "图片" : a.asset_type === "video" ? "视频" : a.asset_type === "audio" ? "音频" : "文档"}
+                        {a.asset_type === "image" ? t("asset.type_image") : a.asset_type === "video" ? t("asset.type_video") : a.asset_type === "audio" ? t("asset.type_audio") : t("asset.type_document")}
                       </span>
                       <span className="text-[10px] truncate">{a.filename}</span>
                     </div>
@@ -474,7 +476,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                 onClick={() => setUnassignedExpanded(prev => !prev)}
                 className="text-[11px] px-0.5 hover:opacity-70"
                 style={{ color: S.ms, cursor: "pointer", background: "none", border: "none" }}
-                title="展开/折叠"
+                title={t("common.expand_collapse")}
               >
                 {unassignedExpanded ? "\u25bc" : "\u25b6"}
               </button>
@@ -499,7 +501,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                         return fetch("/api/nodes/" + data.source_node_id + "/assets/" + data.asset_id, { method: "DELETE" }).catch(() => {});
                       }
                     }).then(() => {
-                      setToast({ message: "\u5df2\u53d6\u6d88\u5206\u914d", type: "info" });
+                      setToast({ message: t("node.toast_unassigned"), type: "info" });
                       setNodeAssets(new Map()); // clear all caches
                       expandedNodes.forEach(nid => {
                         fetch("/api/nodes/" + nid + "/assets").then(r => r.json()).then(d => {
@@ -513,14 +515,14 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                   } catch {}
                 }}
               >
-                <span>未分配</span>
+                <span>{t("common.unassigned")}</span>
                 <span className="text-[10px] ml-1" style={{ color: S.ms }}>({unassigned.length})</span>
               </div>
             </div>
             {unassignedExpanded && (
               <div className="ml-5 mt-0.5">
                 {unassigned.length === 0 ? (
-                  <span className="text-[10px]" style={{ color: S.ms }}>暂无素材</span>
+                  <span className="text-[10px]" style={{ color: S.ms }}>{t("common.noResults")}</span>
                 ) : (
                   unassigned.map((a) => (
                     <div key={a.id} onClick={() => onSelectAsset?.(a.id)}
@@ -538,7 +540,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                         }}
                       >
                       <span className="text-[10px] flex-shrink-0" style={{ color: S.ms }}>
-                        {a.asset_type === "image" ? "图片" : a.asset_type === "video" ? "视频" : a.asset_type === "audio" ? "音频" : "文档"}
+                        {a.asset_type === "image" ? t("asset.type_image") : a.asset_type === "video" ? t("asset.type_video") : a.asset_type === "audio" ? t("asset.type_audio") : t("asset.type_document")}
                       </span>
                       <span className="text-[10px] truncate">{a.filename}</span>
                     </div>
@@ -550,7 +552,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
         )}
         {nodes.length === 0 && !isRunning && (
           <p className="text-xs text-center py-4" style={{ color: S.ms }}>
-            暂无聚合节点，点击"全量分析"开始
+            {t("node.empty_hint")}
           </p>
         )}
       </div>
@@ -574,7 +576,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = S.s)}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             >
-              重命名 / 编辑描述
+              {t("node.rename")} / {t("node.edit_description")}
             </button>
             <button
               onClick={() => {
@@ -586,7 +588,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = S.s)}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             >
-              分析追加到此节点
+              {t("node.analyze_append")}
             </button>
             <button
               onClick={() => {
@@ -598,7 +600,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = S.rb)}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             >
-              删除节点
+              {t("node.delete_node")}
             </button>
             <div className="border-t my-0.5" style={{ borderColor: S.h }} />
             <button
@@ -612,7 +614,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = S.s)}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             >
-              手动添加素材
+              {t("node.add_assets")}
             </button>
             <button
               onClick={() => {
@@ -625,7 +627,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = S.s)}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             >
-              手动移除素材
+              {t("node.remove_assets")}
             </button>
             <div className="border-t my-0.5" style={{ borderColor: S.h }} />
             <button
@@ -639,7 +641,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = S.s)}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
             >
-              查看素材
+              {t("node.view_assets")}
             </button>
           </div>
         </>
@@ -658,12 +660,12 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
               style={{ backgroundColor: S.c, borderColor: S.h }}
             >
               <h3 className="text-sm font-medium mb-3" style={{ color: S.i }}>
-                {creatingNode ? "新建节点" : "编辑节点"}
+                {creatingNode ? t("node.edit_title_create") : t("node.edit_title_edit")}
               </h3>
               <div className="flex flex-col gap-3">
                 <div>
                   <label className="text-[11px] mb-1 block" style={{ color: S.ms }}>
-                    节点名
+                    {t("node.edit_name")}
                   </label>
                   <input
                     type="text"
@@ -675,7 +677,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                 </div>
                 <div>
                   <label className="text-[11px] mb-1 block" style={{ color: S.ms }}>
-                    描述
+                    {t("node.edit_description")}
                   </label>
                   <textarea
                     value={editNode.desc}
@@ -691,7 +693,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                     className="text-xs px-3 py-1 rounded-md"
                     style={{ backgroundColor: S.s, color: S.m }}
                   >
-                    取消
+                    {t("node.edit_cancel")}
                   </button>
                   <button
                     onClick={creatingNode ? saveCreate : saveEdit}
@@ -702,7 +704,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                       color: S.w,
                     }}
                   >
-                    保存
+                    {t("node.edit_save")}
                   </button>
                   {creatingNode && (
                     <button
@@ -714,7 +716,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                         color: S.w,
                       }}
                     >
-                      保存并分析
+                      {t("node.edit_save_analyze")}
                     </button>
                   )}
                 </div>
@@ -749,9 +751,9 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       {confirmFullAgg && (
         <ConfirmModal
-          title="全量分析"
-          message={`将删除全部 ${nodes.length} 个已有节点，重新分析所有素材生成新节点。此操作不可撤销。`}
-          confirmText="继续分析"
+          title={t("aggregation.full_confirm_title")}
+          message={t("aggregation.full_confirm_msg",{count: nodes.length})}
+          confirmText={t("aggregation.full_confirm_btn")}
           confirmColor="error"
           onConfirm={() => { setConfirmFullAgg(false); runAggregation("full"); }}
           onCancel={() => setConfirmFullAgg(false)}
@@ -759,9 +761,9 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
       )}
       {confirmDelete !== null && (
         <ConfirmModal
-          title="删除节点"
-          message={`确定删除「${nodes.find(n => n.id === confirmDelete)?.name || ""}」？素材不会被删除。`}
-          confirmText="删除"
+          title={t("confirm.delete_title")}
+          message={t("confirm.delete_msg",{name: nodes.find(n => n.id === confirmDelete)?.name || ""})}
+          confirmText={t("confirm.delete_btn")}
           confirmColor="error"
           loading={deletingNodeId === confirmDelete}
           onConfirm={doDelete}

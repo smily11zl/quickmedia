@@ -1,5 +1,5 @@
 #!/bin/bash
-# QuickMedia 一键安装脚本
+# QuickMedia one-click setup script
 # Create venv, install deps, verify frontend dist.
 
 set -e
@@ -7,7 +7,7 @@ set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "=== QuickMedia Setup ==="
+echo "=== QuickMedia Setup ===\n"
 
 # 1. Create venv if missing
 if [ ! -d ".venv" ]; then

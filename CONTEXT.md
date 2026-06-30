@@ -527,4 +527,4 @@ WebSocket 推送事件：后端数据变更（聚合完成、节点增删改、�
 
 ### AI 搜索 Prompt 配置
 
-`search_ai` prompt 模板位于 `~/.asset-manager/prompts.yaml`，与现有分析 prompt 相同的结构（system_format / default / custom / presets）。system_format 要求 LLM 输出 `{"asset_ids": [1,5,23]}`，无匹配返回 `{"asset_ids": []}`。prompts.yaml 首次启动自动从 DEFAULT_PROMPTS 生成，后续升级合并系统字段、保留用户 custom。
+`search_ai` prompt 模板位于 `~/.asset-manager/prompts.yaml`，与现有分析 prompt 相同的结构（system_format / default / custom / presets）。system_format 要求 LLM 输出 `{"asset_ids": [1,5,23]}`，无匹配返回 `{"asset_ids": []}`。prompts.yaml 首次启动自动从 DEFAULT_PROMPTS 生成，后续升级合并系统字段、保留用户 custom。\n\n## V17 — 国际化 (i18n)\n\n### 显示语言\n\nQuickMedia 支持简体中文 (zh) 和英文 (en)。首次访问时根据浏览器语言自动选择：简体/繁体中文 → 简体中文，其他 → 英文。用户可在设置面板"基础"Tab 手动切换，选择持久化在 localStorage。\n\n### Locale 文件\n\n前端翻译文本统一存放在 `frontend/src/locales/{lang}.json`，按模块内嵌命名空间。使用 react-i18next 加载。\n\n### 多语言 Prompt 模板\n\n`DEFAULT_PROMPTS` 拆分为中文 (`DEFAULT_PROMPTS_ZH`) 和英文 (`DEFAULT_PROMPTS_EN`) 两套，PromptConfig 初始化时根据语言选择对应 default 值。用户自定义 custom 不受语言切换影响。\n\n### 后端消息\n\n后端 API 不直接输出用户可见文字。错误和提示通过结构化字段返回，前端按当前语言翻译显示。\n\n### README\n\n`README.md` 为英文默认版本，`README.zh.md` 为中文版本。两份互相链接。

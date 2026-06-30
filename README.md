@@ -1,93 +1,100 @@
-# QuickMedia
+[English](README.md) | [中文](README.zh.md)
 
-本地素材管理工具 — 扫描、标签、AI 分析、语义搜索、素材聚合。
+# QuickMedia — Local Asset Intelligence
 
-## 核心功能
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-backend-green)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-frontend-61dafb)](https://react.dev/)
 
-### 素材扫描与管理
-- 目录扫描（SHA256 去重 + inode 追踪）
-- 实时文件监听（fsevents）
-- 元数据提取（图片尺寸、视频分辨率/时长、音频信息）
-- 缩略图异步生成
-- 手工扫描（Web UI 点击触发，支持配置路径 / 选择文件 / 选择文件夹）
-- 素材删除（仅移除索引，源文件不受影响）
+Scan, tag, AI-analyze, semantically search, and aggregate your local assets.
 
-### AI 智能分析
-- 图片视觉描述 + 元素标签
-- 视频多帧采样 + 首帧分析 + 综合总结
-- 音频/视频语音转录（whisper）
-- 文档摘要 + 关键词
-- OCR 图片文字提取
-- AI 任务队列（异步，不阻塞扫描）
-- 重试机制（3 次，2s 间隔）+ 手动重试/重新分析
-- 自定义 AI Prompt（图片/文档/语音/视频四类独立模板 + 预设）
-- 多模型支持（Ollama / OpenAI / DeepSeek / OpenRouter / MiniMax）
-- 任务模型绑定（不同分析类型可指定不同模型）
+## Core Features
 
-### 搜索
-- 语义搜索（ChromaDB 向量，`qwen3-embedding`）
-- RRF 融合排序（BM25 关键词 + 语义向量混合）
-- 三种模式：综合 / 语义 / 匹配
-- jieba 中文分词
-- 搜索结果关键词高亮
-- 相似素材推荐（详情页叠加层）
+### Asset Scanning & Management
+- Directory scanning (SHA256 deduplication + inode tracking)
+- Real-time file watching (fsevents)
+- Metadata extraction (image dimensions, video resolution/duration, audio info)
+- Async thumbnail generation
+- Manual scanning (Web UI triggered, configurable paths / file selection / folder selection)
+- Asset deletion (index only, source files unaffected)
 
-### 标签系统
-- 三种来源：auto（系统自动）/ ai（AI 生成）/ manual（手动）
-- 扁平结构（无层级），取并集筛选
-- AI 标签确认/删除
+### AI Analysis
+- Image visual description + element tags
+- Video multi-frame sampling + frame analysis + comprehensive summary
+- Audio/video speech transcription (whisper)
+- Document summaries + keywords
+- OCR text extraction from images
+- AI task queue (async, non-blocking during scanning)
+- Retry mechanism (3 attempts, 2s interval) + manual retry/re-analyze
+- Custom AI prompts (independent templates + presets for image/document/speech/video)
+- Multi-model support (Ollama / OpenAI / DeepSeek / OpenRouter / MiniMax)
+- Task-to-model binding (different analysis types can use different models)
 
-### 素材聚合（v12-v14）
-- AI 自动聚类：全量分析 / 全量追加 / 追加分析
-- 聚合节点多对多关联（素材可属于多个节点）
-- 侧边栏双 Tab：搜索筛选 / 聚合节点
-- 节点管理：新建、重命名、编辑描述、删除
-- 手动添加/移除素材（多选批量操作）
-- 节点分析追加：AI 自动匹配未连接素材到节点
-- 选中节点状态持久（跨 Tab 保留，主内容区清除条）
-- 全量分析确认（防止误删已有节点）
+### Search
+- Semantic search (ChromaDB vectors, `qwen3-embedding`)
+- RRF fusion ranking (BM25 keyword + semantic vector hybrid)
+- Three modes: Combined / Semantic / Keyword
+- jieba Chinese word segmentation
+- Search result keyword highlighting
+- Similar asset discovery (detail panel overlay)
 
-### 云图（v13）
-- 力导向图可视化节点-素材关系
-- 视图切换三按钮：☁ 云图 / ▦ 网格 / ☰ 列表
-- 聚合节点按素材数量缩放 + 颜色深度梯度
-- 节点圆圈内显示素材数量
-- 素材节点按类型着色，zoom 自适应缩略图
-- 展开/折叠素材节点、共享边（粗细=共享素材数）
-- 未分配节点（蓝色虚线）
-- 搜索高亮 + WebSocket 增量推送
+### Tag System
+- Three sources: auto (system) / ai (AI-generated) / manual (user-added)
+- Flat structure (no hierarchy), union-based filtering
+- AI tag confirmation / deletion
 
-### 筛选
-- 类型筛选（图片/视频/音频/文档），数量实时反映当前结果集
-- 创建/修改时间日期区间
-- 文件格式下拉多选
-- AI 状态下拉多选（已完成/分析中/等待/失败）
-- 标签多选筛选（取并集）
-- 批量选择 + 重新分析
-- 排序（名称/大小/时间）
+### Asset Aggregation (v12-v14)
+- AI auto-clustering: Full analysis / Full append / Incremental append
+- Aggregation node many-to-many associations (assets can belong to multiple nodes)
+- Sidebar dual-tab: Search & Filter / Aggregation Nodes
+- Node management: create, rename, edit description, delete
+- Manual add/remove assets (multi-select batch operations)
+- Node analyze-append: AI auto-matches unconnected assets to node
+- Node selection persistence (across tabs, clear indicator in main area)
+- Full analysis confirmation (prevents accidental deletion of existing nodes)
 
-### MCP 工具（v11/v14）
-- FastMCP 驱动，stdio 传输
-- 21 个工具：素材管理（6）+ 聚合节点管理（8）+ 聚合分析 + 扫描 + 标签管理 + 统计 + 重分析
-- Hermes / Claude Desktop / Codex CLI 均可用
+### Graph View (v13)
+- Force-directed graph visualizing node-asset relationships
+- Three view buttons: ☁ Graph / ▦ Grid / ☰ List
+- Aggregation nodes scaled by asset count + color depth gradient
+- Asset count inside node circles
+- Asset nodes colored by type, zoom-adaptive thumbnails
+- Expand/collapse asset nodes, shared edges (width = shared asset count)
+- Unassigned node (blue dashed line)
+- Search highlighting + WebSocket incremental updates
+
+### Filtering
+- Type filter (Image/Video/Audio/Document), counts reflect current result set
+- Created/Modified date range pickers
+- File format multi-select dropdown
+- AI status multi-select (Done/Processing/Pending/Failed)
+- Tag multi-select filter (union logic)
+- Batch select + re-analyze
+- Sort (name/size/date)
+
+### MCP Tools (v11/v14)
+- FastMCP driven, stdio transport
+- 22 tools: Asset management (6) + Node management (8) + Aggregation + Scan + Tags + Stats + Re-analyze
+- Compatible with Hermes / Claude Desktop / Codex CLI
 
 ### Web UI
-- 设置页面：监控路径配置、模型管理、AI Prompt 模板
-- 文档预览（txt/md/docx），素材详情（路径/尺寸/时长/AI 结果）
-- 批量操作（多选 + 重新分析）
+- Settings page: watch path configuration, model management, AI prompt templates
+- Document preview (txt/md/docx), asset details (path/size/duration/AI results)
+- Batch operations (multi-select + re-analyze)
+- i18n: English / Chinese (auto-detected from browser, adjustable in settings)
 
-## 安装
+## Installation
 
-### 快速安装（macOS/Linux）
+### Quick Install (macOS/Linux)
 
 ```bash
 chmod +x scripts/setup.sh && ./scripts/setup.sh
 ```
 
-### 基础环境
+### Prerequisites
 
 - Python 3.11+
-- ffmpeg（视频元数据、缩略图提取）
+- ffmpeg (video metadata, thumbnail extraction)
 
 ```bash
 # macOS
@@ -95,70 +102,61 @@ brew install ffmpeg
 
 # Linux (Debian/Ubuntu)
 sudo apt install ffmpeg
-
-# Windows
-# 下载 https://ffmpeg.org/download.html 或 winget install ffmpeg
 ```
 
-### Python 包安装
+### Python Packages
 
-核心依赖（必装）：Pillow、PyYAML、watchdog
+Core dependencies (required): Pillow, PyYAML, watchdog
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[all]"   # 安装全部功能包
+pip install -e ".[all]"   # all features
 ```
 
-可选按需安装，替代 `[all]`：
+Optional installs (replace `[all]`):
 
 ```bash
-pip install -e ".[web]"        # Web UI（FastAPI + Uvicorn）
-pip install -e ".[audio]"      # 语音转录（Whisper）
-pip install -e ".[text]"       # 文档解析（PyMuPDF + openpyxl）
-pip install -e ".[embedding]"  # 语义搜索 + 聚合（ChromaDB + jieba）
-pip install -e ".[mcp]"        # MCP 工具接口
+pip install -e ".[web]"        # Web UI (FastAPI + Uvicorn)
+pip install -e ".[audio]"      # Speech transcription (Whisper)
+pip install -e ".[text]"       # Document parsing (PyMuPDF + openpyxl)
+pip install -e ".[embedding]"  # Semantic search + aggregation (ChromaDB + jieba)
+pip install -e ".[mcp]"        # MCP tool interface
 ```
 
-### 前端构建
+### Frontend Build
 
-需要 Node.js。构建一次即可，产物在 `frontend/dist/` 下，运行时无需 Node。
+Requires Node.js. Build once; output served from `frontend/dist/`. No Node needed at runtime.
 
 ```bash
 cd frontend && npm install && npm run build && cd ..
 ```
 
-### AI 模型（可选）
+### AI Models (Optional)
 
-需要 Ollama 或其他兼容服务。未配置时 AI 分析/搜索功能不可用，素材管理、扫描功能正常。
+Requires Ollama or compatible service. Without configuration, AI analysis/search is unavailable but asset management and scanning work normally.
 
 ```bash
 # macOS
 brew install ollama
 ollama serve &
-
-# Linux
-curl -fsSL https://ollama.com/install.sh | sh
-
-# Windows
-# 下载 https://ollama.com/download/windows
 ```
 
-拉取模型：
+Pull models:
 ```bash
-ollama pull qwen3.5:9b              # 视觉/文本分析
-ollama pull qwen3-embedding:8b      # 语义搜索嵌入
+ollama pull qwen3.5:9b              # vision/text analysis
+ollama pull qwen3-embedding:8b      # semantic search embedding
 ```
 
-## 启动
+## Quick Start
 
 ```bash
 quickmedia serve
 ```
 
-首次启动会自动弹出配置页面，添加监控文件夹后即可扫描。
+On first run, a config page opens automatically. Add watch folders to begin scanning.
 
-## MCP 集成
+## MCP Integration
 
 ### Hermes
 
@@ -189,14 +187,14 @@ mcp_servers:
 codex mcp add quickmedia -- quickmedia mcp
 ```
 
-## 支持的模型
+## Supported Models
 
-通过 Web UI 设置页 → 模型管理配置。不同分析任务可绑定不同模型。
+Configure via Web UI → Settings → Model Management. Different analysis tasks can bind different models.
 
-| Provider | 模型 | 图片 | 视频 | 音频 | 文本 |
-|----------|------|:----:|:----:|:----:|:----:|
-| **Ollama** (本地) | `qwen3.5:9b` | ✓ | ✓ | | ✓ |
-| | `qwen3-embedding:8b` | | | | 嵌入 |
+| Provider | Model | Vision | Video | Audio | Text |
+|----------|------|:------:|:-----:|:-----:|:----:|
+| **Ollama** (local) | `qwen3.5:9b` | ✓ | ✓ | | ✓ |
+| | `qwen3-embedding:8b` | | | | embed |
 | **OpenAI** | `gpt-4o` | ✓ | | | ✓ |
 | | `gpt-4o-mini` | ✓ | | | ✓ |
 | **DeepSeek** | `deepseek-chat` | | | | ✓ |
@@ -217,7 +215,7 @@ codex mcp add quickmedia -- quickmedia mcp
 | | `qwen/qwen3.5-coder` | | | | ✓ |
 | | `qwen/qwen3.7-plus` | ✓ | ✓ | | ✓ |
 | | `qwen/qwen3.7-max` | ✓ | ✓ | | ✓ |
-| | `qwen/qwen3-embedding-8b` | | | | 嵌入 |
+| | `qwen/qwen3-embedding-8b` | | | | embed |
 | **MiniMax** | `MiniMax-M3` | | | | ✓ |
 | | `MiniMax-M2.7` | | | | ✓ |
 | | `MiniMax-M2.5` | | | | ✓ |
@@ -225,55 +223,55 @@ codex mcp add quickmedia -- quickmedia mcp
 | | `MiniMax-M2` | | | | ✓ |
 | | `MiniMax-M1` | | | | ✓ |
 
-> 嵌入模型用于语义搜索和素材聚合。图片/视频分析需要多模态模型。各 Provider 需要配置对应的 API Key。
+> Embedding models are used for semantic search and aggregation. Vision/video analysis requires multimodal models. Each provider requires a corresponding API key.
 
-## 数据存储
+## Data Storage
 
-- 数据库：`~/.asset-manager/data.db`
-- 配置文件：`~/.asset-manager/config.yaml`
-- 模型目录：`~/.asset-manager/models.yaml`
-- Prompt 模板：`~/.asset-manager/prompts.yaml`
-- 向量库：`~/.asset-manager/chroma_db/`
-- 缩略图：`~/.asset-manager/thumbnails/`
+- Database: `~/.asset-manager/data.db`
+- Config: `~/.asset-manager/config.yaml`
+- Models: `~/.asset-manager/models.yaml`
+- Prompt templates: `~/.asset-manager/prompts.yaml`
+- Vector DB: `~/.asset-manager/chroma_db/`
+- Thumbnails: `~/.asset-manager/thumbnails/`
 
-## 项目结构
+## Project Structure
 
 ```
 quickmedia/
-├── quickmedia/           # Python 后端
-│   ├── api/server.py     # FastAPI 路由
-│   ├── aggregation/      # 聚合模块（prompts/worker/api）
-│   ├── database.py       # SQLite + 迁移
-│   ├── scanner.py        # 文件扫描器
-│   ├── search.py         # 语义搜索
-│   ├── mcp_server.py     # MCP 服务（21 工具）
-│   ├── ai.py             # AI 分析器
-│   ├── cli.py            # CLI 入口
+├── quickmedia/           # Python backend
+│   ├── api/server.py     # FastAPI routes
+│   ├── aggregation/      # Aggregation module (prompts/worker/api)
+│   ├── database.py       # SQLite + migrations
+│   ├── scanner.py        # File scanner
+│   ├── search.py         # Semantic search
+│   ├── mcp_server.py     # MCP server (22 tools)
+│   ├── ai.py             # AI analyzers
+│   ├── ai_worker.py      # AI task queue worker
+│   ├── cli.py            # CLI entry point
 │   └── ...
-├── frontend/             # React 前端
+├── frontend/             # React frontend
 │   └── src/
-│       ├── App.tsx       # 主组件
-│       ├── GraphView.tsx # 云图视图
-│       ├── NodePanel.tsx # 聚合节点面板
-│       ├── AddAssetModal.tsx  # 添加/移除素材弹框
-│       ├── Toast.tsx      # 消息提示
-│       ├── ConfirmModal.tsx # 确认弹框
+│       ├── i18n.ts       # Internationalization
+│       ├── locales/      # Translation files (zh/en)
+│       ├── App.tsx       # Main component
+│       ├── GraphView.tsx # Graph visualization
+│       ├── NodePanel.tsx # Aggregation node panel
 │       └── ...
-├── tests/                # Pytest 测试
-└── docs/v*/              # 版本文档（plan/PRD/design/tasks）
+├── tests/                # Pytest tests
+└── docs/v*/              # Version docs (plan/PRD/design/tasks)
 ```
 
-## 开发
+## Development
 
 ```bash
-# 运行测试
+# Run tests
 python -m pytest tests/ -q
 
-# 前端开发模式
+# Frontend dev mode
 cd frontend && npm run dev
 
-# 前端测试
+# Frontend tests
 cd frontend && npx vitest run
 ```
 
-> ⚠️ 修改前端代码后，必须运行 `npm run build` 并将 `frontend/dist/` 提交到 Git。仓库内的 dist 是其他用户直接使用的构建产物，不更新会导致其他用户看到旧版 UI。
+> ⚠️ After modifying frontend code, run `npm run build` and commit `frontend/dist/`. The dist in the repository is the built artifact used directly by other users; failing to update it will show stale UI.

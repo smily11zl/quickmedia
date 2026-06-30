@@ -4,10 +4,11 @@ Loads and manages prompt templates from ~/.asset-manager/prompts.yaml.
 """
 
 import os
+import threading
 import yaml
 
 
-DEFAULT_PROMPTS = {
+DEFAULT_PROMPTS_ZH = {
     "vision": {
         "system_format": (
             "请严格按以下JSON格式输出（只输出JSON，不要有其他文字）：\n"
@@ -325,11 +326,332 @@ DEFAULT_PROMPTS = {
     },
 }
 
+DEFAULT_PROMPTS_EN = {
+    "vision": {
+        "system_format": (
+            "Output strictly in JSON format (only JSON, no other text):\n"
+            '{"description": "Image description", "tags": ["tag1", "tag2", "tag3"], "text": "Text content in image", "search_terms": ["search term1", "search term2"]}\n'
+            "If no text is recognized, set text to empty string.\n"
+            "search_terms rules (3-8 terms):\n"
+            "- Generate from a user search perspective, not simple rewrites of tags.\n"
+            "- Must cover multiple dimensions: subject, scene, action, style, mood, usage, broader concepts, etc.\n"
+            "- Can supplement with reasonably related search terms not directly appearing in the content.\n"
+            "- Prioritize single-concept terms, avoid concatenating multiple concepts into long phrases.\n"
+            "- Prioritize terms users would likely search for.\n"
+            "- Search terms should maximize the discoverability of the asset.\n"
+            "- Avoid duplicates, near-synonyms, and meaningless expansions.\n"
+            "- Do not output complete sentences.\n"
+        ),
+        "default": ("Output in English.\n"
+            "Analyze this image.\n"
+            "- description: Describe the image content within 50 characters. Scene, subjects, events, etc.\n"
+            "- tags: Identify key elements, text in image, etc. Extract the most important tags.\n"
+            "Tag requirements:\n"
+            "  * 3-8 most important tags\n"
+            "  * Prioritize complete objects, don't split into components\n"
+            "  * Avoid duplicate or obviously hierarchical tags\n"
+            "  * Prioritize subject, scene, and key actions\n"
+            "  * Retain important styles, colors, or design features valuable for search\n"
+            "  * Ignore low-value details and decorative elements\n"
+            "  * Tags should match human tagging conventions\n"
+            "  * Only output elements explicitly present in the asset, do not speculate\n"
+            "- search_terms:\n"
+            "  * If style is design/scene: Analyze composition (rule of thirds, symmetry, etc.), lighting direction and intensity, color palette, depth of field, extract photographic elements and visual focus\n"
+            "  * If style is graphic design: Analyze layout, color scheme, typography style, design style (retro, etc.), icons and interactive elements\n"
+            "  * If style is pet photo: Describe breed, posture and quantity, describe environment and behavior\n"
+            "  * If style is portrait: Describe gender, approximate age, clothing style and pose, identify accessories, makeup features, and any recognizable text\n"
+        ),
+        "custom": "",
+        "presets": [
+            {"name": "Photography", "content": "Analyze the composition of this photo (rule of thirds, center, symmetry, etc.), lighting direction and intensity, color palette, and depth of field. Extract photographic elements and visual focus."},
+            {"name": "Design", "content": "Analyze the layout, color scheme, typography, and design style (minimal, flat, retro, etc.) of this image. Identify UI components, icons, and interaction elements."},
+            {"name": "Pet", "content": "Describe the breed, coat color, posture, and count of the pet(s) in the image. Describe the environment and behavior state."},
+            {"name": "Portrait", "content": "Describe the gender, approximate age, expression, clothing style, and pose of the person. Identify accessories, makeup features, and any recognizable text."},
+        ],
+    },
+    "text": {
+        "system_format": (
+            "Output strictly in JSON format (only JSON, no other text):\n"
+            '{"summary": "Document summary", "tags": ["tag1", "tag2", "tag3"], "search_terms": ["search term1", "search term2"]}\n'
+            "search_terms rules (3-8 terms):\n"
+            "- Generate from a knowledge retrieval perspective, not simple rewrites of tags.\n"
+            "- Must cover: topic, technical direction, business domain, application scenario, broader concepts, etc.\n"
+            "- For specific technologies, can supplement related domains and broader concepts.\n"
+            "- Can supplement reasonably related search terms.\n"
+            "- Prioritize terms users may search for in the future.\n"
+            "- Prioritize single-concept terms.\n"
+            "- Avoid duplicates and near-synonyms.\n"
+            "- Do not output complete sentences.\n"
+        ),
+        "default": ("Output in English.\n"
+            "Summarize the following document content within 50 characters, and extract the most important topic keywords.\n"
+            "Tag requirements:\n"
+            "  * 3-8 most important tags\n"
+            "  * Prioritize core topics\n"
+            "  * Prioritize tech stack, product names, domain terminology\n"
+            "  * Prioritize important concepts covered in the document\n"
+            "  * Avoid duplicate or obviously hierarchical tags\n"
+            "  * Tags should match human tagging conventions\n"
+            "  * Only output content explicitly important in the document\n"
+            "  * If tech doc: Summarize tech stack, architecture design and core implementation, extract key technical terms, framework names and programming concepts\n"
+            "  * If notes/diary: Summarize personal thoughts, key decisions and todos, extract emotional keywords, involved people and event types\n"
+            "  * If study notes: Summarize core knowledge points, key concept definitions and relationships between concepts, extract subject areas, topic words and professional terminology\n"
+        ),
+        "custom": "",
+        "presets": [
+            {"name": "Tech Doc", "content": "Summarize the tech stack, architecture design, and core implementation. Extract key technical terms, framework names, and programming concepts."},
+            {"name": "Notes/Diary", "content": "Summarize personal thoughts, key decisions, and action items in the notes. Extract emotional keywords, involved people, and event types."},
+            {"name": "Study Notes", "content": "Summarize core knowledge points, key concept definitions, and relationships between concepts. Extract subject areas, topic words, and professional terminology."},
+        ],
+    },
+    "speech": {
+        "system_format": (
+            "Output strictly in JSON format (only JSON, no other text):\n"
+            '{"summary": "Speech summary", "tags": ["tag1", "tag2", "tag3"], "search_terms": ["search term1", "search term2"]}\n'
+            "search_terms rules (3-8 terms):\n"
+            "- Generate from a future retrieval perspective, not simple rewrites.\n"
+            "- Must cover: topic, business domain, project background, technical direction, related concepts, etc.\n"
+            "- For professional terminology, can supplement broader concepts and common expressions.\n"
+            "- Can supplement reasonably related search terms.\n"
+            "- Prioritize terms users may search for in the future.\n"
+            "- Prioritize single-concept terms.\n"
+            "- Avoid duplicates and near-synonyms.\n"
+            "- Do not output complete sentences.\n"
+        ),
+        "default": ("Output in English.\n"
+            "The following is a speech transcript. Summarize the main content within 50 characters.\n"
+            "Tag requirements:\n"
+            "  * 3-8 most important tags\n"
+            "  * Prioritize core topics\n"
+            "  * Prioritize project and person names\n"
+            "  * Prioritize key decisions, action items and tasks\n"
+            "  * Avoid duplicate or obviously hierarchical tags\n"
+            "  * Tags should match human tagging conventions\n"
+            "  * Only output information explicitly mentioned in the content\n"
+            "  * If meeting notes: Summarize key decisions, action items and positions, extract participant roles, discussion topics and deadlines\n"
+            "  * If interview/dialogue: Summarize core topics, interviewee viewpoints and key quotes, extract topic types, emotional tone and key figures\n"
+            "  * If lecture/study: Summarize core knowledge points, examples and knowledge structure, extract subject areas, key concepts and learning methods\n"
+        ),
+        "custom": "",
+        "presets": [
+            {"name": "Meeting", "content": "Summarize key decisions, action items, and positions in the meeting. Extract participant roles, discussion topics, and deadlines."},
+            {"name": "Interview", "content": "Summarize core topics, interviewee viewpoints, and key quotes. Extract topic types, emotional tone, and key figures."},
+            {"name": "Lecture", "content": "Summarize core knowledge points, examples, and knowledge structure. Extract subject areas, key concepts, and learning methods."},
+        ],
+    },
+    "video_summary": {
+        "system_format": (
+            "Output strictly in JSON format (only JSON, no other text):\n"
+            '{"summary": "Comprehensive summary", "tags": ["tag1", "tag2", "tag3"], "search_terms": ["search term1", "search term2"]}\n'
+            "search_terms rules (3-8 terms):\n"
+            "- Generate from user search perspective, not simple rewrites.\n"
+            "- Prioritize generation based on actual video content.\n"
+            "- For specific entities, can supplement reasonable broader concepts and common search expressions.\n"
+            "- Can supplement search terms highly relevant to the content.\n"
+            "- Prioritize terms users may search for in the future.\n"
+            "- When speech content contains opinions, jokes, or information inconsistent with the visual, do not generate corresponding search terms.\n"
+            "- Do not generate subjective evaluations, emotional expressions or controversial search terms.\n"
+            "- Do not generate weakly related terms just to broaden search scope.\n"
+            "- Prioritize single-concept terms.\n"
+            "- Avoid duplicates, near-synonyms and meaningless expansions.\n"
+            "- Do not output complete sentences.\n"
+        ),
+        "default": ("Output in English.\n"
+            "Merge the following two descriptions about the same video into a comprehensive summary within 50 characters.\n"
+            "Tag requirements:\n"
+            "  * 3-8 most important tags\n"
+            "  * Prioritize the core theme and main events of the video\n"
+            "  * Prioritize key entities such as people and locations\n"
+            "  * Prioritize key actions and behaviors\n"
+            "  * Analyze combining visual content and speech content\n"
+            "  * Tags should prioritize visually confirmable facts, supplemented by speech information\n"
+            "  * When speech content contains opinions, jokes, or information inconsistent with the visual, do not use as tags\n"
+            "  * Do not use subjective evaluations, emotional expressions, insulting descriptions or analysis conclusions as tags\n"
+            "  * Avoid duplicate or obviously hierarchical tags\n"
+            "  * Tags should match human tagging conventions\n"
+            "  * Only output content explicitly shown or mentioned in the video, do not speculate\n"
+            "  * For educational, interview content, prioritize discussion topics over visual details\n"
+        ),
+    },
+    "video_vision": {
+        "system_format": (
+            "Output strictly in JSON format (only JSON, no other text):\n"
+            '{"description": "Frame description", "tags": ["tag1", "tag2", "tag3"], "text": "Text content in frame", "search_terms": ["search term1", "search term2"]}\n'
+            "If no text is recognized, set text to empty string.\n"
+            "search_terms rules (3-8 terms):\n"
+            "- Generate from user search perspective.\n"
+            "- Prioritize supplementing synonyms and reasonable broader concepts.\n"
+            "- Search terms must be highly relevant to video content.\n"
+            "- Can combine visual and speech to express the same theme.\n"
+            "- Prioritize covering dimensions like topic, usage, etc.\n"
+            "- Do not output generic terms or weakly related terms.\n"
+            "- Prioritize single-concept terms.\n"
+            "- Avoid duplicates and near-synonyms.\n"
+            "- Do not output complete sentences.\n"
+        ),
+        "default": ("Output in English.\n"
+            "This is a frame extracted from a video.\n"
+            "- description: Describe the video content within 50 characters. Scene, subjects, events, etc.\n"
+            "- tags: Identify key elements, text in frame, etc.\n"
+            "- Ambiance: Overall atmosphere within 50 characters.\n"
+            "Tag requirements:\n"
+            "  * 3-8 most important tags\n"
+            "  * Prioritize the core theme of the video\n"
+            "  * Prioritize key entities such as people and locations\n"
+            "  * Prioritize key actions, events or behaviors\n"
+            "  * Analyze combining visual and speech content\n"
+            "  * Avoid duplicate or obviously hierarchical tags\n"
+            "  * Prioritize information most valuable for retrieval\n"
+            "  * Only output content explicitly shown or mentioned, do not speculate\n"
+            "  * Tags should match human tagging conventions\n"
+        ),
+    },
+    "aggregation_full": {
+        "system_format": (
+            "Output strictly in JSON format (only JSON, no other text):\n"
+            '{"nodes": [{"name": "Node name", "description": "Brief node description", "asset_ids": [1, 2, 3]}]}\n'
+        ),
+        "default": ("Output in English.\n"
+            "You are an asset library organization expert.\n"
+            "Please generate user-friendly topic nodes based on asset content for users to browse.\n"
+            "\n"
+            "Help users quickly discover, browse, and manage assets.\n"
+            "Nodes should be like category folders or collections in an asset library, not academic classifications.\n"
+            "Prioritize topics users genuinely care about and want to click to browse.\n"
+            "Each node contains:\n"
+            "- Node name\n"
+            "- One-sentence description of the topic\n"
+            "- Assets belonging to this node (by id)\n"
+            "Naming principles:\n"
+            "- Prioritize using everyday user language.\n"
+            "- Prioritize reflecting interests, hobbies, or activities.\n"
+            "- Names should be concise and clear, typically within 10 characters.\n"
+            "- Node names should feel like category folder or collection names.\n"
+            "- Prioritize names users would actively search for or click.\n"
+            "- Priority examples: Pet Daily, Cat Collection, Family Dinner, Cooking, Tokyo Trip, Fitness, Work Log, Product Demo, Coffee Shop Visit, Home Office\n"
+            "- Avoid: Biological Entities, Behavioral Activities, Outdoor Scenes, Entertainment Content, Visual Objects\n"
+            "- Topic identification priority: Interests & Hobbies > Activity Scenes\n"
+            "- Do not create nodes based solely on single objects.\n"
+            "- Organize into thematic collections: Digital Products, Office Scene, Coffee Time, Product Display\n"
+            "Node granularity requirements:\n"
+            "- Not too coarse, not too fine (no 'Sleeping Orange Cat' or 'Man Raising Hand').\n"
+            "- Organize assets at a topic granularity users would want to click and browse. Prioritize forming thematic collections with real browsing value.\n"
+            "Deduplication rules:\n"
+            "- Do not generate semantically duplicate or highly similar nodes. Do not generate parent-child relationship nodes simultaneously.\n"
+            "- If two nodes express similar topics, prioritize merging. If two nodes share most assets, prioritize merging.\n"
+            "- Prioritize keeping the most understandable, specific, and valuable name.\n"
+            "- Avoid generating both 'Pets' and 'Pet Daily' — merge into 'Pet Daily'.\n"
+            "- Avoid generating both 'Tokyo Trip' and 'Japan Travel' — if most assets are in Tokyo, keep 'Tokyo Trip'.\n"
+            "Coverage principles:\n"
+            "- One asset can belong to multiple nodes. Cover valuable assets as much as possible.\n"
+            "- Scattered assets that can't form clear topics can be ignored. Prioritize forming thematic collections of real user value.\n"
+            "Node quality requirements:\n"
+            "- Nodes should have clear distinctions from each other. Each node should have a clear theme.\n"
+            "- Avoid creating nodes for very few assets. New nodes must have at least 3+ assets. Single-asset nodes are not allowed.\n"
+            "- Single assets should preferentially be appended to existing nodes, not create new nodes.\n"
+            "- If an asset cannot be categorized into any node, do not create a node just for it — omit it.\n"
+            "- If you can only create one node for an asset, and that node would have only this one asset, do not create it.\n"
+            "- Avoid generating many similarly-named nodes.\n"
+            "Node quantity principles:\n"
+            "- Better few and high quality than many mediocre. Do not generate many similar nodes. Prioritize high-value topics, only keep the easiest to understand and use.\n"
+            "After generating, self-check: Are there duplicate topics? Are there parent-child duplicate nodes? Are there nodes with heavy asset overlap? Are there hard-to-understand abstract names? If so, merge before outputting.\n"
+            "Asset list:\n"
+            "{assets}\n"
+        ),
+    },
+    "aggregation_full_append": {
+        "system_format": (
+            "Output strictly in JSON format (only JSON, no other text):\n"
+            '{"new_nodes": [{"name": "New node name", "description": "node description", "asset_ids": [1, 2, 3]}], "append_to_existing": {"node_id": [1, 2, 3], "other_node_id": [4, 5]}}\n'
+        ),
+        "default": ("Output in English.\n"
+            "You are an asset classification expert. The following aggregation nodes already exist. Please analyze all assets and optimize.\n"
+            "Existing nodes:\n"
+            "{nodes}\n"
+            "You can:\n"
+            "- Add new nodes\n"
+            "- Append assets to existing nodes\n"
+            "Each asset can belong to multiple nodes. Try to cover all assets, but meaningless assets don't need to enter nodes.\n"
+            "New node constraints: Avoid creating nodes too similar in meaning to existing nodes. If a new node and existing node express similar topics, append to existing instead of creating new. Prioritize assigning assets to the semantically best-matching existing node. New nodes must have at least 3+ assets. Single-asset nodes are not allowed. Single assets should preferentially be appended to existing nodes. If only one asset cannot fit any existing node, don't create a node just for it — omit it.\n"
+            "Naming principles: Use everyday user language. Names should be concise and clear, typically within 10 characters. Node names should feel like category folder or collection names. Avoid single-object nodes — don't create nodes for individual objects. Organize as thematic collections: Digital Products, Office Scene.\n"
+            "Deduplication: Do not generate semantically duplicate or highly similar nodes. If two nodes share most assets, prioritize merging. Do not generate parent-child relationship nodes simultaneously.\n"
+            "Support both creating new nodes and appending assets to existing nodes.\n"
+            "New nodes: new_nodes (don't include existing nodes here). Append to existing: append_to_existing (keys are existing node IDs).\n"
+            "If no new nodes are needed, new_nodes can be an empty array. If no appends are needed, append_to_existing can be an empty object.\n"
+            "All asset list:\n"
+            "{assets}\n"
+        ),
+    },
+    "aggregation_append": {
+        "system_format": (
+            "Output strictly in JSON format (only JSON, no other text):\n"
+            '{"append_to_existing": {"existing_node_id": [1, 2, 3]}}\n'
+        ),
+        "default": ("Output in English.\n"
+            "You are an asset classification expert. The following aggregation nodes already exist. Please assign new assets to the appropriate existing nodes.\n"
+            "Existing nodes:\n"
+            "{nodes}\n"
+            "Each asset can belong to multiple nodes. Try to cover all assets, but meaningless assets don't need to enter nodes.\n"
+            "New asset list:\n"
+            "{assets}\n"
+        ),
+    },
+    "aggregation_analyze_append": {
+        "system_format": (
+            "Output strictly in JSON format (only JSON, no other text):\n"
+            '{"asset_ids": [1, 2, 3]}\n'
+        ),
+        "default": ("Output in English.\n"
+            "Node name: {node_name}\n"
+            "Node description: {node_description}\n"
+            "The node currently contains {existing_count} assets with the following characteristics:\n"
+            "{existing_assets}\n"
+            "There are {candidate_count} candidate assets below. Please identify which ones should be added to this node:\n"
+            "{candidates}\n"
+        ),
+    },
+    "search_ai": {
+        "system_format": (
+            "Output strictly in JSON format (only JSON, no other text):\n"
+            '{"ids": [1, 2, 3]}\n'
+            'If no matching assets, output: {"ids": []}\n'
+        ),
+        "default": ("Output in English.\n"
+            "You are an asset search assistant. Below is a list of assets:\n"
+            "Format per line: [id] filename - analysis description\n"
+            "{assets}\n"
+            "User's search intent is: {query}\n"
+            "Please return IDs of assets that are STRICTLY RELEVANT.\n"
+            "Only return when asset content is clearly related to the user query.\n"
+            "If uncertain about relevance, do not return. Better to miss than include irrelevant results.\n"
+            "Sort by relevance from highest to lowest.\n"
+        ),
+    },
+}
+
+
+DEFAULT_PROMPTS_ZH
+DEFAULT_PROMPTS_EN
+
+def get_default_prompts(language: str = 'zh'):
+    """Get default prompts for the given language."""
+    return DEFAULT_PROMPTS_ZH if language == 'zh' else DEFAULT_PROMPTS_EN
+
+
+_current_language: str = "zh"
+
+def get_current_language() -> str:
+    return _current_language
+
+def set_current_language(lang: str) -> None:
+    global _current_language
+    _current_language = lang
 
 class PromptConfig:
     """Manages AI prompt configuration stored in YAML."""
 
-    def __init__(self, config_dir: str):
+    def __init__(self, config_dir: str, language: str = "zh"):
+        self.language = language
         self.config_dir = config_dir
         self._file = os.path.join(config_dir, "prompts.yaml")
         self._data = self._load()
@@ -340,34 +662,53 @@ class PromptConfig:
                 data = yaml.safe_load(f) or {}
         else:
             self._ensure_prompts_yaml()
-            data = dict(DEFAULT_PROMPTS)
+            data = dict(get_default_prompts(self.language))
         # Merge missing fields from DEFAULT_PROMPTS (for upgrades)
-        for key in DEFAULT_PROMPTS:
+        for key in get_default_prompts(self.language):
             if key not in data:
-                data[key] = dict(DEFAULT_PROMPTS[key])
-            # Always sync system_format from code (user edits go in custom/default)
-            data[key]["system_format"] = DEFAULT_PROMPTS[key]["system_format"]
+                data[key] = dict(get_default_prompts(self.language)[key])
+            # Always sync system_format and presets from code
+            data[key]["system_format"] = get_default_prompts(self.language)[key]["system_format"]
+            if "presets" in get_default_prompts(self.language)[key]:
+                data[key]["presets"] = get_default_prompts(self.language)[key]["presets"]
         return data
 
     def _ensure_prompts_yaml(self) -> None:
         os.makedirs(self.config_dir, exist_ok=True)
         with open(self._file, "w") as f:
-            yaml.dump(DEFAULT_PROMPTS, f, allow_unicode=True, sort_keys=False)
+            yaml.dump(get_default_prompts(self.language), f, allow_unicode=True, sort_keys=False)
 
-    def get_prompt(self, task_type: str) -> str:
+    def get_prompt(self, task_type: str, language: str = "") -> str:
+        if not language:
+            language = self.language
         section = self._data.get(task_type, {})
         custom = section.get("custom", "")
         if custom:
             base = custom
         else:
-            base = section.get("default", "")
-        fmt = section.get("system_format", "")
+            # Use language-specific default if provided, else from loaded data
+            if language:
+                defaults = get_default_prompts(language)
+                base = defaults.get(task_type, {}).get("default", "")
+                fmt = defaults.get(task_type, {}).get("system_format", "")
+            else:
+                base = section.get("default", "")
+                fmt = section.get("system_format", "")
         if fmt:
             return f"{base}\n\n{fmt}"
         return base
 
     def get_all(self) -> dict:
-        return self._data
+        """Return all prompts with language-specific defaults."""
+        result = dict(self._data)
+        defaults = get_default_prompts(self.language)
+        for key in defaults:
+            if key not in result:
+                result[key] = dict(defaults[key])
+            else:
+                result[key]["default"] = defaults[key].get("default", "")
+                result[key]["system_format"] = defaults[key].get("system_format", "")
+        return result
 
     def save(self, task_type: str, custom_prompt: str) -> None:
         self._data.setdefault(task_type, {})["custom"] = custom_prompt
