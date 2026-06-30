@@ -77,9 +77,9 @@ def register_aggregation_routes(app):
 
     @app.post("/api/aggregation/status/reset")
     def aggregation_status_reset():
-        """Clear all failed tasks from queue."""
+        """Clear done and failed tasks from queue."""
         db = _get_db(app)
-        db.execute("DELETE FROM aggregation_queue WHERE status='failed'")
+        db.execute("DELETE FROM aggregation_queue WHERE status IN ('done', 'failed')")
         return {"ok": True}
 
     @app.get("/api/nodes")
