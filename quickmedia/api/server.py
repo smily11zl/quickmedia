@@ -340,9 +340,10 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         for item in items:
             tags = _db.get_asset_tags(item["id"])
             item["tags"] = [dict(t) for t in tags]
-
         # For semantic/combined modes, also query embeddings
+        warning = None
         if mode in ("semantic", "combined"):
+            binding = {}
             try:
                 from quickmedia.embedding import ChromaStore
                 from quickmedia.ai_worker import EmbeddingAdapter
@@ -463,8 +464,10 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             except Exception as e:
                 # Semantic search failure should not break the request
                 print(f"Semantic search error: {e}", flush=True)
+                provider = binding.get("provider", "ollama") if binding else "ollama"
+                warning = f"语义搜索失败（{provider}: {e}）"
 
-        return {"items": items, "counts": _count_by_type(items)}
+        return {"items": items, "counts": _count_by_type(items), "warning": warning if warning else None}
 
     # ── Graph API ─────────────────────────────────────────────────
 

@@ -81,8 +81,10 @@ function App() {
   const [toast, setToast] = useState<{ message: string; type?: "info" | "error" } | null>(null);
   const [confirmDeleteAsset, setConfirmDeleteAsset] = useState<Asset | null>(null);
 
-  const ckCfg=()=>{Promise.all([fetch("/api/config/watch-paths").then(r=>r.json()),fetch("/api/task-models").then(r=>r.json())]).then(([wp,tm])=>{const hasWp=wp.paths&&wp.paths.length>0;const hasTm=!!(tm&&Object.values(tm).every((x:any)=>x.model));setMC(!hasWp||!hasTm);const sa=tm?.search_ai;const ready=!!(sa?.provider && sa?.model);setAiSearchReady(ready);if(ready&&!q){ssmode("ai");}});};
+  const ckCfg=()=>{Promise.all([fetch("/api/config/watch-paths").then(r=>r.json()),fetch("/api/task-models").then(r=>r.json())]).then(([wp,tm])=>{const hasWp=wp.paths&&wp.paths.length>0;const hasTm=!!(tm&&Object.values(tm).every((x:any)=>x.model));setMC(!hasWp||!hasTm);const sa=tm?.search_ai;const ready=!!(sa?.provider && sa?.model);setAiSearchReady(ready);});};
   useEffect(()=>{fetch("/api/formats").then(r=>r.json()).then(sfmts);ckCfg();setInterval(ckCfg,30000);},[]);
+  // One-time: default to AI search when model is configured on first load
+  useEffect(()=>{fetch("/api/task-models").then(r=>r.json()).then(tm=>{if(tm?.search_ai?.provider && tm?.search_ai?.model&&!q){ssmode("ai");}});},[]);
   useEffect(()=>{fetch("/api/tags").then(r=>r.json()).then(stg);},[]);
   useEffect(()=>{fetch("/api/queue/status").then(r=>r.json()).then(setQStat);const i=setInterval(()=>fetch("/api/queue/status").then(r=>r.json()).then(setQStat),5000);return ()=>clearInterval(i);},[]);
 
@@ -91,7 +93,7 @@ function App() {
     if(smode==="ai"){sslc(true);setSelectedNodeId(null);setSelectedNodeName("");fetch(`/api/search?q=${encodeURIComponent(q)}&mode=ai`).then(r=>r.json()).then(d=>{const items=d.items||[];sa(items);if(d.counts)setCounts(d.counts);sr(items);sds(true);}).catch(()=>setToast({message:"AI \u641c\u7d22\u5931\u8d25",type:"error"})).finally(()=>sslc(false));return;}
     sslc(true);
     setSelectedNodeId(null); setSelectedNodeName("");
-    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);}}).catch(()=>{if(smode==="ai")setToast({message:"AI \u641c\u7d22\u5931\u8d25",type:"error"});}).finally(()=>sslc(false));
+    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{if(d.warning){setToast({message:d.warning,type:"info"});sslc(false);return;}const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);}}).catch(()=>{if(smode==="ai")setToast({message:"AI 搜索失败",type:"error"});}).finally(()=>sslc(false));
   };
   const fa=()=>{const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>{sa(d.items); if(d.counts)setCounts(d.counts);});};
   useEffect(()=>{if(didSearch||selectedNodeId)return;fa();},[tf,ff,af,df,mf,tgf]);useEffect(()=>{const u=async()=>{const r=await fetch("/api/assets?limit=500");const d=await r.json();const m:Record<number,any>={};d.items.forEach((a:any)=>m[a.id]=a);sa((p:any[])=>{let c=false;const n=p.map(a=>{const f=m[a.id];if(f&&a.ai_status!==f.ai_status){c=true;return{...a,ai_status:f.ai_status,analyzed_at:f.analyzed_at};}return a;});return c?n:p;});};const i=setInterval(u,3000);return ()=>clearInterval(i);},[]);
