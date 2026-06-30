@@ -75,7 +75,12 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
   const fetchStatus = () => {
     fetch("/api/aggregation/status")
       .then((r) => r.json())
-      .then(setAggStatus);
+      .then((d) => {
+        setAggStatus(d);
+        if (d.status === "done" || d.task?.status === "done") {
+          fetch("/api/aggregation/status/reset", { method: "POST" });
+        }
+      });
   };
 
   useEffect(() => {
@@ -731,7 +736,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           nodeId={removeModal.nodeId}
           nodeName={removeModal.nodeName}
           mode="remove"
-          onClose={() => { const rnid = removeModal?.nodeId; setRemoveModal(null); if (rnid) refreshNodeAssets(rnid); if (selectedNodeId === rnid && onRefreshAssets) onRefreshAssets(rnid); }}
+          onClose={() => { const rnid = removeModal?.nodeId; setRemoveModal(null); if (rnid) refreshNodeAssets(rnid); if (selectedNodeId === rnid && onRefreshAssets) onRefreshAssets(rnid); onGraphRefresh?.(); }}
           onAdded={() => {
             fetchNodes();
             onGraphRefresh?.();

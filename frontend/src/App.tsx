@@ -303,21 +303,8 @@ function App() {
                   const allOk = results.every(r => r.ok);
                   if (allOk || results.some(r => r.ok)) {
                     setNodeRefreshKey(k => k + 1);
-                    setGraphData((prev:any) => {
-                      let newNodes = prev.nodes;
-                      let newEdges = prev.edges;
-                      for (const nid of nodeIds) {
-                        newNodes = newNodes.map((n:any) =>
-                          n.id === nid ? {...n, asset_count: Math.max(0, (n.asset_count||0) - 1)} : n
-                        );
-                        newEdges = newEdges.filter((e:any) => !(e.asset_id === assetId && e.node_id === nid));
-                      }
-                      return {
-                        nodes: newNodes,
-                        edges: newEdges,
-                        unassigned: [...prev.unassigned, {id: assetId, filename: "", asset_type: ""}],
-                      };
-                    });
+                    // Refresh graph data from API instead of manual patch
+                    fetch("/api/graph").then(r => r.json()).then(d => setGraphData(d));
                   }
                 });
               } else {
