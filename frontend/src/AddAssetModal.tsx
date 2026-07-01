@@ -24,7 +24,7 @@ interface Props {
   mode?: "add" | "remove";
 }
 
-function AddAssetModal({ nodeId, nodeName, onClose, onAdded, mode = "add" }: Props) {
+function AddAssetModal({ nodeId, nodeName, onClose, onAdded: _onAdded, mode = "add" }: Props) {
   const { t } = useTranslation();
   const [allAssets, setAllAssets] = useState<Asset[]>([]);
   const [filtered, setFiltered] = useState<Asset[]>([]);

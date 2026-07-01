@@ -97,8 +97,8 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
     if (aggStatus.task?.status === "done") {
       setNodeAssets(new Map()); // clear all caches
       fetchNodes();
-      const nc = aggStatus.task?.nodes_created || 0;
-      const as = aggStatus.task?.assigned || 0;
+      const nc = (aggStatus.task as any)?.nodes_created || 0;
+      const as = (aggStatus.task as any)?.assigned || 0;
       if (nc > 0 || as > 0) {
         setToast({ message: (nc > 0 && as > 0 ? t("aggregation.done_both",{nc,as}) : nc > 0 ? t("aggregation.done_nodes",{nc}) : t("aggregation.done_empty")), type: "info" });
       } else {
@@ -125,7 +125,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           lastAggMode.current = mode;
           fetchStatus();
         } else {
-          setToast({ message: d.detail ? t("error." + d.detail, d.detail) : t("aggregation.submit_failed"), type: "error" });
+          setToast({ message: d.detail ? t("error." + String(d.detail), String(d.detail)) : t("aggregation.submit_failed"), type: "error" });
         }
       });
   };
@@ -212,7 +212,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
           }
           setNodeAssets(prev => { const m = new Map(prev); m.delete(nodeId); return m; }); expandedNodes.forEach(nid => { fetch('/api/nodes/' + nid + '/assets').then(r => r.json()).then(d => { setNodeAssets(prev => new Map(prev.set(nid, d.items || []))); }); });
         } else {
-          setToast({ message: d.detail ? t("error." + d.detail, d.detail) : t("aggregation.analyze_failed"), type: "error" });
+          setToast({ message: d.detail ? t("error." + String(d.detail), String(d.detail)) : t("aggregation.analyze_failed"), type: "error" });
         }
       })
       .catch(() => {

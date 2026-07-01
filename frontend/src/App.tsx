@@ -96,7 +96,7 @@ function App() {
     if(smode==="ai"){sslc(true);setSelectedNodeId(null);setSelectedNodeName("");fetch(`/api/search?q=${encodeURIComponent(q)}&mode=ai`).then(r=>r.json()).then(d=>{const items=d.items||[];sa(items);if(d.counts)setCounts(d.counts);sr(items);sds(true);}).catch(()=>setToast({message:"AI \u641c\u7d22\u5931\u8d25",type:"error"})).finally(()=>sslc(false));return;}
     sslc(true);
     setSelectedNodeId(null); setSelectedNodeName("");
-    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{if(d.warning){setToast({message:d.warning,type:"info"});sslc(false);return;}const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);}}).catch(()=>{if(smode==="ai")setToast({message:t("search.ai_failed"),type:"error"});}).finally(()=>sslc(false));
+    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{if(d.warning){setToast({message:d.warning,type:"info"});sslc(false);return;}const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);}}).catch(()=>{if((smode as string)==="ai")setToast({message:t("search.ai_failed"),type:"error"});}).finally(()=>sslc(false));
   };
   const fa=()=>{const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>{sa(d.items); if(d.counts)setCounts(d.counts);});};
   useEffect(()=>{if(didSearch||selectedNodeId)return;fa();},[tf,ff,af,df,mf,tgf]);useEffect(()=>{const u=async()=>{const r=await fetch("/api/assets?limit=500");const d=await r.json();const m:Record<number,any>={};d.items.forEach((a:any)=>m[a.id]=a);sa((p:any[])=>{let c=false;const n=p.map(a=>{const f=m[a.id];if(f&&a.ai_status!==f.ai_status){c=true;return{...a,ai_status:f.ai_status,analyzed_at:f.analyzed_at};}return a;});return c?n:p;});};const i=setInterval(u,3000);return ()=>clearInterval(i);},[]);
@@ -237,7 +237,7 @@ function App() {
         </div>
         </>
         ) : (
-          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} refreshKey={nodeRefreshKey} onGraphRefresh={(newNodeId?:number)=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);if(newNodeId)setExpandedNodes((prev:Set<number>)=>new Set(prev).add(newNodeId));else setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));});}} onGraphFullReload={()=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));setGraphKey(k=>k+1);});}} onSelectAsset={(aid:number)=>{selA(aid);}} onOpenSettings={(tab:string)=>{setSettingsTab(tab);sso(true);}} selectedAssetId={sel?.id} unassigned={graphData.unassigned} />
+          <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} refreshKey={nodeRefreshKey} onGraphRefresh={(newNodeId?:number)=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);if(newNodeId)setExpandedNodes((prev:Set<number>)=>new Set(prev).add(newNodeId));else setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));});}} onGraphFullReload={()=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));setGraphKey(k=>k+1);});}} onSelectAsset={(aid:number)=>{selA(aid);}}  selectedAssetId={sel?.id} unassigned={graphData.unassigned} />
         )}
         <div className="mt-auto pt-4 flex flex-col gap-1 relative" style={{borderTop:`1px solid ${S.h}`}}>
           <button onClick={()=>sscm(!scm)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 {t("common.scan")}</button>
@@ -291,7 +291,7 @@ function App() {
             selectedNodeId={selectedNodeId}
             selectedNodeName={selectedNodeName}
             onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}}
-            onSelectAsset={(aid:number)=>{selA(aid);}} onOpenSettings={(tab:string)=>{setSettingsTab(tab);sso(true);}}
+            onSelectAsset={(aid:number)=>{selA(aid);}} 
             searchResults={searchResults}
             filteredAssets={fs}
             hasActiveFilter={!!(tf||ff.size>0||af.size>0||tgf.size>0||(q&&didSearch)||selectedNodeId)}
