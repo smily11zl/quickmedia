@@ -221,6 +221,7 @@ class Config:
         if not os.path.isfile(package_models):
             return
         if not os.path.isfile(user_models):
+            os.makedirs(self.config_dir, exist_ok=True)
             shutil.copy2(package_models, user_models)
             return
         with open(package_models, "r") as f:
