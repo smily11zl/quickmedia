@@ -25,23 +25,23 @@ def list_assets_filtered(db, asset_type: str = "", tag_names: list[str] = None, 
     if has_type and has_tags:
         ph = ",".join("?" for _ in tag_names)
         rows = db.execute(
-            f"SELECT DISTINCT a.id, a.filename, a.asset_type, a.size FROM assets a "
+            f"SELECT DISTINCT a.id, a.filename, a.asset_type, a.size, a.path, a.ai_status, a.ai_status_updated_at, a.visual_description, a.ai_summary, a.transcript, a.video_summary, a.ocr_text, a.hash, a.extension, a.width, a.height, a.duration FROM assets a "
             f"JOIN asset_tags at ON a.id=at.asset_id JOIN tags t ON t.id=at.tag_id "
             f"WHERE a.asset_type=? AND t.name IN ({ph}) LIMIT ?",
             [asset_type] + tag_names + [limit],
         )
     elif has_type:
-        rows = db.execute("SELECT id, filename, asset_type, size FROM assets WHERE asset_type=? LIMIT ?", (asset_type, limit))
+        rows = db.execute("SELECT id, filename, asset_type, size, path, ai_status, ai_status_updated_at, visual_description, ai_summary, transcript, video_summary, ocr_text, hash, extension, width, height, duration FROM assets WHERE asset_type=? LIMIT ?", (asset_type, limit))
     elif has_tags:
         ph = ",".join("?" for _ in tag_names)
         rows = db.execute(
-            f"SELECT DISTINCT a.id, a.filename, a.asset_type, a.size FROM assets a "
+            f"SELECT DISTINCT a.id, a.filename, a.asset_type, a.size, a.path, a.ai_status, a.ai_status_updated_at, a.visual_description, a.ai_summary, a.transcript, a.video_summary, a.ocr_text, a.hash, a.extension, a.width, a.height, a.duration FROM assets a "
             f"JOIN asset_tags at ON a.id=at.asset_id JOIN tags t ON t.id=at.tag_id "
             f"WHERE t.name IN ({ph}) LIMIT ?",
             tag_names + [limit],
         )
     else:
-        rows = db.execute("SELECT id, filename, asset_type, size FROM assets LIMIT ?", (limit,))
+        rows = db.execute("SELECT id, filename, asset_type, size, path, ai_status, ai_status_updated_at, visual_description, ai_summary, transcript, video_summary, ocr_text, hash, extension, width, height, duration FROM assets LIMIT ?", (limit,))
     return [dict(r) for r in rows]
 
 
@@ -63,4 +63,6 @@ def delete_asset_full(db, cfg, asset_id: int) -> dict:
     except Exception:
         pass
     db.execute("DELETE FROM assets WHERE id=?", (asset_id,))
+    # Clean orphan tags
+    db.execute("DELETE FROM tags WHERE id NOT IN (SELECT DISTINCT tag_id FROM asset_tags)")
     return {"ok": True, "message": f"deleted asset {asset_id}"}

@@ -437,7 +437,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                 ) : nodeAssets.get(node.id)!.length === 0 ? (
                   <span className="text-[10px]" style={{ color: S.ms }}>{t("common.noResults")}</span>
                 ) : (
-                  nodeAssets.get(node.id)!.map((a: any) => (
+                  (nodeAssets.get(node.id) || []).map((a: any) => (
                     <div key={a.id} onClick={() => onSelectAsset?.(a.id)}
                       className="flex items-center gap-1.5 py-0.5 px-1 rounded cursor-pointer hover:brightness-95"
                       style={{ color: S.i, backgroundColor: selectedAssetId === a.id ? S.rb : "transparent" }}
@@ -521,10 +521,10 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
             </div>
             {unassignedExpanded && (
               <div className="ml-5 mt-0.5">
-                {unassigned.length === 0 ? (
-                  <span className="text-[10px]" style={{ color: S.ms }}>{t("common.noResults")}</span>
-                ) : (
-                  unassigned.map((a) => (
+               {!unassigned || unassigned.length === 0 ? (
+                 <span className="text-[10px]" style={{ color: S.ms }}>{t("common.noResults")}</span>
+               ) : (
+                 (unassigned || []).map((a) => (
                     <div key={a.id} onClick={() => onSelectAsset?.(a.id)}
                       className="flex items-center gap-1.5 py-0.5 px-1 rounded cursor-pointer hover:brightness-95"
                       style={{ color: S.i, backgroundColor: selectedAssetId === a.id ? S.rb : "transparent" }}

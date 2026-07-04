@@ -150,7 +150,10 @@ export default {
     "deselect": "取消选择",
     "reanalyze_selected": "重新分析已选",
     "detail_type": "类型",
-    "detail_modified": "修改时间"
+    "delete": "删除",
+    "detail_modified": "修改时间",
+    "detail_ai_cancelled": "已取消",
+    "filter_cancelled": "已取消"
   },
   "settings": {
     "title": "设置",
@@ -278,7 +281,9 @@ export default {
   },
   "queue": {
     "processing": "分析中",
-    "pending_count": "{{count}} 个待分析"
+    "pending_count": "{{count}} 个待分析",
+    "clear_all": "清除",
+    "clear_confirm": "确认清空所有队列任务？正在运行的任务将标记为已取消。"
   },
   "filter": {
     "all_tags": "全部标签",
@@ -298,7 +303,9 @@ export default {
     "selected": "已选 {{count}} 个",
     "select_all": "全选",
     "deselect": "取消选择",
-    "reanalyze": "重新分析已选"
+    "reanalyze": "重新分析已选",
+    "delete_selected": "删除已选",
+    "delete_confirm": "确认删除 {{count}} 个素材？"
   },
   "confirm": {
     "delete_title": "删除节点",

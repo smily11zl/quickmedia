@@ -42,3 +42,6 @@
 - `aiT` 模块级函数 → `import i18n` 直接调用 `i18n.t()`
 - PromptConfig `get_prompt()` 默认用 `self.language`
 - `_console_log` 删除时连 `if` 块一起删（空块语法错）
+
+### Hotfix
+- s3 遗留：空状态 `t("detail.empty_hint")` 缺 JSX `{}`，显示为 raw key → 已修复

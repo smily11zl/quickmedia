@@ -142,9 +142,9 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         if ai_status:
             status_list = ai_status.split(",")
             placeholders = ",".join("?" * len(status_list))
-            conditions.append(f"COALESCE(aq.status, '-') IN ({placeholders})")
+            conditions.append(f"a.ai_status IN ({placeholders})")
             params.extend(status_list)
-            counts_conditions.append(f"COALESCE(aq.status, '-') IN ({placeholders})")
+            counts_conditions.append(f"a.ai_status IN ({placeholders})")
             counts_params.extend(status_list)
         if tags:
             tag_ids = [int(t) for t in tags.split(",")]
@@ -165,21 +165,8 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                    a.width, a.height, a.duration, a.path, a.description,
                    a.visual_description, a.thumbnail_status, a.modified_at,
                    a.extension,
-                   CASE WHEN aq.status IS NOT NULL THEN aq.status
-                        WHEN a.visual_description IS NOT NULL OR a.ai_summary IS NOT NULL THEN 'done'
-                        ELSE 'pending'
-                   END as ai_status"""
-        base_from = """FROM assets a
-                   LEFT JOIN (
-                       SELECT asset_id,
-                         CASE WHEN SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END) > 0
-                              THEN 'processing'
-                              ELSE MAX(status)
-                         END as status
-                       FROM ai_queue
-                       WHERE id IN (SELECT MAX(id) FROM ai_queue GROUP BY asset_id, task_type)
-                       GROUP BY asset_id
-        ) aq ON a.id = aq.asset_id"""
+                   a.ai_status"""
+        base_from = """FROM assets a"""
 
         if ai_status or tags:
             total_row = _db.execute(
@@ -258,15 +245,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         tags = _db.get_asset_tags(asset_id)
         result["tags"] = [dict(t) for t in tags]
         # AI status: prioritize 'processing', else the latest status
-        ai_rows = _db.execute(
-            """SELECT status FROM ai_queue WHERE asset_id=?
-               ORDER BY CASE WHEN status='processing' THEN 0 ELSE 1 END, id DESC
-               LIMIT 1""",
-            (asset_id,),
-        )
-        result["ai_status"] = ai_rows[0]["status"] if ai_rows else (
-            "done" if (result.get("visual_description") or result.get("ai_summary")) else "pending"
-        )
+        result["ai_status"] = result.get("ai_status")
         return result
 
     @app.put("/api/assets/{asset_id}")
@@ -735,7 +714,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             _db.conn.execute(
                 "UPDATE assets SET visual_description=NULL, ai_summary=NULL, "
                 "ocr_text=NULL, transcript=NULL, video_summary=NULL, "
-                "analyzed_at=NULL WHERE id=?",
+                "analyzed_at=NULL, ai_status='pending', ai_status_updated_at=datetime('now') WHERE id=?",
                 (aid,),
             )
             # Clear old auto tags, search_terms, and embeddings
@@ -760,6 +739,29 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             elif asset_type == "document":
                 _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'text')", (aid,))
         return {"ok": True, "message": f"已重新入队 {len(asset_ids)} 个素材"}
+
+    @app.post("/api/assets/batch-delete")
+    def batch_delete(body: dict):
+        _db = _get_db(app)
+        ids = body.get("ids", [])
+        from quickmedia.asset_ops import delete_asset_full
+        cfg = Config(config_dir=app.extra["config_dir"])
+        deleted = 0
+        for aid in ids:
+            result = delete_asset_full(_db, cfg, aid)
+            if result.get("ok"):
+                deleted += 1
+        return {"ok": True, "deleted": deleted}
+
+    @app.delete("/api/ai-queue")
+    def clear_queue():
+        _db = _get_db(app)
+        _db.execute(
+            "UPDATE assets SET ai_status='cancelled', ai_status_updated_at=datetime('now') "
+            "WHERE id IN (SELECT asset_id FROM ai_queue)"
+        )
+        _db.execute("DELETE FROM ai_queue")
+        return {"ok": True}
 
     @app.get("/api/assets/{asset_id}/preview")
     def preview_asset(asset_id: int):
@@ -1111,5 +1113,12 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
 
 
 def _get_db(app: FastAPI) -> Database:
-    """Get a fresh Database connection for the current request."""
-    return Database(app.extra["db_path"])
+    """Get thread-local Database connection."""
+    import threading
+    tid = threading.current_thread().ident
+    if "_db_cache" not in app.extra:
+        app.extra["_db_cache"] = {}
+    cache = app.extra["_db_cache"]
+    if tid not in cache:
+        cache[tid] = Database(app.extra["db_path"])
+    return cache[tid]

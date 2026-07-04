@@ -3,6 +3,8 @@
 import sqlite3
 import os
 
+DB_VERSION = 18  # increment when adding new migration
+
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS assets (
@@ -126,10 +128,19 @@ class Database:
         self.conn = sqlite3.connect(db_path)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.execute("PRAGMA busy_timeout = 5000")
+        current_ver = self.conn.execute("PRAGMA user_version").fetchone()[0]
+        if current_ver >= DB_VERSION:
+            return  # already up to date
+        self._init_schema()
         self._migrate_v9()
         self._migrate_v12()
         self._migrate_v16()
-        self._init_schema()
+        self._migrate_v18()
+        try:
+            self.conn.execute(f"PRAGMA user_version={DB_VERSION}")
+        except sqlite3.OperationalError:
+            pass  # another connection already set it
 
     def _migrate_v9(self) -> None:
         """V9: rename ai_description to visual_description for existing databases."""
@@ -153,6 +164,27 @@ class Database:
         except Exception:
             pass
 
+
+    def _migrate_v18(self) -> None:
+        """v18: add ai_status and ai_status_updated_at columns to assets.
+        Migrates and backfills old data.
+        """
+        cols = [r["name"] for r in self.conn.execute("PRAGMA table_info(assets)").fetchall()]
+        if "ai_status" not in cols:
+            self.conn.execute("ALTER TABLE assets ADD COLUMN ai_status TEXT")
+        if "ai_status_updated_at" not in cols:
+            self.conn.execute("ALTER TABLE assets ADD COLUMN ai_status_updated_at TEXT")
+        try:
+            self.conn.execute(
+            "UPDATE assets SET ai_status=CASE "
+            "WHEN visual_description IS NOT NULL OR ai_summary IS NOT NULL "
+            "OR transcript IS NOT NULL OR video_summary IS NOT NULL "
+            "OR ocr_text IS NOT NULL THEN 'done' ELSE 'pending' END, "
+            "ai_status_updated_at=COALESCE(analyzed_at, datetime('now')) "
+            "WHERE ai_status IS NULL"
+        )
+        except Exception:
+            pass  # DB locked by another connection, will backfill next startup
     def _init_schema(self) -> None:
         """Create tables and indexes if they don't exist."""
         self.conn.executescript(SCHEMA_SQL)
@@ -452,4 +484,6 @@ def _cleanup_v4_tags(db: Database) -> int:
     )
     db.conn.commit()
     return removed
+
+
 

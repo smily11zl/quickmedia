@@ -105,7 +105,7 @@ class AIWorker:
         print("[AIWorker] process_queue() called", flush=True)
         try:
             rows = self.db.execute(
-                "SELECT aq.id, aq.asset_id, aq.task_type, a.path, a.asset_type, aq.attempt "
+                "SELECT aq.id, aq.asset_id, aq.task_type, a.path, a.asset_type, a.filename, aq.attempt "
                 "FROM ai_queue aq JOIN assets a ON aq.asset_id = a.id "
                 "WHERE aq.status = 'pending' ORDER BY aq.id"
             )
@@ -120,18 +120,30 @@ class AIWorker:
         print(f"[AIWorker] 发现 {len(rows)} 个待处理任务", flush=True)
         count = 0
         for row in rows:
-            name = self.db.execute(
-                "SELECT filename FROM assets WHERE id=?", (row["asset_id"],)
-            )[0]["filename"]
+            name = row["filename"]
             asset_type = row["asset_type"]
             task_type = row["task_type"]
             attempt = row["attempt"] or 0
 
             # Retry loop: keep trying the same task until success or max retries
             while True:
+                # Check if asset still exists or was cancelled
+                asset_status = self.db.execute(
+                    "SELECT ai_status FROM assets WHERE id=?", (row["asset_id"],)
+                )
+                if not asset_status:
+                    print(f"[AIWorker] 素材已删除，跳过: {name}", flush=True)
+                    break
+                if asset_status[0]["ai_status"] == "cancelled":
+                    print(f"[AIWorker] 跳过已取消: {name}", flush=True)
+                    break
                 self.db.execute(
                     "UPDATE ai_queue SET status='processing', attempt=? WHERE id=?",
                     (attempt, row["id"]),
+                )
+                self.db.execute(
+                    "UPDATE assets SET ai_status='processing', ai_status_updated_at=datetime('now') WHERE id=?",
+                    (row["asset_id"],)
                 )
                 print(f"[AIWorker] 分析中: {name} ({task_type}/{asset_type})"
                       f"{f' (第{attempt+1}次尝试)' if attempt > 0 else ''}", flush=True)
@@ -147,16 +159,24 @@ class AIWorker:
                         self._process_transcribe(row["asset_id"], row["path"])
                     elif task_type == "embedding":
                         self._process_embedding(row["asset_id"])
-                    self.db.execute(
-                        "UPDATE ai_queue SET status='done', attempt=? WHERE id=?",
-                        (attempt, row["id"]),
+                    # Check if asset deleted or cancelled during processing
+                    asset_status = self.db.execute(
+                        "SELECT ai_status FROM assets WHERE id=?", (row["asset_id"],)
                     )
-                    # Update analyzed_at timestamp
+                    if not asset_status:
+                        print(f"[AIWorker] 素材已删除，跳过: {name}", flush=True)
+                        break
+                    if asset_status[0]["ai_status"] == "cancelled":
+                        print(f"[AIWorker] 跳过已取消: {name}", flush=True)
+                        break
+                    # Mark asset as done and clean up queue
                     from datetime import datetime
+                    now = datetime.now().isoformat()
                     self.db.execute(
-                        "UPDATE assets SET analyzed_at=? WHERE id=?",
-                        (datetime.now().isoformat(), row["asset_id"]),
+                        "UPDATE assets SET ai_status='done', ai_status_updated_at=?, analyzed_at=? WHERE id=?",
+                        (now, now, row["asset_id"]),
                     )
+                    self.db.execute("DELETE FROM ai_queue WHERE id=?", (row["id"],))
                     print(f"[AIWorker] 完成: {name}", flush=True)
                     # Enqueue embedding if result is sufficient for vectorization
                     if task_type in ("vision", "text", "transcribe", "video_summary"):
@@ -168,6 +188,10 @@ class AIWorker:
                         print(f"[AIWorker] 重试 {attempt}/{self.MAX_RETRIES}: {name} — {e}", flush=True)
                         import time; time.sleep(2)
                     else:
+                        self.db.execute(
+                            "UPDATE assets SET ai_status='failed', ai_status_updated_at=datetime('now') WHERE id=?",
+                            (row["asset_id"],)
+                        )
                         self.db.execute(
                             "UPDATE ai_queue SET status='failed', error=?, attempt=? WHERE id=?",
                             (str(e), attempt, row["id"]),
@@ -419,11 +443,11 @@ class AIWorker:
             if rows:
                 tag_id = rows[0]["id"]
             else:
-                cursor = self.db.conn.execute(
+                self.db.execute(
                     "INSERT INTO tags (name) VALUES (?)", (name,)
                 )
-                self.db.conn.commit()
-                tag_id = cursor.lastrowid
+                row = self.db.execute("SELECT last_insert_rowid()")
+                tag_id = row[0][0]
             existing = self.db.execute(
                 "SELECT 1 FROM asset_tags WHERE asset_id=? AND tag_id=?",
                 (asset_id, tag_id),

@@ -150,7 +150,10 @@ export default {
     "deselect": "Deselect",
     "reanalyze_selected": "Re-analyze selected",
     "detail_type": "Type",
-    "detail_modified": "Modified"
+    "delete": "Delete",
+    "detail_modified": "Modified",
+    "detail_ai_cancelled": "Cancelled",
+    "filter_cancelled": "Cancelled"
   },
   "settings": {
     "title": "Settings",
@@ -278,7 +281,9 @@ export default {
   },
   "queue": {
     "processing": "Processing",
-    "pending_count": "{{count}} pending"
+    "pending_count": "{{count}} pending",
+    "clear_all": "Clear",
+    "clear_confirm": "Clear all queue tasks? Running tasks will be marked as cancelled."
   },
   "filter": {
     "all_tags": "All tags",
@@ -298,7 +303,9 @@ export default {
     "selected": "{{count}} selected",
     "select_all": "Select all",
     "deselect": "Deselect",
-    "reanalyze": "Re-analyze selected"
+    "reanalyze": "Re-analyze selected",
+    "delete_selected": "Delete selected",
+    "delete_confirm": "Delete {{count}} assets?"
   },
   "confirm": {
     "delete_title": "Delete Node",

@@ -27,7 +27,7 @@ interface TagInfo { id: number; name: string; count: number; }
 const f=(b:number)=>{for(const u of["B","KB","MB","GB"]){if(b<1024)return `${b}${u}`;b=Math.floor(b/1024);}return `${b}TB`;};
 const S={c:"#faf9f5",h:"#e6dfd8",d:"#efe9de",s:"#f5f0e8",i:"#141413",b:"#3d3d3a",m:"#6c6a64",ms:"#8e8b82",r:"#cc785c",rb:"rgba(204,120,92,0.08)",w:"#fff"};
 const docI=(a:Asset)=>{const x=a.filename.split(".").pop()?.toLowerCase()||"";const m:Record<string,string>={pdf:"📕",md:"📝",txt:"📝",csv:"📊",json:"📋",xlsx:"📊",docx:"📄"};return m[x]||"📄";};
-const aiT=(s?:string)=>{if(!s||s==="-")return null;const m:{[k:string]:string}={done:i18n.t("asset.detail_ai_done"),processing:i18n.t("asset.detail_ai_processing"),pending:i18n.t("asset.detail_ai_pending"),failed:i18n.t("asset.detail_ai_failed")};return <span className="text-[10px]" style={{color:S.ms}}>{m[s]||s}</span>;};
+const aiT=(s?:string)=>{if(!s||s==="-")return null;const cl:{[k:string]:string}={done:"#5db872",processing:"#e8a55a",failed:"#c64545",pending:"#6c6a64",cancelled:"#8b75a6"};const m:{[k:string]:string}={done:i18n.t("asset.detail_ai_done"),processing:i18n.t("asset.detail_ai_processing"),pending:i18n.t("asset.detail_ai_pending"),failed:i18n.t("asset.detail_ai_failed"),cancelled:i18n.t("asset.detail_ai_cancelled")};return <span className="text-[10px]" style={{color:cl[s]||S.ms}}>{m[s]||s}</span>;};
 
 const DocPreview = ({id}:{id:number}) => {
   const [txt,setTxt]=useState("");
@@ -83,6 +83,8 @@ function App() {
   const [counts, setCounts] = useState({image: 0, video: 0, audio: 0, document: 0});
   const [toast, setToast] = useState<{ message: string; type?: "info" | "error" } | null>(null);
   const [confirmDeleteAsset, setConfirmDeleteAsset] = useState<Asset | null>(null);
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState<any>(null);
+  const [queueClearConfirm, setQueueClearConfirm] = useState(false);
 
   const ckCfg=()=>{Promise.all([fetch("/api/config/watch-paths").then(r=>r.json()),fetch("/api/task-models").then(r=>r.json())]).then(([wp,tm])=>{const hasWp=wp.paths&&wp.paths.length>0;const hasTm=!!(tm&&Object.values(tm).every((x:any)=>x.model));setMC(!hasWp||!hasTm);const sa=tm?.search_ai;const ready=!!(sa?.provider && sa?.model);setAiSearchReady(ready);});};
   useEffect(()=>{fetch("/api/formats").then(r=>r.json()).then(sfmts);ckCfg();setInterval(ckCfg,30000);},[]);
@@ -149,6 +151,8 @@ function App() {
   const rmT=(tid:number)=>{if(!sel)return;fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"DELETE"}).then(()=>{sl({...sel,tags:sel.tags.filter(t=>t.id!==tid)});fetch("/api/tags").then(r=>r.json()).then(stg);});};
   const cfT=(tid:number)=>{if(!sel)return;fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"DELETE"}).then(()=>fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"POST"})).then(()=>{sl({...sel,tags:sel.tags.map(t=>t.id===tid?{...t,source:"manual"}:t)});});};
   const tgA=(id:number)=>{const n=new Set(ms);n.has(id)?n.delete(id):n.add(id);sm(n);};
+  const cq=()=>{setQueueClearConfirm(true);};
+  const bd=()=>{setBatchDeleteConfirm({title:t("batch.delete_selected"),message:t("batch.delete_confirm",{count:ms.size}),action:()=>{fetch("/api/assets/batch-delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[...ms]})}).then(r=>r.json()).then(d=>{if(d.ok){sm(new Set());sa([]);fa();}});}});};
   const bRe=()=>{fetch("/api/assets/batch-reanalyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({asset_ids:[...ms]})}).then(()=>{sm(new Set());});};
   const delA=(id:number)=>{fetch(`/api/assets/${id}`,{method:"DELETE"}).then(()=>{sl(null);fa();});};
 
@@ -213,7 +217,7 @@ function App() {
           </button>
           {aop&&<div className="fixed inset-0 z-[5]" onClick={()=>saop(false)}/>}
           {aop&&<div className="absolute top-full left-0 right-0 mt-1 p-2 rounded border shadow-sm z-10 flex gap-1 flex-wrap" style={{borderColor:S.h,backgroundColor:S.c}}>
-            {[{k:"done",l:t("asset.detail_ai_done")},{k:"processing",l:t("asset.detail_ai_processing")},{k:"pending",l:t("asset.detail_ai_pending")},{k:"failed",l:t("asset.detail_ai_failed")}].map(s=><button key={s.k} onClick={()=>{const n=new Set(af);n.has(s.k)?n.delete(s.k):n.add(s.k);saf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(af.has(s.k)?"font-medium":"")} style={{color:af.has(s.k)?S.r:S.ms,backgroundColor:af.has(s.k)?S.rb:"transparent"}}>{s.l}</button>)}
+            {[{k:"done",l:t("asset.detail_ai_done"),c:"#5db872"},{k:"processing",l:t("asset.detail_ai_processing"),c:"#e8a55a"},{k:"pending",l:t("asset.detail_ai_pending"),c:"#6c6a64"},{k:"failed",l:t("asset.detail_ai_failed"),c:"#c64545"},{k:"cancelled",l:t("asset.filter_cancelled"),c:"#8b75a6"}].map(s=><button key={s.k} onClick={()=>{const n=new Set(af);n.has(s.k)?n.delete(s.k):n.add(s.k);saf(n);}} className={"px-1.5 py-0.5 rounded text-[11px] "+(af.has(s.k)?"font-medium":"")} style={{color:s.c,fontWeight:af.has(s.k)?"bold":"normal",backgroundColor:af.has(s.k)?S.rb:"transparent"}}>{s.l}</button>)}
           </div>}
         </div>
         <div className="text-xs mb-1 mt-2" style={{color:S.ms}}>{t("asset.filter_tags")}</div>
@@ -253,7 +257,7 @@ function App() {
       {slc && <div className="fixed inset-0 z-40 flex items-center justify-center" style={{backgroundColor: "rgba(250,249,245,0.7)"}}><div className="text-center"><div className="animate-spin text-2xl mb-2">⏳</div><p className="text-sm" style={{color: "#6c6a64"}}>{t("search.searching")}</p></div></div>}
       <main className="flex-1 flex flex-col overflow-hidden">
         <div className="px-6 pt-4 pb-2">
-        {ms.size>0&&<div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{backgroundColor:S.d}}><span className="text-xs" style={{color:S.b}}>已选 {ms.size} 个</span><button onClick={()=>sm(new Set(fs.map(a=>a.id)))} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>{t("batch.select_all")}</button><button onClick={()=>sm(new Set())} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>{t("batch.deselect")}</button><button onClick={bRe} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>{t("batch.reanalyze")}</button></div>}
+        {ms.size>0&&<div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{backgroundColor:S.d}}><span className="text-xs" style={{color:S.b}}>已选 {ms.size} 个</span><button onClick={()=>sm(new Set(fs.map(a=>a.id)))} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>{t("batch.select_all")}</button><button onClick={()=>sm(new Set())} className="text-xs px-3 py-1 rounded-md" style={{backgroundColor:S.s,color:S.m}}>{t("batch.deselect")}</button><button onClick={bRe} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:S.r,color:S.w}}>{t("batch.reanalyze")}</button><button onClick={bd} className="text-xs px-3 py-1 rounded-md font-medium" style={{backgroundColor:"#c64545",color:S.w}}>{t("batch.delete_selected")}</button></div>}
         <div className="flex gap-2 mb-4 items-center">
           <div className="flex gap-1 rounded-md p-0.5" style={{backgroundColor:S.s}}>
             <button onClick={()=>sv("grid")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="grid"?S.c:"transparent",color:S.i}}>{t("view.grid")}</button>
@@ -264,7 +268,7 @@ function App() {
             <option value="name">{t("common.sort_name")}</option><option value="size">{t("common.sort_size")}</option><option value="date">{t("common.sort_date")}</option>
           </select>
           {qStat.processing_name && <span className="text-[10px]" style={{color: '#e8a55a'}}>{t("queue.processing")}: {qStat.processing_name}</span>}
-          {qStat.pending > 0 && <span className="text-[10px]" style={{color: S.ms}}>{t("queue.pending_count",{count: qStat.pending})}</span>}
+          {qStat.pending > 0 && <span className="text-[10px]" style={{color: S.ms}}>{t("queue.pending_count",{count: qStat.pending})}</span>}{qStat.pending > 0 && <button onClick={cq} className="text-[10px] ml-2 underline cursor-pointer" style={{color: S.ms}}>{t("queue.clear_all")}</button>}
           <span className="text-xs ml-auto" style={{color:S.ms}}>{t("common.item_count",{count: fs.length})}</span>
         </div>
         {vw!=="graph"&&selectedNodeId && (
@@ -367,7 +371,7 @@ function App() {
             </div>))}
           </div>
         )}
-        {fs.length===0&&<div className="text-center mt-20"><p className="text-4xl mb-4">📁</p><p style={{fontFamily:"'Inter',sans-serif",color:S.b}}>{t("detail.empty_title")}</p><p className="text-sm mt-2" style={{color:S.m}}>t("detail.empty_hint")</p></div>}
+        {fs.length===0&&<div className="text-center mt-20"><p className="text-4xl mb-4">📁</p><p style={{fontFamily:"'Inter',sans-serif",color:S.b}}>{t("detail.empty_title")}</p><p className="text-sm mt-2" style={{color:S.m}}>{t("detail.empty_hint")}</p></div>}
         </div>
         </div>
       </main>
@@ -382,7 +386,7 @@ function App() {
           {sel.duration&&<div><span style={{color:S.ms}}>{t("asset.detail_duration")}</span><p style={{color:S.b}}>{Math.round(sel.duration)}{t("common.seconds")}</p></div>}
           {sel.modified_at&&<div><span style={{color:S.ms}}>{t("asset.detail_modified")}</span><p style={{color:S.b}}>{sel.modified_at.slice(0,10)}</p></div>}
         </div>
-        {sel.ai_status&&sel.ai_status!=="-"&&<div className="text-xs flex items-center gap-2"><span style={{color:S.ms}}>{t("asset.detail_ai_status")}: </span><span style={{color:sel.ai_status==="done"?"#5db872":sel.ai_status==="processing"?"#e8a55a":sel.ai_status==="failed"?"#c64545":S.m}}>{sel.ai_status==="done"?t("asset.detail_ai_done"):sel.ai_status==="processing"?t("asset.detail_ai_processing") + "...":sel.ai_status==="pending"?t("asset.detail_ai_pending"):sel.ai_status}</span>{sel.ai_status==="failed"?<button onClick={()=>fetch(`/api/assets/${sel.id}/retry-ai`,{method:"POST"}).then(()=>selA(sel.id)).then(()=>fa())} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.r,color:S.w}}>{t("asset.detail_ai_retry")}</button>:<button onClick={()=>fetch(`/api/assets/${sel.id}/reanalyze`,{method:"POST"}).then(()=>{selA(sel.id);})} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.d,color:S.b}}>{t("asset.detail_reanalyze")}</button>}</div>}
+        {sel.ai_status&&sel.ai_status!=="-"&&<div className="text-xs flex items-center gap-2"><span style={{color:S.ms}}>{t("asset.detail_ai_status")}: </span><span style={{color:sel.ai_status==="done"?"#5db872":sel.ai_status==="processing"?"#e8a55a":sel.ai_status==="failed"?"#c64545":S.m}}>{sel.ai_status==="done"?t("asset.detail_ai_done"):sel.ai_status==="processing"?t("asset.detail_ai_processing") + "...":sel.ai_status==="pending"?t("asset.detail_ai_pending"):sel.ai_status==="cancelled"?t("asset.detail_ai_cancelled"):sel.ai_status}</span>{sel.ai_status==="failed"?<button onClick={()=>fetch(`/api/assets/${sel.id}/retry-ai`,{method:"POST"}).then(()=>selA(sel.id)).then(()=>fa())} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.r,color:S.w}}>{t("asset.detail_ai_retry")}</button>:<button onClick={()=>fetch(`/api/assets/${sel.id}/reanalyze`,{method:"POST"}).then(()=>{selA(sel.id);})} className="text-xs px-2 py-0.5 rounded-md" style={{backgroundColor:S.d,color:S.b}}>{t("asset.detail_reanalyze")}</button>}</div>}
         {(sel.visual_description||sel.ai_summary||sel.video_summary)&& <div><button onClick={() => scp(sel.id)} className="text-xs px-2 py-1 rounded-md" style={{backgroundColor: S.rb, color: S.r}}>🔍 {t("asset.detail_similar")}</button></div>}
         {sel.visual_description&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>{t("asset.detail_ai_desc")}</div><p className="text-xs" style={{color:S.b}}>{sel.visual_description}</p></div>}
         {sel.ocr_text&&<div><div className="text-[11px] mb-1" style={{color:S.ms}}>{t("asset.detail_ocr")}</div><p className="text-xs" style={{color:S.b}}>{sel.ocr_text}</p></div>}
@@ -402,6 +406,8 @@ function App() {
       {mm && <ModelManager onClose={() => smm(false)} />}
       {cp && <SimilarPanel assetId={cp} onClose={() => scp(null)} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {queueClearConfirm && (<ConfirmModal title={t("queue.clear_all")} message={t("queue.clear_confirm")} confirmText={t("common.delete")} confirmColor="error" onConfirm={()=>{fetch("/api/ai-queue",{method:"DELETE"}).then(r=>r.json()).then(d=>{if(d.ok){setQStat({pending:0,processing_name:null});}});setQueueClearConfirm(false);}} onCancel={()=>setQueueClearConfirm(false)}/>)}
+      {batchDeleteConfirm && (<ConfirmModal title={batchDeleteConfirm.title} message={batchDeleteConfirm.message} confirmText={t("common.delete")} confirmColor="error" onConfirm={()=>{batchDeleteConfirm.action();setBatchDeleteConfirm(null);}} onCancel={()=>setBatchDeleteConfirm(null)}/>)}
       {confirmDeleteAsset && (
         <ConfirmModal
           title={t("asset.detail_delete")}

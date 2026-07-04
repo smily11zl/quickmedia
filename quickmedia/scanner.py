@@ -125,11 +125,11 @@ class Scanner:
             if rows:
                 tag_ids[name] = rows[0]["id"]
             else:
-                cursor = self.db.conn.execute(
+                self.db.execute(
                     "INSERT INTO tags (name) VALUES (?)", (name,)
                 )
-                self.db.conn.commit()
-                tag_ids[name] = cursor.lastrowid
+                row = self.db.execute("SELECT last_insert_rowid()")
+                tag_ids[name] = row[0][0]
         return tag_ids
 
     def _link_tags(
@@ -213,17 +213,17 @@ class Scanner:
         created_ts = datetime.fromtimestamp(st.st_ctime).isoformat()
         now = datetime.now().isoformat()
 
-        cursor = self.db.conn.execute(
+        self.db.execute(
             """INSERT INTO assets
                (hash, inode, device, path, filename, extension, asset_type,
                 size, status, thumbnail_status, modified_at, created_at,
-                scanned_at)
-               VALUES (?,?,?,?,?,?,?,?, 'active','pending',?,?,?)""",
+                scanned_at, ai_status, ai_status_updated_at)
+                VALUES (?,?,?,?,?,?,?,?, 'active','pending',?,?,?, 'pending',?)""",
             (hash_val, st.st_ino, st.st_dev, filepath, filename,
-             ext.lower(), asset_type, size, modified_ts, created_ts, now),
+             ext.lower(), asset_type, size, modified_ts, created_ts, now, now),
         )
-        self.db.conn.commit()
-        return cursor.lastrowid
+        row = self.db.execute("SELECT last_insert_rowid()")
+        return row[0][0]
 
     def _ingest_file(self, filepath: str, result: dict = None) -> int:
         """Ingest a single file into the asset database. Returns asset_id or 0.
@@ -282,9 +282,9 @@ class Scanner:
             result["total"] = result.get("total", 0) + 1
 
         # Post-processing: tags, metadata, thumbnail, AI
-        auto_tags = self._auto_tags(filename, asset_type, filepath, 0)
-        self._link_tags(asset_id, auto_tags, source="auto")
         meta = self._metadata.extract(filepath)
+        auto_tags = self._auto_tags(filename, asset_type, filepath, meta.get("duration", 0))
+        self._link_tags(asset_id, auto_tags, source="auto")
         if meta.get("width") or meta.get("height") or meta.get("duration"):
             updates, params = [], []
             if meta.get("width") is not None:

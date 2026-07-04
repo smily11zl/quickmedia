@@ -344,7 +344,27 @@ def _cmd_serve(cfg: Config, db_path: str):
             print(f"已生成 {processed} 个缩略图")
 
     app = create_app(db, cfg, thumb_dir)
+
+    # Backfill ai_status for existing data
+    db.execute(
+        "UPDATE assets SET ai_status=CASE "
+        "WHEN visual_description IS NOT NULL OR ai_summary IS NOT NULL "
+        "OR transcript IS NOT NULL OR video_summary IS NOT NULL "
+        "OR ocr_text IS NOT NULL THEN 'done' ELSE 'pending' END, "
+        "ai_status_updated_at=COALESCE(analyzed_at, datetime('now')) "
+        "WHERE ai_status IS NULL"
+    )
+    # Reset any stuck "processing" tasks
+    db.execute(
+        "UPDATE ai_queue SET status='pending', attempt=0 WHERE status='processing'"
+    )
+    db.execute(
+        "UPDATE assets SET ai_status='pending', ai_status_updated_at=datetime('now') WHERE id IN "
+        "(SELECT asset_id FROM ai_queue WHERE status='processing')"
+    )
+
     db.close()
+
 
     # Start file watcher
     from quickmedia.watcher import AssetWatcher
@@ -384,12 +404,7 @@ def _cmd_serve(cfg: Config, db_path: str):
             except Exception as e:
                 print(f"[AIWorker] loop error: {e}", flush=True)
             time.sleep(5)
-    # Reset any stuck "processing" tasks from previous interrupted runs
-    ai_db = Database(db_path)
-    ai_db.execute(
-        "UPDATE ai_queue SET status='pending', attempt=0 WHERE status='processing'"
-    )
-    ai_db.close()
+
     ai_thread = threading.Thread(target=_ai_loop, daemon=True)
     ai_thread.start()
 

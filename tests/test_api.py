@@ -302,3 +302,74 @@ class TestPromptsAPI:
             "custom": "test"
         })
         assert r.status_code == 400
+
+class TestV18BatchDelete:
+    """v18: batch delete assets."""
+
+    def test_batch_delete_ok(self):
+        """POST /api/assets/batch-delete deletes multiple assets."""
+        from fastapi.testclient import TestClient
+        from quickmedia.api.server import create_app
+        from quickmedia.database import Database
+        from quickmedia.config import Config
+        import tempfile, os
+
+        tmp = tempfile.mkdtemp()
+        db_path = os.path.join(tmp, "test.db")
+        config_dir = os.path.join(tmp, "config")
+        os.makedirs(config_dir, exist_ok=True)
+
+        db = Database(db_path)
+        cfg = Config(config_dir=config_dir)
+        app = create_app(db, cfg, tmp)
+        client = TestClient(app)
+
+        # Insert test assets
+        db.execute(
+            "INSERT INTO assets (hash,inode,device,path,filename,extension,asset_type,size,status) "
+            "VALUES ('h1',1,1,'/t/a.jpg','a.jpg','.jpg','image',100,'active'),"
+            "('h2',1,1,'/t/b.jpg','b.jpg','.jpg','image',200,'active')"
+        )
+
+        resp = client.post("/api/assets/batch-delete", json={"ids": [1, 2]})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+
+        # Verify assets deleted
+        rows = db.execute("SELECT id FROM assets")
+        assert len(rows) == 0
+
+    def test_clear_queue_ok(self):
+        """DELETE /api/ai-queue clears all tasks."""
+        from fastapi.testclient import TestClient
+        from quickmedia.api.server import create_app
+        from quickmedia.database import Database
+        from quickmedia.config import Config
+        import tempfile, os
+
+        tmp = tempfile.mkdtemp()
+        db_path = os.path.join(tmp, "test.db")
+        config_dir = os.path.join(tmp, "config")
+        os.makedirs(config_dir, exist_ok=True)
+
+        db = Database(db_path)
+        cfg = Config(config_dir=config_dir)
+        app = create_app(db, cfg, tmp)
+        client = TestClient(app)
+
+        # Insert asset and queue tasks
+        db.execute(
+            "INSERT INTO assets (hash,inode,device,path,filename,extension,asset_type,size,status) "
+            "VALUES ('h1',1,1,'/t/a.jpg','a.jpg','.jpg','image',100,'active')"
+        )
+        db.execute("INSERT INTO ai_queue (asset_id, task_type, status) VALUES (1, 'vision', 'pending')")
+        db.execute("INSERT INTO ai_queue (asset_id, task_type, status) VALUES (1, 'embedding', 'done')")
+
+        resp = client.delete("/api/ai-queue")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+
+        rows = db.execute("SELECT * FROM ai_queue")
+        assert len(rows) == 0

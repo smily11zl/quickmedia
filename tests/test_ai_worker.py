@@ -222,3 +222,39 @@ class TestTranscribeTask:
         assert "Q3预算" in (asset_rows[0]["transcript"] or "")
         assert "Q3预算分配" in (asset_rows[0]["ai_summary"] or "")
         assert "综合" in (asset_rows[0]["video_summary"] or "")
+
+class TestV18CancelledSkip:
+    """v18: cancelled task should not be retried."""
+
+    def test_cancelled_task_skipped_on_retry(self):
+        """Worker skips retry when task status is cancelled."""
+        import tempfile, os
+        from quickmedia.database import Database
+        from quickmedia.config import Config
+
+        tmp = tempfile.mkdtemp()
+        db_path = os.path.join(tmp, "test.db")
+        config_dir = os.path.join(tmp, "config")
+        os.makedirs(config_dir, exist_ok=True)
+
+        db = Database(db_path)
+        # Create asset
+        db.execute(
+            "INSERT INTO assets (hash,inode,device,path,filename,extension,asset_type,size,status) "
+            "VALUES ('h1',1,1,'/t/a.txt','a.txt','.txt','document',100,'active')"
+        )
+        # Insert task
+        db.execute(
+            "INSERT INTO ai_queue (asset_id, task_type, status) VALUES (1, 'text', 'cancelled')"
+        )
+
+        cfg = Config(config_dir=config_dir)
+        worker = AIWorker(db=db, config=cfg)
+        # process_queue queries only 'pending' — cancelled should be skipped
+        # Since our task is already cancelled (not pending), it should return 0
+        processed = worker.process_queue()
+        assert processed == 0, f"Expected 0 processed, got {processed}"
+
+        # Also verify the task was NOT updated back to pending/failed
+        rows = db.execute("SELECT status FROM ai_queue WHERE id=1")
+        assert rows[0]["status"] == "cancelled"

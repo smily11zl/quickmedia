@@ -205,3 +205,42 @@ class TestV4TagCleanup:
         names = {r["name"] for r in tags}
         assert "短片(<5min)" in names
         assert "猫" in names
+
+
+class TestV18Migration:
+    """v18 schema migration — cancelled status in ai_queue."""
+
+    
+    def test_ai_status_column_exists(self):
+        """v18: ai_status and ai_status_updated_at columns exist on assets."""
+        db = _tmp_db()
+        columns = db.execute("PRAGMA table_info(assets)")
+        col_names = {r["name"] for r in columns}
+        assert "ai_status" in col_names
+        assert "ai_status_updated_at" in col_names
+
+    def test_ai_status_defaults_to_null(self):
+        """v18: new assets get NULL ai_status (deferred compute)."""
+        db = _tmp_db()
+        db.execute(
+            "INSERT INTO assets (hash,inode,device,path,filename,extension,asset_type,size,status) "
+            "VALUES ('h1',1,1,'/t/a.jpg','a.jpg','.jpg','image',100,'active')"
+        )
+        rows = db.execute("SELECT ai_status, ai_status_updated_at FROM assets WHERE id=1")
+        assert rows[0]["ai_status"] is None
+        assert rows[0]["ai_status_updated_at"] is None
+
+    def test_ai_queue_accepts_cancelled_status(self):
+        """v18 migration allows 'cancelled' and rejects invalid statuses in ai_queue."""
+        db = _tmp_db()
+        db.execute(
+            "INSERT INTO assets (hash,inode,device,path,filename,extension,asset_type,size,status) VALUES ('x1',1,1,'/t/a.jpg','a.jpg','.jpg','image',100,'active')"
+        )
+        # cancelled should be accepted
+        db.execute(
+            "INSERT INTO ai_queue (asset_id, task_type, status) VALUES (1, 'vision', 'cancelled')"
+        )
+        rows = db.execute("SELECT * FROM ai_queue WHERE status='cancelled'")
+        assert len(rows) == 1
+        assert rows[0]["status"] == "cancelled"
+

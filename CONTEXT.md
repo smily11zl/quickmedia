@@ -527,4 +527,50 @@ WebSocket 推送事件：后端数据变更（聚合完成、节点增删改、�
 
 ### AI 搜索 Prompt 配置
 
+### i18n 术语 ✅ 已实施
+
+- **locale 文件**：前端中英文翻译资源（zh.ts / en.ts），按模块组织键值对，使用嵌套结构（如 `search.placeholder`）
+- **语言检测**：首次访问自动检测浏览器语言 → zh/zh-CN/zh-TW/zh-HK 归为中文，其余归为英文
+- **cookie 持久化**：语言选择写入 `qm_lang` cookie，服务端通过 middleware 读取
+- **PromptConfig 语言**：DEFAULT_PROMPTS 拆分 ZH/EN 双版，`get_prompt()` 根据语言动态返回
+
+## V18 新增术语
+
+### ai_queue cancelled 状态
+
+素材分析队列（ai_queue）的第五种状态。用户主动取消后标记为 cancelled——Worker 重试循环跳过，不重新入队。前端统计不计入 active 队列数，筛选下拉增加"已取消"选项，状态显示为淡紫色 `#8b75a6`。
+
+### 批量删除
+
+网格/列表视图多选素材后一次性删除所有选中项。清理范围：素材记录 + 关联标签 + 向量索引 + 聚合节点关联 + 队列中相关任务。工具栏在现有"重新分析已选"旁增加"删除已选"按钮。
+
+### 队列全清
+
+一键清空 ai_queue 表中所有 pending/processing/failed/cancelled 任务。位于队列状态文字旁，点击弹出确认弹窗。当前正在运行的 HTTP 请求无法中断（Python 多线程限制），但完成后不入库。
+
+### AI 状态颜色
+
+素材分析状态在网格/列表视图和详情面板使用统一色值：done=绿 `#5db872`、processing=橙 `#e8a55a`、failed=红 `#c64545`、pending=灰 `#6c6a64`、cancelled=紫 `#8b75a6`。
+
+### MCP 字段对齐
+
+search_assets 和 get_asset 两个 MCP 工具返回字段完全一致，均包含素材全部分析结果（video_summary、transcript、ocr_text、visual_description、ai_summary 等）。
+
 `search_ai` prompt 模板位于 `~/.asset-manager/prompts.yaml`，与现有分析 prompt 相同的结构（system_format / default / custom / presets）。system_format 要求 LLM 输出 `{"asset_ids": [1,5,23]}`，无匹配返回 `{"asset_ids": []}`。prompts.yaml 首次启动自动从 DEFAULT_PROMPTS 生成，后续升级合并系统字段、保留用户 custom。\n\n## V17 — 国际化 (i18n)\n\n### 显示语言\n\nQuickMedia 支持简体中文 (zh) 和英文 (en)。首次访问时根据浏览器语言自动选择：简体/繁体中文 → 简体中文，其他 → 英文。用户可在设置面板"基础"Tab 手动切换，选择持久化在 localStorage。\n\n### Locale 文件\n\n前端翻译文本统一存放在 `frontend/src/locales/{lang}.json`，按模块内嵌命名空间。使用 react-i18next 加载。\n\n### 多语言 Prompt 模板\n\n`DEFAULT_PROMPTS` 拆分为中文 (`DEFAULT_PROMPTS_ZH`) 和英文 (`DEFAULT_PROMPTS_EN`) 两套，PromptConfig 初始化时根据语言选择对应 default 值。用户自定义 custom 不受语言切换影响。\n\n### 后端消息\n\n后端 API 不直接输出用户可见文字。错误和提示通过结构化字段返回，前端按当前语言翻译显示。\n\n### README\n\n`README.md` 为英文默认版本，`README.zh.md` 为中文版本。两份互相链接。
+
+## ai_status
+
+素材 AI 分析状态，存储在 `assets.ai_status` 字段中（v18+）。取值：
+
+- `pending` — 等待 AI 分析
+- `processing` — AI 分析进行中
+- `done` — AI 分析已完成
+- `failed` — AI 分析失败
+- `cancelled` — 用户取消分析
+
+状态更新时间记录在 `assets.ai_status_updated_at`（ISO 时间戳）。
+
+### 迁移
+
+v17 及更早版本通过 `ai_queue` 子查询实时计算。v18 引入 `PRAGMA user_version=18` 跳过重复迁移。
+

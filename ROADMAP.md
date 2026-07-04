@@ -247,7 +247,7 @@
 - 模板支持 6 个占位符变量（{assets}, {nodes}, {node_name}, {node_description}, {existing_assets}, {candidates}）
 - 每个编辑区显示可用占位符说明
 
-## v17 — 多语言国际化 🔄
+## v17 — 多语言国际化 ✅
 
 - 前端中/英切换（react-i18next，自动检测浏览器语言）
 - DEFAULT_PROMPTS 中英文模板
@@ -258,3 +258,21 @@
 ## 待定
 
 - 云图拖放素材到聚合节点（自动连线，不刷新全图）
+- AI 状态颜色标识（网格视图已完成/分析中/等待/失败状态用不同颜色）
+- 批量删除素材（Web UI 多选删除，并清理队列中相关任务）
+- 队列管理增强（全部停止/清空，失败状态素材可恢复）
+- 语音模型扩展（支持更多语音分析模型）
+- 分析维度细化（可按类型选择分析内容，如语音素材跳过语音分析）
+- 重新分析功能优化（可选择分析维度，非全量重置）
+- MCP 字段扩展（search_assets/get_asset 返回素材全部字段，含 AI 分析结果）
+
+
+## v18 — 已完成 ✅
+
+- ai_status/assets 表字段化，消除子查询依赖
+- PRAGMA user_version 版本号跳过重复迁移
+- Worker 双重取消检查（before/after AI）
+- 批量删除 + 队列清空（状态同步）
+- AI 状态 5 色标签 + 国际化
+- MCP 模型字段 + docstring 完整对齐
+- Thread-local DB cache 优化启动性能

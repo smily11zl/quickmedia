@@ -35,11 +35,21 @@ class AssetBasic(BaseModel):
     filename: str = Field(description="文件名")
     asset_type: str = Field(description="类型: image/video/audio/document")
     size: int = Field(description="文件大小(字节)")
+    extension: Optional[str] = Field(default=None, description="文件扩展名(不含点)")
     path: Optional[str] = Field(default=None, description="文件路径")
+    hash: Optional[str] = Field(default=None, description="文件SHA256哈希")
+    width: Optional[int] = Field(default=None, description="图片/视频宽度")
+    height: Optional[int] = Field(default=None, description="图片/视频高度")
+    duration: Optional[float] = Field(default=None, description="时长(秒)")
     visual_description: Optional[str] = Field(default=None, description="AI图片/视频视觉描述")
-    ai_summary: Optional[str] = Field(default=None, description="AI文本摘要(文档内容/音频转录/视频的语音转录)")
-    distance: Optional[float] = Field(default=None, description="语义相似距离(越小越相关,仅搜索/相似返回)")
-    rrf_score: Optional[float] = Field(default=None, description="RRF综合得分(越大越相关,仅综合搜索返回)")
+    ai_summary: Optional[str] = Field(default=None, description="AI文本摘要")
+    transcript: Optional[str] = Field(default=None, description="音频/视频语音转录全文")
+    video_summary: Optional[str] = Field(default=None, description="视频综合总结")
+    ocr_text: Optional[str] = Field(default=None, description="OCR识别文字")
+    ai_status: Optional[str] = Field(default=None, description="AI分析状态: done=已完成, processing=分析中, pending=待分析, failed=分析失败, cancelled=已取消")
+    ai_status_updated_at: Optional[str] = Field(default=None, description="AI状态最近更新时间(ISO格式)")
+    distance: Optional[float] = Field(default=None, description="语义相似距离")
+    rrf_score: Optional[float] = Field(default=None, description="RRF综合得分")
 
     class Config:
         extra = "allow"
@@ -64,6 +74,8 @@ class AssetDetail(BaseModel):
     ocr_text: Optional[str] = Field(default=None, description="图片OCR识别文字")
     transcript: Optional[str] = Field(default=None, description="音频/视频语音转录全文")
     video_summary: Optional[str] = Field(default=None, description="视频综合总结(视觉+语音融合理解)")
+    ai_status: Optional[str] = Field(default=None, description="AI分析状态: done=已完成, processing=分析中, pending=待分析, failed=分析失败, cancelled=已取消")
+    ai_status_updated_at: Optional[str] = Field(default=None, description="AI状态最近更新时间(ISO格式)")
     tags: list[Tag] = Field(default_factory=list, description="标签列表")
     modified_at: Optional[str] = Field(default=None, description="文件修改时间(ISO格式)")
     created_at: Optional[str] = Field(default=None, description="文件创建时间(ISO格式)")
@@ -140,11 +152,20 @@ def search_assets(query: str, mode: str = "ai", limit: int = 10) -> list[AssetBa
     - filename: 文件名
     - asset_type: 类型 image/video/audio/document
     - size: 文件大小(字节)
+    - extension: 文件扩展名(不含点)
     - path: 文件路径
-    - visual_description: AI图片/视频视觉描述
+    - hash: 文件SHA256哈希
+    - width/height: 宽高
+    - duration: 时长(秒)
+    - visual_description: AI视觉描述
     - ai_summary: AI文本摘要
-    - distance: 语义相似距离(越小越相关, semantic/combined模式)
-    - rrf_score: RRF综合得分(越大越相关, combined模式)
+    - transcript: 语音转录
+    - video_summary: 视频综合总结
+    - ocr_text: OCR文字
+    - ai_status: AI分析状态(done=已完成, processing=分析中, pending=待分析, failed=分析失败, cancelled=已取消)
+    - ai_status_updated_at: AI状态最近更新时间
+    - distance: 语义相似距离(越小越相似)
+    - rrf_score: RRF综合得分(越大越相关)
     """
     db, cfg, data_dir = init_db()
     if mode == "ai":
@@ -175,6 +196,8 @@ def get_asset(asset_id: int = 0, asset_ids: list[int] = None) -> AssetDetail | l
     - ocr_text: 图片OCR识别文字
     - transcript: 音频/视频语音转录全文
     - video_summary: 视频综合总结(视觉+语音融合理解)
+    - ai_status: AI分析状态(done=已完成, processing=分析中, pending=待分析, failed=分析失败, cancelled=已取消)
+    - ai_status_updated_at: AI状态最近更新时间(ISO格式)
     - tags: [{name, source}] 标签, source=auto(AI生成)/manual(手动)
     - hash: 文件SHA256哈希
     - modified_at / created_at: 文件时间(ISO格式)
@@ -204,9 +227,18 @@ def list_assets(asset_type: str = "", tags: list[str] = None, limit: int = 20) -
     - filename: 文件名
     - asset_type: 类型 image/video/audio/document
     - size: 文件大小(字节)
+    - extension: 文件扩展名(不含点)
     - path: 文件路径
-    - visual_description: AI图片/视频视觉描述
-    - ai_summary: AI文本摘要
+    - hash: 文件SHA256哈希
+    - width/height: 宽高
+    - duration: 时长(秒)
+    - visual_description: AI视觉描述(图片/视频)
+    - ai_summary: AI文本摘要(文档)
+    - transcript: 语音转录(音频/视频)
+    - video_summary: 视频综合总结(视频)
+    - ocr_text: OCR文字(图片)
+    - ai_status: AI分析状态(done=已完成, processing=分析中, pending=待分析, failed=分析失败, cancelled=已取消)
+    - ai_status_updated_at: AI状态最近更新时间
     """
     db, cfg, _ = init_db()
     from quickmedia.asset_ops import list_assets_filtered
@@ -223,7 +255,18 @@ def find_similar(asset_id: int, limit: int = 10) -> list[AssetBasic]:
     - filename: 文件名
     - asset_type: 类型 image/video/audio/document
     - size: 文件大小(字节)
+    - extension: 文件扩展名(不含点)
     - path: 文件路径
+    - hash: 文件SHA256哈希
+    - width/height: 宽高
+    - duration: 时长(秒)
+    - visual_description: AI视觉描述(图片/视频)
+    - ai_summary: AI文本摘要(文档)
+    - transcript: 语音转录(音频/视频)
+    - video_summary: 视频综合总结(视频)
+    - ocr_text: OCR文字(图片)
+    - ai_status: AI分析状态(done=已完成, processing=分析中, pending=待分析, failed=分析失败, cancelled=已取消)
+    - ai_status_updated_at: AI状态最近更新时间
     - distance: 语义相似距离(越小越相似)
     """
     db, cfg, data_dir = init_db()

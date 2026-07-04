@@ -78,7 +78,8 @@ def search_assets(
         result = []
         for s in similar[:limit]:
             row = db.execute(
-                "SELECT id, filename, asset_type, size, visual_description, ai_summary FROM assets WHERE id=?",
+                "SELECT id, filename, asset_type, size, path, visual_description, ai_summary, "
+                "ai_status, width, height, duration, transcript, video_summary, ocr_text, hash FROM assets WHERE id=?",
                 (s["asset_id"],),
             )
             if row:
@@ -104,7 +105,8 @@ def search_assets(
     result = []
     for aid, score in sorted_ids:
         row = db.execute(
-            "SELECT id, filename, asset_type, size, visual_description, ai_summary FROM assets WHERE id=?",
+            "SELECT id, filename, asset_type, size, path, visual_description, ai_summary, "
+            "ai_status, width, height, duration, transcript, video_summary, ocr_text, hash FROM assets WHERE id=?",
             (aid,),
         )
         if row:
@@ -163,7 +165,8 @@ def search_ai_assets(
 
     # Get all active assets with descriptions
     rows = db.execute(
-        "SELECT id, filename, asset_type, visual_description, ai_summary, video_summary "
+        "SELECT id, filename, asset_type, size, path, visual_description, ai_summary, ai_status, "
+        "width, height, duration, transcript, video_summary, ocr_text "
         "FROM assets WHERE status='active'"
     )
     assets = []

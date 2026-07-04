@@ -44,3 +44,24 @@ QuickMedia 全量 UI 和 prompt 模板均为简体中文，非中文用户上手
 - 前端：切换语言后 UI 文字正确渲染
 - 后端：DEFAULT_PROMPTS_ZH / DEFAULT_PROMPTS_EN 结构一致
 - API：PromptConfig 不同语言加载不同 default
+
+---
+
+## v18 — AI 状态重构 ✅ 已完成
+
+### Problem Statement
+
+素材的 AI 分析状态（done/processing/pending/failed/cancelled）依赖 `ai_queue` 子查询实时计算，性能差且无法独立管理状态。队列清除、批量删除、Worker 取消等场景缺乏可靠的状态同步。
+
+### Solution
+
+将 `ai_status` 和 `ai_status_updated_at` 作为 `assets` 表字段，消除冗余查询。引入 `PRAGMA user_version` 版本号跳过重复迁移。Worker 双重检查（前/后）防止 AI 分析覆盖取消状态。
+
+### Key Changes
+
+- **DB**: `assets.ai_status` TEXT + `assets.ai_status_updated_at` TEXT, `PRAGMA user_version=18`
+- **Worker**: 处理前检查 assets.ai_status, cancelled/不存在则跳过；成功后写 done + 删 ai_queue + enqueue embedding；失败写 failed
+- **API**: `_get_db` 线程本地缓存, user_version 跳过迁移；`batch-delete` 复用 `delete_asset_full`；`clear_queue` DELETE FROM ai_queue
+- **Frontend**: `aiT()` 5 色状态标签（done/processing/pending/failed/cancelled）；批量选择 + 删除 + 确认弹窗 i18n
+- **MCP**: `AssetBasic` 全 19 字段 + `AssetDetail` 含 ai_status，docstring 与模型对齐
+- **Scanner**: INSERT 时直接写 ai_status='pending', _auto_tags 在 metadata 提取后用真实 duration
