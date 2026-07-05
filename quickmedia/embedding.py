@@ -122,9 +122,11 @@ class ChromaStore:
         return f"{field}_{asset_id}"
 
     def add(self, asset_id: int, field: str, vector: list[float], term_index: int = None, term_text: str = None) -> None:
-        """Add or update a field's embedding for an asset."""
+        """Add or update a field's embedding for an asset. Deduplicates by term_text when provided."""
         if term_index is not None:
             sid = f"search_{asset_id}_{term_index}"
+        elif term_text:
+            sid = f"search_{asset_id}_{term_text}"
         else:
             sid = self._id(asset_id, field)
         metadata = {"asset_id": asset_id, "field": field if term_index is None else "search"}
@@ -135,6 +137,29 @@ class ChromaStore:
             self._collection.update(ids=[sid], embeddings=[vector])
         else:
             self._collection.add(ids=[sid], embeddings=[vector], metadatas=[metadata])
+
+    def delete_by_term(self, asset_id: int, term_text: str) -> None:
+        """Remove a single search term vector for an asset."""
+        results = self._collection.get(where={"$and": [{"asset_id": asset_id}, {"term": term_text}]})
+        if results and results["ids"]:
+            self._collection.delete(ids=results["ids"])
+
+    def clean_orphans(self, valid_asset_ids: set[int]) -> int:
+        """Remove vectors for assets that no longer exist. Returns count of deleted vectors."""
+        try:
+            results = self._collection.get()
+            if not results or not results["ids"]:
+                return 0
+            orphan_ids = []
+            for i, mid in enumerate(results["ids"]):
+                aid = results["metadatas"][i].get("asset_id") if results.get("metadatas") else None
+                if aid and aid not in valid_asset_ids:
+                    orphan_ids.append(mid)
+            if orphan_ids:
+                self._collection.delete(ids=orphan_ids)
+            return len(orphan_ids)
+        except Exception:
+            return 0
 
     def add_fields(self, asset_id: int, vectors: dict[str, list[float]]) -> None:
         """Add embeddings for multiple fields at once."""

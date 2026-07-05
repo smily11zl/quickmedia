@@ -134,7 +134,7 @@ export default {
     "detail_save": "保存",
     "detail_cancel": "取消",
     "detail_add_desc": "点击添加描述",
-    "detail_select": "选择",
+    "detail_select": "添加",
     "detail_no_results": "暂无素材",
     "detail_scan_hint": "运行 quickmedia scan 来扫描素材",
     "detail_new_tag": "新标签...",

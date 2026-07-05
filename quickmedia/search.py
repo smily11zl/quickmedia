@@ -71,6 +71,9 @@ def search_assets(
     query_vector = adapter.embed(query)
     k = cfg.get("semantic.top_k") or 2
     store = ChromaStore(persist_path=chroma_path)
+    # Clean orphan vectors before searching
+    valid_ids = {r[0] for r in db.execute("SELECT id FROM assets")}
+    store.clean_orphans(valid_ids)
     similar = store.query_search_terms(query_vector, k=k, n_results=limit)
 
     # Semantic mode: pure vector results

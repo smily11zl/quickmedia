@@ -414,10 +414,15 @@ class Database:
             )
 
     def remove_tag(self, asset_id: int, tag_id: int) -> None:
-        """Unlink a tag from an asset."""
+        """Unlink a tag from an asset. Clean orphan tag if no other asset uses it."""
         self.execute(
             "DELETE FROM asset_tags WHERE asset_id=? AND tag_id=?",
             (asset_id, tag_id),
+        )
+        # Remove orphan tag if no asset still references it
+        self.execute(
+            "DELETE FROM tags WHERE id=? AND id NOT IN (SELECT DISTINCT tag_id FROM asset_tags)",
+            (tag_id,),
         )
 
 

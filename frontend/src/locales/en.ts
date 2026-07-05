@@ -134,7 +134,7 @@ export default {
     "detail_save": "Save",
     "detail_cancel": "Cancel",
     "detail_add_desc": "Click to add description",
-    "detail_select": "Select",
+    "detail_select": "Add",
     "detail_no_results": "No assets",
     "detail_scan_hint": "Run quickmedia scan to scan assets",
     "detail_new_tag": "New tag...",

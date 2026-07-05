@@ -512,12 +512,6 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         tag_id = _db.create_tag(name)
         return {"id": tag_id, "name": name}
 
-    @app.post("/api/assets/{asset_id}/tags/{tag_id}")
-    def add_tag(asset_id: int, tag_id: int):
-        _db = _get_db(app)
-        _db.tag_asset(asset_id, tag_id)
-        return {"ok": True}
-
     @app.post("/api/assets/{asset_id}/tags/by-name")
     def add_tag_by_name(asset_id: int, body: dict):
         _db = _get_db(app)
@@ -526,12 +520,25 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             raise HTTPException(status_code=400, detail="Tag name required")
         tag_id = _db.create_tag(name)
         _db.tag_asset(asset_id, tag_id)
+        # Also embed the new tag for semantic search
+        _embed_single_term(app, asset_id, name)
         return {"id": tag_id, "name": name}
+
+    @app.post("/api/assets/{asset_id}/tags/{tag_id}")
+    def add_tag(asset_id: int, tag_id: int):
+        _db = _get_db(app)
+        _db.tag_asset(asset_id, tag_id)
+        return {"ok": True}
 
     @app.delete("/api/assets/{asset_id}/tags/{tag_id}")
     def remove_tag(asset_id: int, tag_id: int):
         _db = _get_db(app)
+        # Fetch tag name before removing for vector cleanup
+        rows = _db.execute("SELECT name FROM tags WHERE id=?", (tag_id,))
+        tag_name = rows[0]["name"] if rows else ""
         _db.remove_tag(asset_id, tag_id)
+        if tag_name:
+            _delete_single_term(app, asset_id, tag_name)
         return {"ok": True}
 
     # ── Stats ───────────────────────────────────────────────────
@@ -1127,6 +1134,60 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         if os.path.isdir(frontend_dist):
             return FileResponse(os.path.join(frontend_dist, "index.html"))
         return {"message": "QuickMedia API"}
+
+    def _embed_single_term(app, asset_id: int, term: str) -> None:
+        """Embed a single term and add to ChromaDB. Silently fail if embedding unavailable."""
+        try:
+            from quickmedia.providers import ProviderRegistry
+            from quickmedia.embedding import ChromaStore, EmbeddingAdapter
+            cfg = Config(config_dir=app.extra["config_dir"])
+            user_models = os.path.join(app.extra["config_dir"], "models.yaml")
+            registry = ProviderRegistry(cfg, user_models)
+            binding = registry.get_task_binding("embedding")
+            if not binding:
+                return
+            url = registry.get_provider_url(binding["provider"])
+            if not url:
+                return
+            adapter = EmbeddingAdapter(base_url=url, model=binding["model"])
+            vector = adapter.embed(term)
+            store = ChromaStore(persist_path=os.path.join(app.extra["config_dir"], "chroma_db"))
+            # Skip if term already embedded for this asset
+            existing = store._collection.get(where={"$and": [{"asset_id": asset_id}, {"term": term}]})
+            if existing and existing["ids"]:
+                return
+            # Get next term_index for this asset
+            all_terms = store._collection.get(where={"asset_id": asset_id})
+            next_idx = len(all_terms["ids"]) if all_terms and all_terms["ids"] else 0
+            store.add(asset_id, "search", vector, term_index=next_idx, term_text=term)
+        except Exception as e:
+            import sys
+            print(f"[embed-term] failed for asset={asset_id} term={term}: {e}", file=sys.stderr, flush=True)
+            pass  # embedding is non-critical
+
+    def _delete_single_term(app, asset_id: int, term: str) -> None:
+        """Remove a single term vector from ChromaDB."""
+        try:
+            from quickmedia.embedding import ChromaStore
+            store = ChromaStore(persist_path=os.path.join(app.extra["config_dir"], "chroma_db"))
+            store.delete_by_term(asset_id, term)
+        except Exception:
+            pass
+
+    @app.post("/api/assets/{asset_id}/embed-term")
+    def embed_term(asset_id: int, body: dict):
+        term = body.get("term", "").strip()
+        if not term:
+            raise HTTPException(status_code=400, detail="Term required")
+        _embed_single_term(app, asset_id, term)
+        return {"ok": True}
+
+    @app.delete("/api/assets/{asset_id}/embed-term")
+    def delete_embed_term(asset_id: int, term: str = Query("")):
+        if not term.strip():
+            raise HTTPException(status_code=400, detail="Term required")
+        _delete_single_term(app, asset_id, term.strip())
+        return {"ok": True}
 
     return app
 
