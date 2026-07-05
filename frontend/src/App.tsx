@@ -43,6 +43,7 @@ function App() {
   const [fmts,sfmts]=useState<string[]>([]);
   const [searchResults,sr]=useState<Asset[]>([]);
   const [didSearch,sds]=useState(false);
+  const [didSearchMode,sdsMode]=useState<string>("");
   const [tg,stg]=useState<TagInfo[]>([]);
   const [tf,stf]=useState<string|null>(null);
   const [gf,sgf]=useState<number|null>(null);
@@ -96,11 +97,11 @@ function App() {
   useEffect(()=>{fetch("/api/queue/status").then(r=>r.json()).then(setQStat);const i=setInterval(()=>fetch("/api/queue/status").then(r=>r.json()).then(setQStat),5000);return ()=>clearInterval(i);},[]);
 
   const doSearch=()=>{
-    if(!q.trim()){sq("");sr([]);sds(false);fa();return;}
-    if(smode==="ai"){sslc(true);setSelectedNodeId(null);setSelectedNodeName("");fetch(`/api/search?q=${encodeURIComponent(q)}&mode=ai`).then(r=>r.json()).then(d=>{const items=d.items||[];sa(items);if(d.counts)setCounts(d.counts);sr(items);sds(true);}).catch(()=>setToast({message:"AI \u641c\u7d22\u5931\u8d25",type:"error"})).finally(()=>sslc(false));return;}
+    if(!q.trim()){sq("");sr([]);sds(false);sdsMode("");fa();return;}
+    if(smode==="ai"){sslc(true);setSelectedNodeId(null);setSelectedNodeName("");fetch(`/api/search?q=${encodeURIComponent(q)}&mode=ai`).then(r=>r.json()).then(d=>{const items=d.items||[];sa(items);if(d.counts)setCounts(d.counts);sr(items);sds(true);sdsMode("ai");}).catch(()=>setToast({message:"AI \u641c\u7d22\u5931\u8d25",type:"error"})).finally(()=>sslc(false));return;}
     sslc(true);
     setSelectedNodeId(null); setSelectedNodeName("");
-    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{if(d.warning){setToast({message:d.warning,type:"info"});sslc(false);return;}const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);if(smode==="semantic"||smode==="combined")ssb("score");}}).catch(()=>{if((smode as string)==="ai")setToast({message:t("search.ai_failed"),type:"error"});}).finally(()=>sslc(false));
+    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{if(d.warning){setToast({message:d.warning,type:"info"});sslc(false);return;}const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);sdsMode(smode);if(smode==="semantic"||smode==="combined")ssb("score");}}).catch(()=>{if((smode as string)==="ai")setToast({message:t("search.ai_failed"),type:"error"});}).finally(()=>sslc(false));
   };
   const fa=()=>{const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>{sa(d.items); if(d.counts)setCounts(d.counts);});};
   useEffect(()=>{if(didSearch||selectedNodeId)return;fa();},[tf,ff,af,df,mf,tgf]);useEffect(()=>{const u=async()=>{const r=await fetch("/api/assets?limit=500");const d=await r.json();const m:Record<number,any>={};d.items.forEach((a:any)=>m[a.id]=a);sa((p:any[])=>{let c=false;const n=p.map(a=>{const f=m[a.id];if(f&&a.ai_status!==f.ai_status){c=true;return{...a,ai_status:f.ai_status,analyzed_at:f.analyzed_at};}return a;});return c?n:p;});};const i=setInterval(u,3000);return ()=>clearInterval(i);},[]);
@@ -116,7 +117,7 @@ function App() {
   useEffect(()=>{
     if (selectedNodeId) {
       fetch(`/api/nodes/${selectedNodeId}/assets`).then(r=>r.json()).then(d=>{
-        sa(d.items); sr([]); sds(false); sq("");
+        sa(d.items); sr([]); sds(false); sdsMode(""); sq("");
         stf(null); sgf(null);
         if (d.counts) setCounts(d.counts);
       });
@@ -173,10 +174,10 @@ function App() {
         <div className="flex flex-col gap-1 mb-3">
           <div className="relative w-full">
             <input type="text" placeholder={t("search.placeholder")} value={q} onChange={e=>sq(e.target.value)} onKeyDown={e=>e.key==="Enter"&&doSearch()} className="w-full px-3 py-1.5 text-sm rounded-md outline-none pr-6" style={{fontFamily:"'Inter',sans-serif",backgroundColor:S.c,border:`1px solid ${S.h}`,color:S.i}}/>
-            {q&&<button onClick={()=>{sq("");sr([]);sds(false);fa();}} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{color:S.ms}}>✕</button>}
+            {q&&<button onClick={()=>{sq("");sr([]);sds(false);sdsMode("");fa();}} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{color:S.ms}}>✕</button>}
           </div>
           <div className="flex gap-1">
-            <select value={smode} onChange={e=>{const v=e.target.value;if(v==="ai"&&!aiSearchReady){setToast({message:"AI \u641c\u7d22\u672a\u914d\u7f6e\u6a21\u578b\uff0c\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u7ed1\u5b9a",type:"info"});setSettingsTab("models");sso(true);return;}ssmode(v as any);if(didSearch&&(v==="semantic"||v==="combined"))ssb("score");else if(v==="keyword"||v==="ai")ssb("hot");}} className="flex-1 text-[11px] px-1 py-1.5 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
+            <select value={smode} onChange={e=>{const v=e.target.value;if(v==="ai"&&!aiSearchReady){setToast({message:"AI \u641c\u7d22\u672a\u914d\u7f6e\u6a21\u578b\uff0c\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u7ed1\u5b9a",type:"info"});setSettingsTab("models");sso(true);return;}ssmode(v as any);if(didSearch&&(didSearchMode==="semantic"||didSearchMode==="combined"))ssb("score");else if(v==="keyword"||v==="ai")ssb("hot");}} className="flex-1 text-[11px] px-1 py-1.5 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
               <option value="ai">AI {!aiSearchReady?'🔴':''}</option>
               <option value="combined">{t("search.mode_combined")}</option>
               <option value="semantic">{t("search.mode_semantic")}</option>
@@ -266,7 +267,7 @@ function App() {
             <button onClick={()=>sv("graph")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:(vw as string)==="graph"?S.c:"transparent",color:S.i}}>{t("view.graph")}</button>
           </div>
           <select value={sb} onChange={e=>{const v=e.target.value;ssb(v as any);if(v==="hot"&&!didSearch)fa();}} className="text-xs px-2 py-1 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
-            <option value="hot">{t("common.sort_hot")}</option><option value="recent">{t("common.sort_recent")}</option><option value="name">{t("common.sort_name")}</option><option value="size">{t("common.sort_size")}</option><option value="date">{t("common.sort_date")}</option>{(q&&didSearch&&(smode==="semantic"||smode==="combined"))&&<option value="score">{t("common.sort_score")}</option>}
+            <option value="hot">{t("common.sort_hot")}</option><option value="recent">{t("common.sort_recent")}</option><option value="name">{t("common.sort_name")}</option><option value="size">{t("common.sort_size")}</option><option value="date">{t("common.sort_date")}</option>{(q&&didSearch&&(didSearchMode==="semantic"||didSearchMode==="combined"))&&<option value="score">{t("common.sort_score")}</option>}
           </select>
           {qStat.processing_name && <span className="text-[10px]" style={{color: '#e8a55a'}}>{t("queue.processing")}: {qStat.processing_name}</span>}
           {qStat.pending > 0 && <span className="text-[10px]" style={{color: S.ms}}>{t("queue.pending_count",{count: qStat.pending})}</span>}{qStat.pending > 0 && <button onClick={cq} className="text-[10px] ml-2 underline cursor-pointer" style={{color: S.ms}}>{t("queue.clear_all")}</button>}
