@@ -13,7 +13,7 @@ interface Asset {
 
 const f=(b:number)=>{for(const u of["B","KB","MB","GB"]){if(b<1024)return `${b}${u}`;b=Math.floor(b/1024);}return `${b}TB`;};
 
-export default function SimilarPanel({ assetId, onClose }: { assetId: number; onClose: () => void }) {
+export default function SimilarPanel({ assetId, onClose, onSelect }: { assetId: number; onClose: () => void; onSelect?: (id: number) => void }) {
   const { t } = useTranslation();
   const [items, setItems] = useState<Asset[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,7 +47,7 @@ export default function SimilarPanel({ assetId, onClose }: { assetId: number; on
           {!loading && items && items.length > 0 && (
             <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               {items.map(a => (
-                <div key={a.id} className="rounded-lg overflow-hidden border" style={{borderColor: S.h, backgroundColor: S.c}}>
+                <div key={a.id} className="rounded-lg overflow-hidden border cursor-pointer hover:brightness-95 transition-all" style={{borderColor: S.h, backgroundColor: S.c}} onClick={() => onSelect?.(a.id)}>
                   <div className="aspect-square flex items-center justify-center" style={{backgroundColor: S.s}}>
                     {a.thumbnail_status==="done"
                       ? <img src={`/api/thumbnails/${a.id}`} className="w-full h-full object-cover"/>

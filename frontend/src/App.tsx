@@ -403,7 +403,7 @@ function App() {
       </aside>}
       {so && <SettingsModal onClose={() => {sso(false);ckCfg();}} initialTab={settingsTab} initialModelTab={settingsTab==="models"?"tasks":undefined} onModelSave={()=>setTimeout(ckCfg,500)} />}
       {mm && <ModelManager onClose={() => smm(false)} />}
-      {cp && <SimilarPanel assetId={cp} onClose={() => scp(null)} />}
+      {cp && <SimilarPanel assetId={cp} onClose={() => scp(null)} onSelect={(id) => selA(id)} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       {queueClearConfirm && (<ConfirmModal title={t("queue.clear_all")} message={t("queue.clear_confirm")} confirmText={t("common.delete")} confirmColor="error" onConfirm={()=>{fetch("/api/ai-queue",{method:"DELETE"}).then(r=>r.json()).then(d=>{if(d.ok){setQStat({pending:0,processing_name:null});}});setQueueClearConfirm(false);}} onCancel={()=>setQueueClearConfirm(false)}/>)}
       {batchDeleteConfirm && (<ConfirmModal title={batchDeleteConfirm.title} message={batchDeleteConfirm.message} confirmText={t("common.delete")} confirmColor="error" onConfirm={()=>{batchDeleteConfirm.action();setBatchDeleteConfirm(null);}} onCancel={()=>setBatchDeleteConfirm(null)}/>)}
