@@ -167,7 +167,8 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                    a.width, a.height, a.duration, a.path, a.description,
                    a.visual_description, a.thumbnail_status, a.modified_at,
                    a.extension,
-                   a.ai_status"""
+                   a.ai_status, a.view_count, a.open_count,
+                   a.scanned_at"""
         base_from = """FROM assets a"""
 
         if ai_status or tags:
@@ -236,8 +237,11 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         return {"total": total_row[0]["c"], "items": items, "counts": counts}
 
     @app.get("/api/assets/{asset_id}")
-    def get_asset(asset_id: int):
+    def get_asset(asset_id: int, click: int = Query(0)):
         _db = _get_db(app)
+        # Increment view_count only on explicit user click (before SELECT)
+        if click:
+            _db.execute("UPDATE assets SET view_count = view_count + 1 WHERE id=?", (asset_id,))
         rows = _db.execute(
             "SELECT * FROM assets WHERE id=?", (asset_id,)
         )
@@ -279,7 +283,40 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     # ── Thumbnails ──────────────────────────────────────────────
 
     @app.get("/api/thumbnails/{asset_id}")
-    def get_thumbnail(asset_id: int):
+    def get_thumbnail(asset_id: int, quality: str = Query("")):
+        if quality == "full":
+            thumb_path = os.path.join(thumb_dir, f"{asset_id}_full.jpg")
+            if not os.path.isfile(thumb_path):
+                # Generate from original file
+                _db = _get_db(app)
+                rows = _db.execute("SELECT path, asset_type FROM assets WHERE id=?", (asset_id,))
+                if not rows:
+                    raise HTTPException(status_code=404, detail="Asset not found")
+                file_path = rows[0]["path"]
+                asset_type = rows[0]["asset_type"]
+                if not os.path.isfile(file_path):
+                    raise HTTPException(status_code=404, detail="File not found")
+                if asset_type == "image":
+                    import PIL.Image
+                    img = PIL.Image.open(file_path)
+                    img.thumbnail((800, 800), PIL.Image.LANCZOS)
+                    if img.mode not in ("RGB", "L"):
+                        img = img.convert("RGB")
+                    img.save(thumb_path, "JPEG", quality=85)
+                elif asset_type == "video":
+                    import subprocess, tempfile
+                    tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+                    tmp.close()
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-i", file_path, "-vframes", "1", "-vf", "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease", tmp.name],
+                        capture_output=True, timeout=30,
+                    )
+                    if os.path.isfile(tmp.name):
+                        os.rename(tmp.name, thumb_path)
+                else:
+                    # For other types, fall back to regular thumbnail
+                    thumb_path = os.path.join(thumb_dir, f"{asset_id}.jpg")
+            return FileResponse(thumb_path, media_type="image/jpeg")
         thumb_path = os.path.join(thumb_dir, f"{asset_id}.jpg")
         if not os.path.isfile(thumb_path):
             raise HTTPException(status_code=404, detail="No thumbnail")
@@ -650,6 +687,13 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         return _db.get_stats()
 
     # ── AI Analysis ──────────────────────────────────────────────
+
+    @app.post("/api/assets/{asset_id}/open")
+    def open_asset(asset_id: int):
+        """Increment open_count for the asset."""
+        _db = _get_db(app)
+        _db.execute("UPDATE assets SET open_count = open_count + 1 WHERE id=?", (asset_id,))
+        return {"ok": True}
 
     @app.post("/api/assets/{asset_id}/retry-ai")
     def retry_ai(asset_id: int):

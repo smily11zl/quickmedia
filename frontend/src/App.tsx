@@ -16,6 +16,8 @@ interface Asset {
   ai_description?: string; ai_summary?: string;
   ocr_text?: string; transcript?: string; video_summary?: string;
   ai_status?: string;
+  score?: number; view_count?: number; open_count?: number;
+  scanned_at?: string;
   doc_preview?: string;
   _stars?: number;
   thumbnail_status: string; modified_at?: string;
@@ -57,7 +59,7 @@ function App() {
   const [settingsTab, setSettingsTab] = useState<string>("basic");
   const [mm,smm]=useState(false);
   const [vw,sv]=useState<"graph"|"grid"|"list">("grid");
-  const [sb,ssb]=useState<"name"|"size"|"date">("name");
+  const [sb,ssb]=useState<"name"|"size"|"date"|"score"|"hot"|"recent">("hot");
   const [ms,sm]=useState<Set<number>>(new Set());
   const [ff,sf]=useState<Set<string>>(new Set());
   const [af,saf]=useState<Set<string>>(new Set());
@@ -98,7 +100,7 @@ function App() {
     if(smode==="ai"){sslc(true);setSelectedNodeId(null);setSelectedNodeName("");fetch(`/api/search?q=${encodeURIComponent(q)}&mode=ai`).then(r=>r.json()).then(d=>{const items=d.items||[];sa(items);if(d.counts)setCounts(d.counts);sr(items);sds(true);}).catch(()=>setToast({message:"AI \u641c\u7d22\u5931\u8d25",type:"error"})).finally(()=>sslc(false));return;}
     sslc(true);
     setSelectedNodeId(null); setSelectedNodeName("");
-    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{if(d.warning){setToast({message:d.warning,type:"info"});sslc(false);return;}const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);}}).catch(()=>{if((smode as string)==="ai")setToast({message:t("search.ai_failed"),type:"error"});}).finally(()=>sslc(false));
+    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${smode}`).then(r=>r.json()).then(d=>{if(d.warning){setToast({message:d.warning,type:"info"});sslc(false);return;}const items = d.items||d||[]; sa(items); if(d.counts)setCounts(d.counts); if(smode!=="keyword"){sr(items);sds(true);if(smode==="semantic"||smode==="combined")ssb("score");}}).catch(()=>{if((smode as string)==="ai")setToast({message:t("search.ai_failed"),type:"error"});}).finally(()=>sslc(false));
   };
   const fa=()=>{const p=new URLSearchParams();if(tf)p.set("type",tf);p.set("limit","200");if(ff.size>0)p.set("formats",[...ff].join(","));if(af.size>0)p.set("ai_status",[...af].join(","));if(tgf.size>0)p.set("tags",[...tgf].join(","));if(df.from)p.set("date_from",df.from);if(df.to)p.set("date_to",df.to);if(mf.from)p.set("mdate_from",mf.from);if(mf.to)p.set("mdate_to",mf.to);fetch(`/api/assets?${p}`).then(r=>r.json()).then(d=>{sa(d.items); if(d.counts)setCounts(d.counts);});};
   useEffect(()=>{if(didSearch||selectedNodeId)return;fa();},[tf,ff,af,df,mf,tgf]);useEffect(()=>{const u=async()=>{const r=await fetch("/api/assets?limit=500");const d=await r.json();const m:Record<number,any>={};d.items.forEach((a:any)=>m[a.id]=a);sa((p:any[])=>{let c=false;const n=p.map(a=>{const f=m[a.id];if(f&&a.ai_status!==f.ai_status){c=true;return{...a,ai_status:f.ai_status,analyzed_at:f.analyzed_at};}return a;});return c?n:p;});};const i=setInterval(u,3000);return ()=>clearInterval(i);},[]);
@@ -143,9 +145,9 @@ function App() {
     if(mf.to)fs=fs.filter(a=>(a.modified_at||"").slice(0,10)<=mf.to);
   }
   if(gf)fs=fs.filter(a=>a.tags.some(t=>t.id===gf));
-  if(smode==="keyword")fs=[...fs].sort((a,b)=>{if(sb==="size")return b.size-a.size;if(sb==="date")return(b.modified_at||"").localeCompare(a.modified_at||"");return a.filename.localeCompare(b.filename);});
+  fs=[...fs].sort((a,b)=>{if(sb==="score")return(b.score||0)-(a.score||0);if(sb==="recent")return(b.scanned_at||"").localeCompare(a.scanned_at||"");if(sb==="hot")return((b.view_count||0)+(b.open_count||0)*3)-((a.view_count||0)+(a.open_count||0)*3)||(b.scanned_at||"").localeCompare(a.scanned_at||"");if(sb==="size")return b.size-a.size;if(sb==="date")return(b.modified_at||"").localeCompare(a.modified_at||"");return a.filename.localeCompare(b.filename);});
 
-  const selA=(id:number)=>{fetch(`/api/assets/${id}`).then(r=>r.json()).then(a=>{sl(a);sd(a.description||"");se(false);});};
+  const selA=(id:number)=>{fetch(`/api/assets/${id}?click=1`).then(r=>r.json()).then(a=>{sl(a);sd(a.description||"");se(false);});};
   const svD=()=>{if(!sel)return;fetch(`/api/assets/${sel.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({description:dv})}).then(()=>{sl({...sel,description:dv});se(false);});};
   const adT=()=>{if(!sel||!nt.trim())return;fetch(`/api/assets/${sel.id}/tags/by-name`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:nt.trim()})}).then(r=>r.json()).then(t=>{sl({...sel,tags:[...sel.tags,{id:t.id,name:t.name,source:"manual"}]});sn("");fetch("/api/tags").then(r=>r.json()).then(stg);fa();});};
   const rmT=(tid:number)=>{if(!sel)return;fetch(`/api/assets/${sel.id}/tags/${tid}`,{method:"DELETE"}).then(()=>{sl({...sel,tags:sel.tags.filter(t=>t.id!==tid)});fetch("/api/tags").then(r=>r.json()).then(stg);});};
@@ -174,7 +176,7 @@ function App() {
             {q&&<button onClick={()=>{sq("");sr([]);sds(false);fa();}} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{color:S.ms}}>✕</button>}
           </div>
           <div className="flex gap-1">
-            <select value={smode} onChange={e=>{const v=e.target.value;if(v==="ai"&&!aiSearchReady){setToast({message:"AI \u641c\u7d22\u672a\u914d\u7f6e\u6a21\u578b\uff0c\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u7ed1\u5b9a",type:"info"});setSettingsTab("models");sso(true);return;}ssmode(v as any);}} className="flex-1 text-[11px] px-1 py-1.5 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
+            <select value={smode} onChange={e=>{const v=e.target.value;if(v==="ai"&&!aiSearchReady){setToast({message:"AI \u641c\u7d22\u672a\u914d\u7f6e\u6a21\u578b\uff0c\u8bf7\u5728\u8bbe\u7f6e\u4e2d\u7ed1\u5b9a",type:"info"});setSettingsTab("models");sso(true);return;}ssmode(v as any);if(didSearch&&(v==="semantic"||v==="combined"))ssb("score");else if(v==="keyword"||v==="ai")ssb("hot");}} className="flex-1 text-[11px] px-1 py-1.5 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
               <option value="ai">AI {!aiSearchReady?'🔴':''}</option>
               <option value="combined">{t("search.mode_combined")}</option>
               <option value="semantic">{t("search.mode_semantic")}</option>
@@ -263,8 +265,8 @@ function App() {
             <button onClick={()=>sv("list")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:vw==="list"?S.c:"transparent",color:S.i}}>{t("view.list")}</button>
             <button onClick={()=>sv("graph")} className="px-2 py-1 text-xs rounded" style={{backgroundColor:(vw as string)==="graph"?S.c:"transparent",color:S.i}}>{t("view.graph")}</button>
           </div>
-          <select value={sb} onChange={e=>ssb(e.target.value as any)} disabled={!!(q && smode!=="keyword")} className="text-xs px-2 py-1 rounded-md outline-none" style={!!(q && smode!=="keyword")?{border:"1px solid #e8e4dd",color:"#bcb8b2",backgroundColor:"#f5f2ed",cursor:"not-allowed",opacity:0.6}:{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
-            <option value="name">{t("common.sort_name")}</option><option value="size">{t("common.sort_size")}</option><option value="date">{t("common.sort_date")}</option>
+          <select value={sb} onChange={e=>{const v=e.target.value;ssb(v as any);if(v==="hot"&&!didSearch)fa();}} className="text-xs px-2 py-1 rounded-md outline-none" style={{border:`1px solid ${S.h}`,color:S.m,backgroundColor:S.c}}>
+            <option value="hot">{t("common.sort_hot")}</option><option value="recent">{t("common.sort_recent")}</option><option value="name">{t("common.sort_name")}</option><option value="size">{t("common.sort_size")}</option><option value="date">{t("common.sort_date")}</option>{(q&&didSearch&&(smode==="semantic"||smode==="combined"))&&<option value="score">{t("common.sort_score")}</option>}
           </select>
           {qStat.processing_name && <span className="text-[10px]" style={{color: '#e8a55a'}}>{t("queue.processing")}: {qStat.processing_name}</span>}
           {qStat.pending > 0 && <span className="text-[10px]" style={{color: S.ms}}>{t("queue.pending_count",{count: qStat.pending})}</span>}{qStat.pending > 0 && <button onClick={cq} className="text-[10px] ml-2 underline cursor-pointer" style={{color: S.ms}}>{t("queue.clear_all")}</button>}
@@ -376,8 +378,8 @@ function App() {
       </main>
       {sel&&<aside className="w-80 border-l overflow-y-auto p-4 flex flex-col gap-3" style={{borderColor:S.h,backgroundColor:S.c}}>
         <div className="flex justify-between items-center"><h2 className="text-sm font-medium truncate flex-1" style={{fontFamily:"'Inter',sans-serif",color:S.i}}>{sel.filename}</h2><button onClick={()=>setConfirmDeleteAsset(sel)} className="text-xs px-1.5 py-0.5 rounded" style={{color:S.r}} title={t("asset.detail_delete_btn")}>🗑</button><button onClick={()=>sl(null)} className="text-lg leading-none px-1" style={{color:S.ms}}>✕</button></div>
-        {sel.thumbnail_status==="done"?<img src={`/api/thumbnails/${sel.id}?t=${sel.modified_at||''}`} className="w-full rounded-lg" style={{border:`1px solid ${S.h}`}}/>:<div className="w-full aspect-square rounded-lg flex items-center justify-center" style={{backgroundColor:S.s}}><span className="text-5xl">{sel.asset_type==="video"?"🎬":sel.asset_type==="audio"?"🎵":sel.asset_type==="document"?docI(sel):"📄"}</span></div>}
-        <div><div className="text-[11px] mb-0.5" style={{color:S.ms}}>{t("asset.detail_path")} <span onClick={()=>fetch("/api/finder/open",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:sel.path})})} className="cursor-pointer ml-1" title={t("asset.detail_open")}>📂</span></div><p className="text-xs break-all" style={{color:S.b}}>{sel.path}</p></div>
+        {sel.thumbnail_status==="done"?<img src={`/api/thumbnails/${sel.id}?quality=full&t=${sel.modified_at||''}`} className="w-full rounded-lg" style={{border:`1px solid ${S.h}`}}/>:<div className="w-full aspect-square rounded-lg flex items-center justify-center" style={{backgroundColor:S.s}}><span className="text-5xl">{sel.asset_type==="video"?"🎬":sel.asset_type==="audio"?"🎵":sel.asset_type==="document"?docI(sel):"📄"}</span></div>}
+        <div><div className="text-[11px] mb-0.5" style={{color:S.ms}}>{t("asset.detail_path")} <span onClick={()=>{fetch(`/api/assets/${sel.id}/open`,{method:"POST"});fetch("/api/finder/open",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:sel.path})});}} className="cursor-pointer ml-1" title={t("asset.detail_open")}>📂</span></div><p className="text-xs break-all" style={{color:S.b}}>{sel.path}</p></div>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div><span style={{color:S.ms}}>{t("asset.detail_type")}</span><p style={{color:S.b}}>{sel.asset_type}</p></div>
           <div><span style={{color:S.ms}}>{t("asset.detail_size")}</span><p style={{color:S.b}}>{f(sel.size)}</p></div>

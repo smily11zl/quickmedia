@@ -71,7 +71,9 @@ Scan, tag, AI-analyze, semantically search, and aggregate your local assets.
 - AI status multi-select (Done/Processing/Pending/Failed)
 - Tag multi-select filter (union logic)
 - Batch select + re-analyze
-- Sort (name/size/date)
+- Sort (name/size/modified/added/hot/score), unified across all search modes
+- Hot sort: weighted by view_count + open_count×3, most-viewed first
+- Score sort (semantic/combined modes): by vector relevance
 
 ### MCP Tools (v11/v14)
 - FastMCP driven, stdio transport
@@ -81,6 +83,8 @@ Scan, tag, AI-analyze, semantically search, and aggregate your local assets.
 ### Web UI
 - Settings page: watch path configuration, model management, AI prompt templates
 - Document preview (txt/md/docx), asset details (path/size/duration/AI results)
+- High-res detail thumbnails (800px from original file, cached)
+- View/open tracking (hot sort weighted)
 - Batch operations (multi-select + re-analyze)
 - i18n: English / Chinese (auto-detected from browser, adjustable in settings)
 

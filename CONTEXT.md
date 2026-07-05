@@ -608,3 +608,20 @@ V19 前名为 Speech。对语音转录文本运行 LLM 分析，提取摘要和�
 - audio → transcribe
 - text → text / speech_summary / video_summary / search_ai / aggregation
 - embedding → embedding
+
+
+### 详情页原图缩略图
+
+V20 新增。进入素材详情时，用原始分辨率文件生成高质量缩略图（区别于列表视图 256px 低分辨率缩略图）。缓存复用，不重复生成。
+
+### 热度排序
+
+V20 新增排序方式。按 `view_count`（查看详情次数）+ `open_count`（打开原文件次数）综合排序。仅在 Web UI 操作计数。
+
+### 分数排序
+
+V20 新增排序选项。当搜索模式为"语义搜索"或"综合搜索"时出现。按 ChromaDB 返回的向量距离/相似度分数排序，默认倒序（最高分在前）。
+
+### view_count / open_count
+
+V20 新增字段，存储在 `assets` 表。`view_count`：素材详情面板打开次数。`open_count`：点击路径打开原文件次数。默认值 0。

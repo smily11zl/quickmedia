@@ -3,7 +3,7 @@
 import sqlite3
 import os
 
-DB_VERSION = 19  # increment when adding new migration
+DB_VERSION = 20  # increment when adding new migration
 
 
 SCHEMA_SQL = """
@@ -33,7 +33,9 @@ CREATE TABLE IF NOT EXISTS assets (
     modified_at     TEXT,
     scanned_at      TEXT,
     created         TEXT DEFAULT (datetime('now')),
-    updated         TEXT DEFAULT (datetime('now'))
+    updated         TEXT DEFAULT (datetime('now')),
+    view_count      INTEGER DEFAULT 0,
+    open_count      INTEGER DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_assets_hash ON assets(hash);
@@ -133,10 +135,13 @@ class Database:
         if current_ver >= DB_VERSION:
             return  # already up to date
         self._init_schema()
+        self._migrate_v2()
+        self._migrate_v3()
         self._migrate_v9()
         self._migrate_v12()
         self._migrate_v16()
         self._migrate_v18()
+        self._migrate_v20()
         try:
             self.conn.execute(f"PRAGMA user_version={DB_VERSION}")
         except sqlite3.OperationalError:
@@ -185,13 +190,18 @@ class Database:
         )
         except Exception:
             pass  # DB locked by another connection, will backfill next startup
+    def _migrate_v20(self) -> None:
+        """v20: add view_count and open_count to assets."""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(assets)").fetchall()}
+        if "view_count" not in cols:
+            self.conn.execute("ALTER TABLE assets ADD COLUMN view_count INTEGER DEFAULT 0")
+        if "open_count" not in cols:
+            self.conn.execute("ALTER TABLE assets ADD COLUMN open_count INTEGER DEFAULT 0")
+
+
     def _init_schema(self) -> None:
         """Create tables and indexes if they don't exist."""
         self.conn.executescript(SCHEMA_SQL)
-        # v2 schema migration
-        self._migrate_v2()
-        # v3 schema migration
-        self._migrate_v3()
         self.conn.commit()
 
     def _migrate_v2(self) -> None:

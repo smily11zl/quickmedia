@@ -139,3 +139,8 @@ OpenRouter 支持的模型有限（仅 GPT-4o/mini、Sonnet 4 等），语音识
 - Whisper provider → 本地 faster-whisper 引擎，开关+测试按钮，不选模型
 - OpenRouter 转录 API → JSON+base64（非 multipart）
 - 视频转录 → ffmpeg 提取 MP3 临时文件（API 用），本地 whisper 直传原文件
+
+
+---
+
+## v20 — 排序修复 + 热度 + 详情页高清缩略图 ✅ 已完成

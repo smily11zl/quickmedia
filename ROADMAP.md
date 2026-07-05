@@ -280,3 +280,15 @@
 - speech → speech_summary 重命名 + 新增 transcribe 任务
 - Whisper provider（本地 faster-whisper 引擎）
 - AIWorker transcribe 适配器化
+
+## v20 — 已完成 ✅
+
+- 排序修复：4 种搜索模式统一排序
+- 热度排序：view_count（查看）+ open_count×3（打开）
+- 详情页原图缩略图（图片 800px + 视频 ffmpeg 首帧）
+- 热度排序权重：打开次数×3
+
+## 远期计划
+
+- 热度衰减：按时间加权衰退，最近操作权重高（last_viewed_at + last_opened_at）
+- 文件内容变更去重修复：inode 路径匹配时重算 SHA256 hash（间隔 5 分钟防重复计算）
