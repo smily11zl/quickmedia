@@ -25,7 +25,8 @@ DEFAULT_CONFIG = {
     "task_models": {
         "vision": {"provider": "ollama", "model": "qwen3.5:9b"},
         "text": {"provider": "ollama", "model": "qwen3.5:9b"},
-        "speech": {"provider": "ollama", "model": "qwen3.5:9b"},
+        "speech_summary": {"provider": "ollama", "model": "qwen3.5:9b"},
+        "transcribe": {"provider": "whisper", "model": "small"},
         "video_summary": {"provider": "ollama", "model": "qwen3.5:9b"},
         "embedding": {"provider": "ollama", "model": "qwen3-embedding:8b"},
         "search_ai": {"provider": "", "model": ""},
@@ -198,13 +199,29 @@ class Config:
         self._data["providers"]["ollama"] = {"url": ollama_url}
         self._data["task_models"] = {
             task: {"provider": "ollama", "model": model}
-            for task in ("vision", "text", "speech", "video_summary")
+            for task in ("vision", "text", "speech_summary", "video_summary")
         }
 
     def _fill_missing_task_models(self) -> None:
-        """Fill in any missing task types from DEFAULT_CONFIG. Saves if changed."""
-        defaults = DEFAULT_CONFIG.get("task_models") or {}
+        """Fill in any missing task types from DEFAULT_CONFIG. Migrate old keys. Saves if changed."""
+        # V19: rename speech → speech_summary (check raw file, not merged defaults)
         current = self._data.setdefault("task_models", {})
+        if "speech" in current:
+            # Only rename if the file itself has "speech" and wasn't already upgraded
+            raw = {}
+            if os.path.isfile(self._filepath):
+                try:
+                    import yaml
+                    with open(self._filepath) as f:
+                        raw = yaml.safe_load(f) or {}
+                except Exception:
+                    pass
+            file_tm = raw.get("task_models", {})
+            if "speech" in file_tm and "speech_summary" not in file_tm:
+                current["speech_summary"] = dict(current["speech"])
+                del current["speech"]
+                self._save()
+        defaults = DEFAULT_CONFIG.get("task_models") or {}
         changed = False
         for task, binding in defaults.items():
             if task not in current:

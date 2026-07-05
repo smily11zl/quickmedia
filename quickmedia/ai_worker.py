@@ -79,6 +79,11 @@ class AIWorker:
         provider = self._registry.get_provider(provider_name) or {}
         url = provider.get("url", "")
         api_key = self._env.get(f"{provider_name.upper()}_API_KEY", "")
+        if provider_name == "whisper":
+            # Return a lightweight adapter for local whisper routing
+            class WhisperAdapter:
+                provider_type = "whisper"
+            return WhisperAdapter()
         if provider_name == "ollama":
             api_key = api_key or "ollama"
             return OllamaAdapter(url.rstrip("/"), model, self._timeout)
@@ -263,20 +268,67 @@ class AIWorker:
         self._try_generate_video_summary(asset_id)
 
     def _process_transcribe(self, asset_id: int, path: str) -> None:
-        """Transcribe audio/video file, then run speech analysis."""
-        transcript = self._transcriber.transcribe(path)
+        """Transcribe audio/video file via configured adapter, then run speech analysis."""
+        adapter = self._get_adapter("transcribe")
+        asset_type = self.db.execute("SELECT asset_type FROM assets WHERE id=?", (asset_id,))[0]["asset_type"]
+        
+        # For video: extract audio to temp file for API providers
+        transcribe_path = path
+        tmp_file = None
+        if asset_type == "video" and getattr(adapter, 'provider_type', '') != "whisper":
+            import tempfile, subprocess as sp
+            tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
+            sp.run(["ffmpeg", "-i", path, "-vn", "-acodec", "libmp3lame", "-y", tmp.name],
+                   capture_output=True, timeout=120)
+            transcribe_path = tmp.name
+            tmp_file = tmp.name
+        
+        # Route to local whisper or API adapter
+        if getattr(adapter, 'provider_type', '') == "whisper":
+            import traceback as _tb, sys as _sys
+            print(f"[AIWorker] 转录模型: whisper(small) path={transcribe_path} type={type(transcribe_path)}", flush=True)
+            _sys.stderr.write(f"[AIWorker-STDERR] before transcribe call\n")
+            try:
+                transcript = self._transcriber.transcribe(transcribe_path)
+                print(f"[AIWorker] transcribe OK, len={len(transcript)}", flush=True)
+            except Exception as _e:
+                _sys.stderr.write(f"[AIWorker-STDERR] except block hit: {type(_e).__name__}: {_e}\n")
+                print(f"[AIWorker] transcribe exception: {type(_e).__name__}: {_e}", flush=True)
+                _tb.print_exc(file=_sys.stderr)
+                raise
+        else:
+            print(f"[AIWorker] 转录模型: {getattr(adapter, 'provider_name', '?')}/{getattr(adapter, 'model', '?')}", flush=True)
+            transcript = adapter.transcribe(transcribe_path)
+        
+        # Clean up temp file
+        if tmp_file:
+            try:
+                os.unlink(tmp_file)
+            except OSError:
+                pass
+        
         if transcript:
+            print(f"[AIWorker] [1] writing transcript to DB", flush=True)
             self.db.execute(
                 "UPDATE assets SET transcript=? WHERE id=?",
                 (transcript, asset_id),
             )
-            name = self.db.execute(
-                "SELECT filename FROM assets WHERE id=?", (asset_id,)
-            )[0]["filename"]
-            print(f"[AIWorker] 转录完成: {name} ({len(transcript)}字)", flush=True)
+            print(f"[AIWorker] [2] reading filename", flush=True)
+            name_row = self.db.execute("SELECT filename FROM assets WHERE id=?", (asset_id,))
+            print(f"[AIWorker] [2a] filename query returned {len(name_row)} rows", flush=True)
+            name = name_row[0]["filename"]
+            print(f"[AIWorker] [3] getting speech_summary adapter", flush=True)
             # Run speech analysis on transcript
-            adapter = self._get_adapter("speech")
-            analyzer = TextAnalyzer(adapter=adapter, prompt_config=self._pc())
+            import traceback as _tb3, sys as _sys3
+            try:
+                adapter2 = self._get_adapter("speech_summary")
+                print(f"[AIWorker] [4] creating TextAnalyzer, adapter type={type(adapter2).__name__}", flush=True)
+            except Exception as _e3:
+                _sys3.stderr.write(f"[AIWorker-STDERR] _get_adapter speech_summary failed: {type(_e3).__name__}: {_e3}\n")
+                _tb3.print_exc(file=_sys3.stderr)
+                raise
+            analyzer = TextAnalyzer(adapter=adapter2, prompt_config=self._pc())
+            print(f"[AIWorker] [5] calling analyze_speech", flush=True)
             result = analyzer.analyze_speech(transcript)
             if result.get("summary"):
                 self.db.execute(

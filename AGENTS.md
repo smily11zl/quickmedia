@@ -45,6 +45,12 @@ grill-me → grill-with-docs → to-prd → to-issues → tdd
 4. **to-issues** — 拆成独立垂直切片 issue
 5. **tdd** — 按 issue 逐个实现，RED→GREEN→REFACTOR
 
+## 每个版本发布前必做
+
+- 更新 `DB_VERSION` 至当前版本号（`quickmedia/database.py`）
+- 如有新增术语，更新 `CONTEXT.md`
+- 如有重大技术决策，在 `docs/adr/` 写 ADR
+
 ## 技术栈
 
 Python 3.11+ / FastAPI / SQLite / React + TailwindCSS / Ollama (Qwen 3.5) / watchdog

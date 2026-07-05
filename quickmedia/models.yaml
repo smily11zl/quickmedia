@@ -32,6 +32,31 @@ openrouter:
       capabilities:
         text: []
         document: [PDF, TXT, MD]
+    - name: anthropic/claude-haiku-4.5
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
+    - name: anthropic/claude-opus-4.7
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
+    - name: anthropic/claude-opus-4.8
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
+    - name: anthropic/claude-sonnet-4.6
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
+    - name: anthropic/claude-sonnet-5
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
     - name: google/gemini-2.5-flash
       capabilities:
         image: [JPG, PNG, GIF, WEBP]
@@ -46,6 +71,40 @@ openrouter:
         audio: [MP3, WAV]
         text: []
         document: [PDF, TXT, MD]
+
+    - name: google/gemini-3-flash
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        video: [MP4]
+        audio: [MP3, WAV]
+        text: []
+        document: [PDF, TXT, MD]
+    - name: google/gemini-3.5-flash
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        video: [MP4]
+        audio: [MP3, WAV]
+        text: []
+        document: [PDF, TXT, MD]
+    - name: openai/gpt-5.4
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
+    - name: openai/gpt-5.5
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
+    - name: openai/whisper-large-v3
+      capabilities:
+        audio: [MP3, WAV, FLAC, M4A]
+    - name: openai/whisper-large-v3-turbo
+      capabilities:
+        audio: [MP3, WAV, FLAC, M4A]
+    - name: qwen/qwen3-asr-flash
+      capabilities:
+        audio: [MP3, WAV, FLAC, M4A]
     - name: deepseek/deepseek-chat
       capabilities:
         text: []
@@ -133,3 +192,20 @@ openai:
         image: [JPG, PNG, GIF, WEBP]
         text: []
         document: [PDF, TXT, MD]
+    - name: gpt-5.5
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
+    - name: gpt-5.4
+      capabilities:
+        image: [JPG, PNG, GIF, WEBP]
+        text: []
+        document: [PDF, TXT, MD]
+
+whisper:
+  type: local
+  models:
+    - name: small
+      capabilities:
+        audio: [MP3, WAV, FLAC, M4A, MP4]

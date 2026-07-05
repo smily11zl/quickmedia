@@ -1,6 +1,8 @@
 """QuickMedia FastAPI server."""
 
 import os
+
+_whisper_model_cache = None
 from fastapi import FastAPI, Request, Query, HTTPException, Body, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -903,7 +905,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         if "ollama_url" in body:
             cfg.set("providers.ollama.url", body["ollama_url"])
         if "model" in body:
-            for task in ("vision", "text", "speech", "video_summary"):
+            for task in ("vision", "text", "speech_summary", "video_summary"):
                 cfg.set(f"task_models.{task}.model", body["model"])
         if "video_frames" in body:
             cfg.set("ai.video_frames", int(body["video_frames"]))
@@ -976,6 +978,23 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         registry = ProviderRegistry(cfg, user_models)
         models = registry.get_models(provider_name)
         return {"models": [{"name": m["name"], "capabilities": m.get("capabilities", [])} for m in models]}
+
+    @app.get("/api/providers/whisper/test")
+    def test_whisper():
+        """Test local faster-whisper availability."""
+        global _whisper_model_cache
+        try:
+            cfg = Config(config_dir=app.extra["config_dir"])
+            tm = cfg.get("task_models") or {}
+            model_size = tm.get("transcribe", {}).get("model", "small")
+            if _whisper_model_cache is None:
+                from faster_whisper import WhisperModel
+                _whisper_model_cache = WhisperModel(model_size, device="cpu", compute_type="int8")
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+
 
     @app.put("/api/providers")
     def update_providers(body: dict):

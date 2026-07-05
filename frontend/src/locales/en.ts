@@ -188,6 +188,8 @@ export default {
     "var_search_ai": "{assets} asset list, {query} search query"
   },
   "model": {
+    "whisper_toggle": "Local Whisper Engine",
+    "whisper_test": "Test",
     "title": "Model Management",
     "close": "Close",
     "tab_providers": "Providers",
@@ -213,6 +215,7 @@ export default {
     "add_provider": "Add Provider",
     "task_vision": "Image Analysis",
     "task_text": "Document Analysis",
+    "task_transcribe": "Transcribe",
     "task_speech": "Speech Analysis",
     "task_video_summary": "Video Summary",
     "task_embedding": "Vectorization",
@@ -220,6 +223,7 @@ export default {
     "task_aggregation": "Aggregation",
     "hint_vision": "Analyze images and video frames, generate tags and descriptions. Requires vision model (e.g. GPT-4o, Qwen-VL).",
     "hint_text": "Analyze document summaries and keywords. Requires text understanding model.",
+    "hint_transcribe": "Convert audio/video to text. Requires speech recognition model.",
     "hint_speech": "Analyze speech transcription summaries and topics. Requires text understanding model.",
     "hint_video_summary": "Combine visual descriptions and speech content to generate summaries. Requires text context understanding.",
     "hint_embedding": "Use search_terms to generate independent vectors for semantic search. One vector per search term, Top-K aggregation. ⚠️ Do not switch models",

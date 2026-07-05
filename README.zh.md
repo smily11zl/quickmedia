@@ -17,14 +17,15 @@
 ### AI 智能分析
 - 图片视觉描述 + 元素标签
 - 视频多帧采样 + 首帧分析 + 综合总结
-- 音频/视频语音转录（whisper）
+- 音频/视频语音转录（whisper，可通过模型管理配置）
+- 语音总结分析（基于转录文本的 LLM 分析）
 - 文档摘要 + 关键词
 - OCR 图片文字提取
 - AI 任务队列（异步，不阻塞扫描）
 - 重试机制（3 次，2s 间隔）+ 手动重试/重新分析
 - 自定义 AI Prompt（图片/文档/语音/视频四类独立模板 + 预设）
-- 多模型支持（Ollama / OpenAI / DeepSeek / OpenRouter / MiniMax）
-- 任务模型绑定（不同分析类型可指定不同模型）
+- 多模型支持（Ollama / OpenAI / DeepSeek / OpenRouter / MiniMax / Whisper）
+- 任务模型绑定，按能力过滤（每个任务仅显示兼容模型）
 
 ### 搜索
 - 语义搜索（ChromaDB 向量，`qwen3-embedding`）
@@ -201,6 +202,8 @@ codex mcp add quickmedia -- quickmedia mcp
 | | `qwen3-embedding:8b` | | | | 嵌入 |
 | **OpenAI** | `gpt-4o` | ✓ | | | ✓ |
 | | `gpt-4o-mini` | ✓ | | | ✓ |
+| | `gpt-5.5` | ✓ | | | ✓ |
+| | `gpt-5.4` | ✓ | | | ✓ |
 | **DeepSeek** | `deepseek-chat` | | | | ✓ |
 | | `deepseek-reasoner` | | | | ✓ |
 | | `deepseek-v4-flash` | | | | ✓ |
@@ -220,12 +223,23 @@ codex mcp add quickmedia -- quickmedia mcp
 | | `qwen/qwen3.7-plus` | ✓ | ✓ | | ✓ |
 | | `qwen/qwen3.7-max` | ✓ | ✓ | | ✓ |
 | | `qwen/qwen3-embedding-8b` | | | | 嵌入 |
+| | `openai/whisper-large-v3` | | | ✓ | |
+| | `openai/whisper-large-v3-turbo` | | | ✓ | |
+| | `qwen/qwen3-asr-flash` | | | ✓ | |
+| | `anthropic/claude-haiku-4.5` | ✓ | | | ✓ |
+| | `anthropic/claude-opus-4.7` | ✓ | | | ✓ |
+| | `anthropic/claude-opus-4.8` | ✓ | | | ✓ |
+| | `anthropic/claude-sonnet-4.6` | ✓ | | | ✓ |
+| | `anthropic/claude-sonnet-5` | ✓ | | | ✓ |
+| | `google/gemini-3-flash` | ✓ | ✓ | ✓ | ✓ |
+| | `google/gemini-3.5-flash` | ✓ | ✓ | ✓ | ✓ |
 | **MiniMax** | `MiniMax-M3` | | | | ✓ |
 | | `MiniMax-M2.7` | | | | ✓ |
 | | `MiniMax-M2.5` | | | | ✓ |
 | | `MiniMax-M2.1` | | | | ✓ |
 | | `MiniMax-M2` | | | | ✓ |
 | | `MiniMax-M1` | | | | ✓ |
+| **Whisper** (本地) | `small` | | | ✓ | |
 
 > 嵌入模型用于语义搜索和素材聚合。图片/视频分析需要多模态模型。各 Provider 需要配置对应的 API Key。
 

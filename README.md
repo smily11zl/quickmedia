@@ -21,14 +21,15 @@ Scan, tag, AI-analyze, semantically search, and aggregate your local assets.
 ### AI Analysis
 - Image visual description + element tags
 - Video multi-frame sampling + frame analysis + comprehensive summary
-- Audio/video speech transcription (whisper)
+- Audio/video speech transcription (configurable: local Whisper or OpenRouter API)
+- Speech summary analysis (LLM-powered transcript summarization)
 - Document summaries + keywords
 - OCR text extraction from images
 - AI task queue (async, non-blocking during scanning)
 - Retry mechanism (3 attempts, 2s interval) + manual retry/re-analyze
 - Custom AI prompts (independent templates + presets for image/document/speech/video)
-- Multi-model support (Ollama / OpenAI / DeepSeek / OpenRouter / MiniMax)
-- Task-to-model binding (different analysis types can use different models)
+- Multi-model support (Ollama / OpenAI / DeepSeek / OpenRouter / MiniMax / Whisper)
+- Task-to-model binding with capability filtering
 
 ### Search
 - Semantic search (ChromaDB vectors, `qwen3-embedding`)
@@ -197,6 +198,8 @@ Configure via Web UI → Settings → Model Management. Different analysis tasks
 | | `qwen3-embedding:8b` | | | | embed |
 | **OpenAI** | `gpt-4o` | ✓ | | | ✓ |
 | | `gpt-4o-mini` | ✓ | | | ✓ |
+| | `gpt-5.5` | ✓ | | | ✓ |
+| | `gpt-5.4` | ✓ | | | ✓ |
 | **DeepSeek** | `deepseek-chat` | | | | ✓ |
 | | `deepseek-reasoner` | | | | ✓ |
 | | `deepseek-v4-flash` | | | | ✓ |
@@ -216,12 +219,24 @@ Configure via Web UI → Settings → Model Management. Different analysis tasks
 | | `qwen/qwen3.7-plus` | ✓ | ✓ | | ✓ |
 | | `qwen/qwen3.7-max` | ✓ | ✓ | | ✓ |
 | | `qwen/qwen3-embedding-8b` | | | | embed |
+| | `openai/whisper-large-v3` | | | ✓ | |
+| | `openai/whisper-large-v3-turbo` | | | ✓ | |
+| | `qwen/qwen3-asr-flash` | | | ✓ | |
+| | `anthropic/claude-haiku-4.5` | ✓ | | | ✓ |
+| | `anthropic/claude-opus-4.7` | ✓ | | | ✓ |
+| | `anthropic/claude-opus-4.8` | ✓ | | | ✓ |
+| | `anthropic/claude-sonnet-4.6` | ✓ | | | ✓ |
+| | `anthropic/claude-sonnet-5` | ✓ | | | ✓ |
+| | `google/gemini-3-flash` | ✓ | ✓ | ✓ | ✓ |
+| | `google/gemini-3.5-flash` | ✓ | ✓ | ✓ | ✓ |
 | **MiniMax** | `MiniMax-M3` | | | | ✓ |
 | | `MiniMax-M2.7` | | | | ✓ |
 | | `MiniMax-M2.5` | | | | ✓ |
 | | `MiniMax-M2.1` | | | | ✓ |
 | | `MiniMax-M2` | | | | ✓ |
 | | `MiniMax-M1` | | | | ✓ |
+| **Whisper** (local) | `small` | | | ✓ | |
+
 
 > Embedding models are used for semantic search and aggregation. Vision/video analysis requires multimodal models. Each provider requires a corresponding API key.
 

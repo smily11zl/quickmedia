@@ -80,3 +80,32 @@ class OpenAIAdapter:
             req.add_header("Content-Type", "application/json")
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
+
+    def transcribe(self, file_path: str) -> str:
+        """Send audio file to OpenAI-compatible transcription API. Returns text."""
+        import os, base64, urllib.error
+        filename = os.path.basename(file_path)
+        with open(file_path, "rb") as f:
+            audio_data = f.read()
+        audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+        ext = os.path.splitext(filename)[1].lstrip(".") or "mp3"
+        
+        body = json.dumps({
+            "model": self.model,
+            "input_audio": {
+                "data": audio_b64,
+                "format": ext,
+            }
+        }).encode("utf-8")
+        
+        url = f"{self.base_url}/audio/transcriptions"
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("Authorization", f"Bearer {self.api_key}")
+        req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout * 4) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body_text = e.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"HTTP {e.code}: {body_text[:500]}") from e
+        return result.get("text", "").strip()

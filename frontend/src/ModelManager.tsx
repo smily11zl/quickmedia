@@ -40,12 +40,14 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
   const [apiKey, setApiKey] = useState("");
   const [models, setModels] = useState<Record<string, {name:string;capabilities:Record<string,string[]>}[]>>({});
   const [testStatus, setTestStatus] = useState<Record<string, string>>({});
+  const [whisperStatus, setWhisperStatus] = useState<string>("");
   const { t } = useTranslation();
 
   const TASK_LABELS: Record<string, string> = {
     vision: t("model.task_vision"),
     text: t("model.task_text"),
-    speech: t("model.task_speech"),
+    speech_summary: t("model.task_speech"),
+    transcribe: t("model.task_transcribe"),
     video_summary: t("model.task_video_summary"),
     embedding: t("model.task_embedding"),
     search_ai: t("model.task_search_ai"),
@@ -55,7 +57,8 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
   const TASK_HINTS: Record<string, string> = {
     vision: t("model.hint_vision"),
     text: t("model.hint_text"),
-    speech: t("model.hint_speech"),
+    speech_summary: t("model.hint_speech"),
+    transcribe: t("model.hint_transcribe"),
     video_summary: t("model.hint_video_summary"),
     embedding: t("model.hint_embedding"),
     search_ai: t("model.hint_search_ai"),
@@ -82,6 +85,10 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
           setModels({...m});
         }).catch(() => {});
       });
+      fetch("/api/providers/whisper/models").then(r => r.json()).then(r2 => {
+        m["whisper"] = r2.models || [];
+        setModels({...m});
+      }).catch(() => {});
     });
   }, []);
 
@@ -156,7 +163,34 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
       .catch(() => setTestStatus({...testStatus, [name]: t("model.connection_failed")}));
   };
 
-  const providerModels = (provider: string): {name:string;capabilities:Record<string,string[]>}[] => models[provider] || [];
+
+  const testWhisper = () => {
+    setWhisperStatus(t("model.testing"));
+    fetch("/api/providers/whisper/test")
+      .then(r => r.json())
+      .then(r => setWhisperStatus(r.ok ? t("model.connected") : (r.error || t("model.connection_failed"))))
+      .catch(() => setWhisperStatus(t("model.connection_failed")));
+  };
+
+  const providerModels = (provider: string, capability?: string): {name:string;capabilities:Record<string,string[]>}[] => {
+    const all = models[provider] || [];
+    if (!capability) return all;
+    return all.filter(m => {
+      const caps = m.capabilities || {};
+      return capability in caps;
+    });
+  };
+
+  const TASK_CAPABILITY: Record<string, string> = {
+    vision: "image",
+    text: "text",
+    speech_summary: "text",
+    transcribe: "audio",
+    video_summary: "text",
+    embedding: "embedding",
+    search_ai: "text",
+    aggregation: "text",
+  };
 
   const capLabel = (caps: Record<string,string[]>) => {
     const labels: Record<string,string> = {image:t("model.cap_image"), text:t("model.cap_text"), audio:t("model.cap_audio"), document:t("model.cap_document"), video:t("model.cap_video"), embedding:t("model.cap_embedding")};
@@ -204,6 +238,16 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
 
           {Object.keys(editProviders).length > 0 && (
             <div className="grid grid-cols-2 gap-2">
+              {/* Whisper local provider */}
+              <div className="p-2 rounded-md border" style={{borderColor: S.h, backgroundColor: S.s}}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium" style={{color: S.i}}>Whisper</span>
+                  <div className="flex gap-1">
+                    <button onClick={() => testWhisper()} className="text-[10px] px-2 py-0.5 rounded" style={{backgroundColor: S.d, color: S.b}}>{t("model.whisper_test")}</button>
+                  </div>
+                </div>
+                {whisperStatus && <p className="text-[10px] mt-0.5" style={{color: whisperStatus === t("model.connected") ? "#5db872" : whisperStatus === t("model.testing") ? S.m : "#c64545"}}>{whisperStatus}</p>}
+              </div>
               {Object.entries(editProviders).map(([name, p]) => (
                 <div key={name} className="p-2 rounded-md border" style={{borderColor: S.h, backgroundColor: S.s}}>
                   <div className="flex items-center justify-between">
@@ -244,7 +288,7 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
           <div className="grid grid-cols-2 gap-2">
             {Object.entries(TASK_LABELS).map(([taskType, label]) => {
               const binding = editTaskModels[taskType] || {provider: "", model: ""};
-              const models_ = providerModels(binding.provider);
+              const models_ = providerModels(binding.provider, TASK_CAPABILITY[taskType]);
               return (
                 <div key={taskType} className="p-2 rounded-md border" style={{borderColor: S.h, backgroundColor: S.s}}>
                   <span className="text-[11px] font-medium" style={{color: S.i}}>{label}</span>
@@ -252,11 +296,11 @@ export default function ModelManager({ onClose, standalone = true, onModelsSaved
                   <div className="flex items-center gap-2 mt-1">
                     <select value={binding.provider} onChange={e => updateTask(taskType, e.target.value, "")} className="text-[10px] px-1 py-0.5 rounded flex-1 outline-none" style={{border: `1px solid ${S.h}`, color: S.i, backgroundColor: S.c}}>
                       <option value="">{t("model.select_provider")}</option>
-                      {Object.keys(editProviders).map(p => <option key={p} value={p}>{p}</option>)}
+                      {[...Object.keys(editProviders), "whisper"].map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                     <div className="relative flex-1">
                       <button onClick={() => setOpenModelPicker(openModelPicker === taskType ? null : taskType)} className="w-full text-left text-[10px] px-2 py-1 rounded flex items-center justify-between outline-none" style={{border: `1px solid ${S.h}`, color: binding.model ? S.i : S.ms, backgroundColor: S.c}}>
-                        <span>{binding.model || t("model.select_model")}</span>
+                        <span>{binding.provider ? (binding.model || t("model.select_model")) : t("model.select_model")}</span>
                         <span className="text-[8px]" style={{color: S.ms}}>▼</span>
                       </button>
                       {openModelPicker === taskType && (<>

@@ -151,9 +151,9 @@ AI 生成的标签以虚线边框展示。用户点击确认后变为实线，�
 
 视频素材始终入队转录任务。transcriber 检测到无音轨时直接标记 done（不报错、不阻塞），不产生转录结果。
 
-### 语音分析（Speech Analysis）
+### 语音分析（Speech Summary）
 
-基于语音转录文本，通过 Ollama 提取主题标签和内容摘要。语音标签以虚线边框展示（同 AI 视觉标签）。语音摘要存入 ai_summary 字段。
+基于语音转录文本，通过 LLM 提取主题标签和内容摘要（V19 前名为 Speech）。语音标签以虚线边框展示（同 AI 视觉标签）。语音摘要存入 ai_summary 字段。
 
 ### 视频综合总结（Video Combined Summary）
 
@@ -218,11 +218,11 @@ Provider 配置在 `config.yaml` 的 `providers` 字段（URL + 模型列表）�
 
 ### Task Model Binding（任务模型绑定）
 
-将 AI 任务类型（vision / text / speech / video_summary / search_ai / aggregation）绑定到具体 provider + model。配置在 `config.yaml` 的 `task_models` 字段。search_ai 为 V15 新增的搜索任务类型，aggregation 为 V16 新增的聚合任务类型。
+将 AI 任务类型（vision / text / speech_summary / transcribe / video_summary / embedding / search_ai / aggregation）绑定到具体 provider + model。配置在 `config.yaml` 的 `task_models` 字段。search_ai 为 V15 新增的搜索任务类型，aggregation 为 V16 新增的聚合任务类型。
 
 ### Model Capabilities（模型能力）
 
-标注模型支持的分析类型，用于设置面板下拉筛选可选模型。定义在 `quickmedia/models.yaml`（随项目发布），capabilities 包括：vision / text / speech。首次启动自动复制到 `~/.asset-manager/models.yaml`，升级时合并新增。
+标注模型支持的分析类型，用于设置面板下拉筛选可选模型。定义在 `quickmedia/models.yaml`（随项目发布），capabilities 包括：image / video / text / document / audio / embedding。首次启动自动复制到 `~/.asset-manager/models.yaml`，升级时合并新增。
 
 ### think 参数
 
@@ -574,3 +574,37 @@ search_assets 和 get_asset 两个 MCP 工具返回字段完全一致，均包�
 
 v17 及更早版本通过 `ai_queue` 子查询实时计算。v18 引入 `PRAGMA user_version=18` 跳过重复迁移。
 
+
+
+### Transcribe（语音转文字）
+
+V19 新增任务。将音频/视频文件转为文字，存储到 `transcript` 字段。通过 `task_models.transcribe` 配置 provider + model。支持的 provider：OpenRouter（whisper-large-v3 / turbo、qwen3-asr-flash）、Ollama（本地模型）、Whisper（本地 faster-whisper 引擎）。
+
+### Speech Summary（语音总结）
+
+基于转录文本，通过 LLM 提取主题标签和内容摘要。原名为 `speech`，V19 重命名。语音标签以虚线边框展示。
+
+### Whisper Provider
+
+本地语音识别引擎（faster-whisper），无需 API Key。在模型管理页面开启/关闭并测试连通性。仅用于 `transcribe` 任务。
+
+
+### Transcribe（语音转文字）
+
+V19 新增任务。将音频/视频文件转为文字，存储到 `transcript` 字段。通过 `task_models.transcribe` 配置 provider + model。支持的 provider：OpenRouter（whisper-large-v3 / turbo、qwen3-asr-flash）、Ollama、Whisper（本地 faster-whisper）。
+
+### Speech Summary（语音总结）
+
+V19 前名为 Speech。对语音转录文本运行 LLM 分析，提取摘要和标签。绑定 `task_models.speech_summary`。
+
+### Whisper Provider
+
+本地语音识别引擎（faster-whisper）。无需 URL 和 API Key，仅开关和测试按钮。模型固定为配置值（默认 small）。不支持远程 API。
+
+### 模型能力过滤
+
+任务配置 Tab 中模型下拉按 `TASK_CAPABILITY` 过滤，仅显示支持该任务的模型：
+- image → vision
+- audio → transcribe
+- text → text / speech_summary / video_summary / search_ai / aggregation
+- embedding → embedding

@@ -47,6 +47,7 @@ DEFAULT_PROMPTS_ZH = {
         ],
     },
     "text": {
+        "context_label": "文档内容",
         "system_format": (
             "请严格按以下JSON格式输出（只输出JSON，不要有其他文字）：\n"
             '{"summary": "文档摘要", "tags": ["标签1", "标签2", "标签3"], "search_terms": ["搜索词1", "搜索词2"]}\n'
@@ -78,7 +79,8 @@ DEFAULT_PROMPTS_ZH = {
             {"name": "学习总结", "content": "总结文档中的核心知识点、关键概念定义和知识点之间的关联。提取学科领域、主题词和专业术语。"},
         ],
     },
-    "speech": {
+    "speech_summary": {
+        "context_label": "语音转录",
         "system_format": (
             "请严格按以下JSON格式输出（只输出JSON，不要有其他文字）：\n"
             '{"summary": "语音摘要", "tags": ["标签1", "标签2", "标签3"], "search_terms": ["搜索词1", "搜索词2"]}\n'
@@ -370,6 +372,7 @@ DEFAULT_PROMPTS_EN = {
         ],
     },
     "text": {
+        "context_label": "Document content",
         "system_format": (
             "Output strictly in JSON format (only JSON, no other text):\n"
             '{"summary": "Document summary", "tags": ["tag1", "tag2", "tag3"], "search_terms": ["search term1", "search term2"]}\n'
@@ -404,7 +407,8 @@ DEFAULT_PROMPTS_EN = {
             {"name": "Study Notes", "content": "Summarize core knowledge points, key concept definitions, and relationships between concepts. Extract subject areas, topic words, and professional terminology."},
         ],
     },
-    "speech": {
+    "speech_summary": {
+        "context_label": "Speech transcript",
         "system_format": (
             "Output strictly in JSON format (only JSON, no other text):\n"
             '{"summary": "Speech summary", "tags": ["tag1", "tag2", "tag3"], "search_terms": ["search term1", "search term2"]}\n'
@@ -442,7 +446,7 @@ DEFAULT_PROMPTS_EN = {
     "video_summary": {
         "system_format": (
             "Output strictly in JSON format (only JSON, no other text):\n"
-            '{"summary": "Comprehensive summary", "tags": ["tag1", "tag2", "tag3"], "search_terms": ["search term1", "search term2"]}\n'
+            '{"video_summary": "Comprehensive summary", "tags": ["tag1", "tag2", "tag3"], "search_terms": ["search term1", "search term2"]}\n'
             "search_terms rules (3-8 terms):\n"
             "- Generate from user search perspective, not simple rewrites.\n"
             "- Prioritize generation based on actual video content.\n"
@@ -613,8 +617,8 @@ DEFAULT_PROMPTS_EN = {
     "search_ai": {
         "system_format": (
             "Output strictly in JSON format (only JSON, no other text):\n"
-            '{"ids": [1, 2, 3]}\n'
-            'If no matching assets, output: {"ids": []}\n'
+            '{"asset_ids": [1, 2, 3]}\n'
+            'If no matching assets, output: {"asset_ids": []}\n'
         ),
         "default": ("Output in English.\n"
             "You are an asset search assistant. Below is a list of assets:\n"

@@ -188,6 +188,8 @@ export default {
     "var_search_ai": "{assets} 素材列表, {query} 搜索查询"
   },
   "model": {
+    "whisper_toggle": "本地 Whisper 引擎",
+    "whisper_test": "测试",
     "title": "模型管理",
     "close": "关闭",
     "tab_providers": "管理",
@@ -213,6 +215,7 @@ export default {
     "add_provider": "添加 Provider",
     "task_vision": "图片分析",
     "task_text": "文档分析",
+    "task_transcribe": "语音转录",
     "task_speech": "语音分析",
     "task_video_summary": "视频总结",
     "task_embedding": "向量化",
@@ -220,6 +223,7 @@ export default {
     "task_aggregation": "聚合分析",
     "hint_vision": "分析图片、视频帧的内容，生成标签和文字描述。需要视觉理解模型（如 GPT-4o、Qwen-VL 等）。",
     "hint_text": "分析文档类素材的摘要和关键词。需要文本理解模型。",
+    "hint_transcribe": "将音频/视频转为文字。需要语音识别模型。",
     "hint_speech": "分析语音转写文本的摘要和主题。需要文本理解模型。",
     "hint_video_summary": "综合画面描述和语音内容生成总结。需要理解文字上下文。",
     "hint_embedding": "使用 search_terms 生成独立向量用于语义搜索。每个搜索词存一个向量，Top-K 聚合匹配。⚠️ 勿切换模型",

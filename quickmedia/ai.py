@@ -153,14 +153,19 @@ class TextAnalyzer:
 
     def analyze(self, text: str) -> dict:
         """Analyze text, returning {summary, tags, search_terms}."""
+        from quickmedia.prompt_config import get_default_prompts, get_current_language as _get_current_lang
         if self._prompt_config:
-            prompt = self._prompt_config.get_prompt("text") + f"\n\n文档内容：\n{text[:4000]}"
+            lang = self._prompt_config.language
+            prompt = self._prompt_config.get_prompt("text", lang)
+            label = get_default_prompts(lang)["text"].get("context_label", "")
+            prompt += f"\n\n{label}:\n{text[:4000]}"
         else:
-            from quickmedia.prompt_config import get_default_prompts, get_current_language as _get_current_lang
-            dc = get_default_prompts(self._prompt_config.language if self._prompt_config else _get_current_lang())
+            lang = _get_current_lang()
+            dc = get_default_prompts(lang)
             fmt = "".join(dc["text"]["system_format"])
             default = "".join(dc["text"]["default"])
-            prompt = f"{default}\n\n{fmt}\n\n文档内容：\n{text[:4000]}"
+            label = dc["text"].get("context_label", "")
+            prompt = f"{default}\n\n{fmt}\n\n{label}:\n{text[:4000]}"
         response = self.adapter.chat(prompt)
         return self._parse_response(response)
 
@@ -197,13 +202,19 @@ class TextAnalyzer:
 
     def analyze_speech(self, transcript: str) -> dict:
         """Analyze a speech transcript, returning {summary, tags}."""
+        from quickmedia.prompt_config import get_default_prompts, get_current_language as _get_current_lang
         if self._prompt_config:
-            prompt = self._prompt_config.get_prompt("speech") + f"\n\n语音转录：\n{transcript[:4000]}"
+            lang = self._prompt_config.language
+            prompt = self._prompt_config.get_prompt("speech_summary", lang)
+            label = get_default_prompts(lang)["speech_summary"].get("context_label", "")
+            prompt += f"\n\n{label}:\n{transcript[:4000]}"
         else:
-            from quickmedia.prompt_config import get_default_prompts, get_current_language as _get_current_lang
-            fmt = "".join(dc["speech"]["system_format"])
-            default = "".join(dc["speech"]["default"])
-            prompt = f"{default}\n\n{fmt}\n\n语音转录：\n{transcript[:4000]}"
+            lang = _get_current_lang()
+            dc = get_default_prompts(lang)
+            fmt = "".join(dc["speech_summary"]["system_format"])
+            default = "".join(dc["speech_summary"]["default"])
+            label = dc["speech_summary"].get("context_label", "")
+            prompt = f"{default}\n\n{fmt}\n\n{label}:\n{transcript[:4000]}"
         response = self.adapter.chat(prompt)
         return self._parse_response(response)
 

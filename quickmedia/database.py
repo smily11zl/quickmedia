@@ -3,7 +3,7 @@
 import sqlite3
 import os
 
-DB_VERSION = 18  # increment when adding new migration
+DB_VERSION = 19  # increment when adding new migration
 
 
 SCHEMA_SQL = """
