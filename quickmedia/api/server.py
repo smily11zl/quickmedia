@@ -717,11 +717,11 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         if not rows:
             raise HTTPException(status_code=404, detail="Asset not found")
         asset_type = rows[0]["asset_type"]
-        # Clear existing AI results
+        # Clear existing AI results and set pending
         _db.conn.execute(
             "UPDATE assets SET visual_description=NULL, ai_summary=NULL, "
             "ocr_text=NULL, transcript=NULL, video_summary=NULL, "
-            "analyzed_at=NULL WHERE id=?",
+            "analyzed_at=NULL, ai_status='pending' WHERE id=?",
             (asset_id,),
         )
         # Clear old ChromaDB embeddings

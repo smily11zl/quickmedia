@@ -89,6 +89,8 @@
 
 ```bash
 chmod +x scripts/setup.sh && ./scripts/setup.sh
+# 已安装后快速启动：
+chmod +x scripts/serve.sh && ./scripts/serve.sh
 ```
 
 ### 基础环境

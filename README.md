@@ -94,6 +94,8 @@ Scan, tag, AI-analyze, semantically search, and aggregate your local assets.
 
 ```bash
 chmod +x scripts/setup.sh && ./scripts/setup.sh
+# Quick start after install:
+chmod +x scripts/serve.sh && ./scripts/serve.sh
 ```
 
 ### Prerequisites
