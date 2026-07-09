@@ -1,92 +1,192 @@
 [English](README.md) | [中文](README.zh.md)
 
-# QuickMedia — Local Asset Intelligence
 
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue)](https://www.python.org/)
+# QuickMedia
+
+## Your local AI-powered second brain for photos, videos and documents.
+
+Transform your messy media folders into an intelligent knowledge base. Search, organize and understand your files with local AI.
+
+![Stars](https://img.shields.io/github/stars/smily11zl/quickmedia?style=social)
+![License](https://img.shields.io/github/license/smily11zl/quickmedia)
+![Python](https://img.shields.io/badge/Python-3.11+-blue)
+![React](https://img.shields.io/badge/React-Frontend-blue)
+![Ollama](https://img.shields.io/badge/AI-Ollama-black)
+
 [![FastAPI](https://img.shields.io/badge/FastAPI-backend-green)](https://fastapi.tiangolo.com/)
-[![React](https://img.shields.io/badge/React-frontend-61dafb)](https://react.dev/)
 
 Scan, tag, AI-analyze, semantically search, and aggregate your local assets.
 
-## Core Features
+## ✨ Core Features
 
-### Asset Scanning & Management
-- Directory scanning (SHA256 deduplication + inode tracking)
-- Real-time file watching (fsevents)
-- Metadata extraction (image dimensions, video resolution/duration, audio info)
-- Async thumbnail generation
-- Manual scanning (Web UI triggered, configurable paths / file selection / folder selection)
-- Asset deletion (index only, source files unaffected)
+### 🧠 AI-Powered Media Understanding
 
-### AI Analysis
-- Image visual description + element tags
-- Video multi-frame sampling + frame analysis + comprehensive summary
-- Audio/video speech transcription (configurable: local Whisper or OpenRouter API)
-- Speech summary analysis (LLM-powered transcript summarization)
-- Document summaries + keywords
-- OCR text extraction from images
-- AI task queue (async, non-blocking during scanning)
-- Retry mechanism (3 attempts, 2s interval) + manual retry/re-analyze
-- Custom AI prompts (independent templates + presets for image/document/speech/video)
-- Multi-model support (Ollama / OpenAI / DeepSeek / OpenRouter / MiniMax / Whisper)
-- Task-to-model binding with capability filtering
+QuickMedia uses multimodal AI models to understand your local files.
 
-### Search
-- Semantic search (ChromaDB vectors, `qwen3-embedding`)
-- RRF fusion ranking (BM25 keyword + semantic vector hybrid)
-- Three modes: Combined / Semantic / Keyword
-- jieba Chinese word segmentation
-- Search result keyword highlighting
-- Similar asset discovery (detail panel overlay)
+Automatically analyze:
+- 🖼️ **Images** — generate descriptions, tags, and understand visual content
+- 🎬 **Videos** — analyze key frames and understand video content
+- 📄 **Documents** — extract summaries and important keywords
+- 🔤 **OCR** — recognize text inside images
+- 🎵 **Audio & Video** — convert speech into searchable text
+- 📝 **AI Summaries** — summarize transcripts and extracted content
 
-### Tag System
-- Three sources: auto (system) / ai (AI-generated) / manual (user-added)
-- Flat structure (no hierarchy), union-based filtering
-- AI tag confirmation / deletion
+Your files become searchable by meaning, not just filenames.
 
-### Asset Aggregation (v12-v14)
-- AI auto-clustering: Full analysis / Full append / Incremental append
-- Aggregation node many-to-many associations (assets can belong to multiple nodes)
-- Sidebar dual-tab: Search & Filter / Aggregation Nodes
-- Node management: create, rename, edit description, delete
-- Manual add/remove assets (multi-select batch operations)
-- Node analyze-append: AI auto-matches unconnected assets to node
-- Node selection persistence (across tabs, clear indicator in main area)
-- Full analysis confirmation (prevents accidental deletion of existing nodes)
+Supports multiple AI providers:
+- Local AI models through Ollama
+- OpenAI-compatible APIs
+- DeepSeek / OpenRouter / MiniMax
+- Whisper speech recognition models
 
-### Graph View (v13)
-- Force-directed graph visualizing node-asset relationships
-- Three view buttons: ☁ Graph / ▦ Grid / ☰ List
-- Aggregation nodes scaled by asset count + color depth gradient
-- Asset count inside node circles
-- Asset nodes colored by type, zoom-adaptive thumbnails
-- Expand/collapse asset nodes, shared edges (width = shared asset count)
-- Unassigned node (blue dashed line)
-- Search highlighting + WebSocket incremental updates
+### 📂 Intelligent Asset Management
 
-### Filtering
-- Type filter (Image/Video/Audio/Document), counts reflect current result set
-- Created/Modified date range pickers
-- File format multi-select dropdown
-- AI status multi-select (Done/Processing/Pending/Failed)
-- Tag multi-select filter (union logic)
-- Batch select + re-analyze
-- Sort (name/size/modified/added/hot/score), unified across all search modes
-- Hot sort: weighted by view_count + open_count×3, most-viewed first
-- Score sort (semantic/combined modes): by vector relevance
+Automatically organize and index your growing media library.
 
-### MCP Tools (v11/v14)
-- FastMCP driven, stdio transport
-- 22 tools: Asset management (6) + Node management (8) + Aggregation + Scan + Tags + Stats + Re-analyze
-- Compatible with Hermes / Claude Desktop / Codex CLI
+Features:
+- Scan folders and automatically index files
+- Detect duplicate files using content hashing
+- Monitor file changes in real time
+- Extract metadata from images, videos, audio, and documents
+- Generate thumbnails asynchronously
+- Manage assets without modifying original files
 
-### Web UI
-- Settings page: watch path configuration, model management, AI prompt templates
-- Document preview (txt/md/docx), asset details (path/size/duration/AI results)
-- High-res detail thumbnails (800px from original file, cached)
-- View/open tracking (hot sort weighted)
-- Batch operations (multi-select + re-analyze)
-- i18n: English / Chinese (auto-detected from browser, adjustable in settings)
+Your original files stay untouched. QuickMedia only builds an intelligent index for them.
+
+### 🔍 Natural Language Search
+
+Find your files based on what they mean, not only their names.
+
+Supports:
+- Semantic search powered by AI embeddings
+- Keyword search
+- Hybrid search combining semantic and traditional search
+- Chinese text understanding
+- Search result highlighting
+- Similar asset discovery
+
+Examples:
+
+"photos of my dog playing outside"
+
+"documents about artificial intelligence"
+
+"videos from my Japan trip"
+
+### 🏷️ Smart Tag System
+
+Organize your assets with flexible tags.
+
+Supports:
+- AI-generated tags
+- System-generated tags
+- User-created tags
+- Tag-based filtering
+- Batch tag management
+
+Tags work together with AI search to improve asset discovery.
+
+### 🧩 AI-Powered Asset Organization
+
+Turn thousands of scattered files into meaningful collections.
+
+QuickMedia can automatically discover relationships between your assets and create intelligent groups.
+
+Features:
+- AI-powered automatic clustering
+- Create custom collections
+- Assets can belong to multiple collections
+- AI-assisted collection expansion
+- Manual organization and editing
+
+Example:
+
+Travel
+├── Chinese Travel
+└── Family Trip
+
+Pets
+├── Dogs
+└── Outdoor Activities
+
+### 🕸️ Media Knowledge Graph
+
+Explore your digital memories through relationships.
+
+QuickMedia visualizes connections between:
+- Images
+- Videos
+- Documents
+- Topics
+- Collections
+
+Features:
+- Interactive force-directed graph
+- Expand and collapse relationships
+- Visual asset grouping
+- Search highlighting
+- Multiple views:
+  - Graph View
+  - Grid View
+  - List View
+
+Your media library becomes a personal knowledge graph.
+
+### 🎯 Advanced Filtering & Management
+
+Quickly find and manage exactly what you need.
+
+Filter by:
+- File type:
+  - Images
+  - Videos
+  - Audio
+  - Documents
+- Date range
+- File format
+- AI analysis status
+- Tags
+- Search relevance
+
+Additional tools:
+- Batch operations
+- Re-analysis
+- Multiple sorting options
+- Most-used asset ranking
+
+### 🤖 AI Agent Integration (MCP)
+
+Control QuickMedia through AI assistants.
+
+Built-in MCP support provides tools for:
+- Asset search
+- Asset management
+- Collection management
+- Folder scanning
+- Tag operations
+- Statistics
+- AI re-analysis
+
+Compatible with:
+- Claude Desktop
+- Codex CLI
+- Hermes
+
+### 🌐 Modern Web Interface
+
+A full-featured local web application.
+
+Includes:
+- Asset dashboard
+- Settings management
+- Asset detail viewer
+- Document preview
+- High-resolution thumbnails
+- Search and filtering interface
+- Batch operations
+- Multi-language support:
+  - English
+  - Chinese
 
 ## Installation
 
@@ -99,7 +199,6 @@ chmod +x scripts/serve.sh && ./scripts/serve.sh
 ```
 
 ### Prerequisites
-
 - Python 3.11+
 - ffmpeg (video metadata, thumbnail extraction)
 
@@ -243,11 +342,9 @@ Configure via Web UI → Settings → Model Management. Different analysis tasks
 | | `MiniMax-M1` | | | | ✓ |
 | **Whisper** (local) | `small` | | | ✓ | |
 
-
 > Embedding models are used for semantic search and aggregation. Vision/video analysis requires multimodal models. Each provider requires a corresponding API key.
 
 ## Data Storage
-
 - Database: `~/.asset-manager/data.db`
 - Config: `~/.asset-manager/config.yaml`
 - Models: `~/.asset-manager/models.yaml`

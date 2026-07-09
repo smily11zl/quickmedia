@@ -249,6 +249,7 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
             cursor: isRunning ? "not-allowed" : "pointer",
             opacity: isRunning ? 0.6 : 1,
           }}
+          title={t("aggregation.full_tip")}
         >
           {t("aggregation.full")}
         </button>
@@ -263,9 +264,10 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                 color: isRunning ? S.ms : S.w,
                 cursor: isRunning ? "not-allowed" : "pointer",
                 opacity: isRunning ? 0.6 : 1,
-              }}
-            >
-              {t("aggregation.full_append")}
+                }}
+                title={t("aggregation.full_append_tip")}
+                >
+                {t("aggregation.full_append")}
             </button>
             <button
               onClick={() => runAggregation("append")}
@@ -276,9 +278,10 @@ function NodePanel({ onSelectNode, selectedNodeId, onRefreshAssets, refreshKey, 
                 color: isRunning ? S.ms : S.w,
                 cursor: isRunning ? "not-allowed" : "pointer",
                 opacity: isRunning ? 0.6 : 1,
-              }}
-            >
-              {t("aggregation.append")}
+                }}
+                title={t("aggregation.append_tip")}
+                >
+                {t("aggregation.append")}
             </button>
           </>
         )}
