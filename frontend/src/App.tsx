@@ -164,13 +164,14 @@ function App() {
 
   return (
     <div className="flex h-screen" style={{backgroundColor:S.c}}>
-      <aside className="w-64 flex flex-col gap-0.5 p-4 border-r overflow-y-auto" style={{borderColor:S.h}}>
+      <aside className="w-64 flex flex-col gap-0.5 p-4 border-r h-full" style={{borderColor:S.h}}>
         <h1 style={{fontFamily:"'Tiempos Headline',Garamond,serif",fontSize:22,fontWeight:400,color:S.i}} className="mb-4">QuickMedia</h1>
         <div className="flex gap-0 mb-3">
           <button onClick={()=>setActiveTab("search")} className="flex-1 text-xs py-1.5 rounded-t-md font-medium" style={{fontFamily:"'Inter',sans-serif",backgroundColor:activeTab==="search"?S.d:"transparent",color:activeTab==="search"?S.i:S.ms,borderBottom:activeTab==="search"?`2px solid ${S.r}`:"2px solid transparent"}}>{t("search.tab_filter")}</button>
           <button onClick={()=>setActiveTab("nodes")} className="flex-1 text-xs py-1.5 rounded-t-md font-medium" style={{fontFamily:"'Inter',sans-serif",backgroundColor:activeTab==="nodes"?S.d:"transparent",color:activeTab==="nodes"?S.i:S.ms,borderBottom:activeTab==="nodes"?`2px solid ${S.r}`:"2px solid transparent"}}>{t("search.tab_nodes")}</button>
         </div>
-        {activeTab==="search" ? (
+        <div className="flex-1 overflow-y-auto flex flex-col gap-0.5">
+{activeTab==="search" ? (
         <>
         <div className="flex flex-col gap-1 mb-3">
           <div className="relative w-full">
@@ -246,6 +247,7 @@ function App() {
         ) : (
           <NodePanel onSelectNode={(nid:number|null,name?:string)=>{setSelectedNodeId(nid);setSelectedNodeName(name||"");if(!nid){sds(false);fa();}}} selectedNodeId={selectedNodeId} onRefreshAssets={(nodeId:number)=>{fetch(`/api/nodes/${nodeId}/assets`).then(r=>r.json()).then(d=>{sa(d.items);if(d.counts)setCounts(d.counts);});}} refreshKey={nodeRefreshKey} onGraphRefresh={(newNodeId?:number)=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);if(newNodeId)setExpandedNodes((prev:Set<number>)=>new Set(prev).add(newNodeId));else setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));});}} onGraphFullReload={()=>{fetch("/api/graph").then(r=>r.json()).then(d=>{setGraphData(d);setExpandedNodes(new Set(d.nodes.map((n:any)=>n.id)));setGraphKey(k=>k+1);});}} onSelectAsset={(aid:number)=>{selA(aid);}}  selectedAssetId={sel?.id} unassigned={graphData.unassigned} />
         )}
+        </div>
         <div className="mt-auto pt-4 flex flex-col gap-1 relative" style={{borderTop:`1px solid ${S.h}`}}>
           <button onClick={()=>sscm(!scm)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>🔍 {t("common.scan")}</button>
           {scm&&<div className="fixed inset-0 z-[5]" onClick={()=>sscm(false)}/>}
