@@ -344,7 +344,7 @@ DEFAULT_PROMPTS_EN = {
             "- Avoid duplicates, near-synonyms, and meaningless expansions.\n"
             "- Do not output complete sentences.\n"
         ),
-        "default": ("Output in English.\n"
+        "default": ("Output descriptions, tags, and search terms in English.\n"
             "Analyze this image.\n"
             "- description: Describe the image content within 50 characters. Scene, subjects, events, etc.\n"
             "- tags: Identify key elements, text in image, etc. Extract the most important tags.\n"
@@ -386,7 +386,7 @@ DEFAULT_PROMPTS_EN = {
             "- Avoid duplicates and near-synonyms.\n"
             "- Do not output complete sentences.\n"
         ),
-        "default": ("Output in English.\n"
+        "default": ("Output summary and keywords in English.\n"
             "Summarize the following document content within 50 characters, and extract the most important topic keywords.\n"
             "Tag requirements:\n"
             "  * 3-8 most important tags\n"
@@ -422,7 +422,7 @@ DEFAULT_PROMPTS_EN = {
             "- Avoid duplicates and near-synonyms.\n"
             "- Do not output complete sentences.\n"
         ),
-        "default": ("Output in English.\n"
+        "default": ("Output summary in English.\n"
             "The following is a speech transcript. Summarize the main content within 50 characters.\n"
             "Tag requirements:\n"
             "  * 3-8 most important tags\n"
@@ -460,7 +460,7 @@ DEFAULT_PROMPTS_EN = {
             "- Avoid duplicates, near-synonyms and meaningless expansions.\n"
             "- Do not output complete sentences.\n"
         ),
-        "default": ("Output in English.\n"
+        "default": ("Output video summary in English.\n"
             "Merge the following two descriptions about the same video into a comprehensive summary within 50 characters.\n"
             "Tag requirements:\n"
             "  * 3-8 most important tags\n"
@@ -493,7 +493,7 @@ DEFAULT_PROMPTS_EN = {
             "- Avoid duplicates and near-synonyms.\n"
             "- Do not output complete sentences.\n"
         ),
-        "default": ("Output in English.\n"
+        "default": ("Output descriptions and tags in English.\n"
             "This is a frame extracted from a video.\n"
             "- description: Describe the video content within 50 characters. Scene, subjects, events, etc.\n"
             "- tags: Identify key elements, text in frame, etc.\n"
@@ -515,7 +515,7 @@ DEFAULT_PROMPTS_EN = {
             "Output strictly in JSON format (only JSON, no other text):\n"
             '{"nodes": [{"name": "Node name", "description": "Brief node description", "asset_ids": [1, 2, 3]}]}\n'
         ),
-        "default": ("Output in English.\n"
+        "default": ("All node names and descriptions must be in English.\n"
             "You are an asset library organization expert.\n"
             "Please generate user-friendly topic nodes based on asset content for users to browse.\n"
             "\n"
@@ -568,7 +568,7 @@ DEFAULT_PROMPTS_EN = {
             "Output strictly in JSON format (only JSON, no other text):\n"
             '{"new_nodes": [{"name": "New node name", "description": "node description", "asset_ids": [1, 2, 3]}], "append_to_existing": {"node_id": [1, 2, 3], "other_node_id": [4, 5]}}\n'
         ),
-        "default": ("Output in English.\n"
+        "default": ("All node names and descriptions must be in English.\n"
             "You are an asset classification expert. The following aggregation nodes already exist. Please analyze all assets and optimize.\n"
             "Existing nodes:\n"
             "{nodes}\n"
@@ -591,7 +591,7 @@ DEFAULT_PROMPTS_EN = {
             "Output strictly in JSON format (only JSON, no other text):\n"
             '{"append_to_existing": {"existing_node_id": [1, 2, 3]}}\n'
         ),
-        "default": ("Output in English.\n"
+        "default": ("All node names and descriptions must be in English.\n"
             "You are an asset classification expert. The following aggregation nodes already exist. Please assign new assets to the appropriate existing nodes.\n"
             "Existing nodes:\n"
             "{nodes}\n"
@@ -605,8 +605,7 @@ DEFAULT_PROMPTS_EN = {
             "Output strictly in JSON format (only JSON, no other text):\n"
             '{"asset_ids": [1, 2, 3]}\n'
         ),
-        "default": ("Output in English.\n"
-            "Node name: {node_name}\n"
+        "default": ("Node name: {node_name}\n"
             "Node description: {node_description}\n"
             "The node currently contains {existing_count} assets with the following characteristics:\n"
             "{existing_assets}\n"
@@ -620,8 +619,7 @@ DEFAULT_PROMPTS_EN = {
             '{"asset_ids": [1, 2, 3]}\n'
             'If no matching assets, output: {"asset_ids": []}\n'
         ),
-        "default": ("Output in English.\n"
-            "You are an asset search assistant. Below is a list of assets:\n"
+        "default": ("You are an asset search assistant. Below is a list of assets:\n"
             "Format per line: [id] filename - analysis description\n"
             "{assets}\n"
             "User's search intent is: {query}\n"
@@ -687,8 +685,13 @@ class PromptConfig:
             language = self.language
         section = self._data.get(task_type, {})
         custom = section.get("custom", "")
+        fmt = ""
         if custom:
             base = custom
+            # Still append system format from defaults for valid JSON output
+            if language:
+                defaults = get_default_prompts(language)
+                fmt = defaults.get(task_type, {}).get("system_format", "")
         else:
             # Use language-specific default if provided, else from loaded data
             if language:

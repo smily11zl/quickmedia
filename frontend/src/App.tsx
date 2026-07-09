@@ -82,6 +82,7 @@ function App() {
   const [graphKey, setGraphKey] = useState(0);
   const [nodeRefreshKey, setNodeRefreshKey] = useState(0);
   const graphInitRef = useRef(false);
+  const scanningRef = useRef(false);
   const dr=useRef<HTMLTextAreaElement>(null);
   const [counts, setCounts] = useState({image: 0, video: 0, audio: 0, document: 0});
   const [toast, setToast] = useState<{ message: string; type?: "info" | "error" } | null>(null);
@@ -109,7 +110,7 @@ function App() {
   // Poll selected asset if it's being processed
   useEffect(()=>{
     if(!sel) return;
-    const i=setInterval(()=>{fetch(`/api/assets/${sel.id}`).then(r=>r.json()).then(a=>{sl(a);sd(a.description||"");se(false);});},5000);
+    const i=setInterval(()=>{if(scanningRef.current)return;fetch(`/api/assets/${sel.id}`).then(r=>r.json()).then(a=>{sl(a);sd(a.description||"");se(false);});},5000);
     return ()=>clearInterval(i);
   },[sel?.id,sel?.ai_status]);
 
@@ -250,8 +251,8 @@ function App() {
           {scm&&<div className="fixed inset-0 z-[5]" onClick={()=>sscm(false)}/>}
           {scm&&<div className="absolute bottom-full left-0 right-0 mb-1 p-2 rounded border shadow-sm z-10 flex flex-col gap-0.5" style={{borderColor:S.h,backgroundColor:S.c}}>
             <button onClick={()=>{sscm(false);fetch("/api/config/watch-paths").then(r=>r.json()).then(d=>{if(!d.paths||d.paths.length===0){setToast({message:t("scan.no_folders"),type:"error"});sso(true);}else{fetch("/api/scan",{method:"POST"}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();})}})}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📂 {t("scan.scan_folder")}</button>
-            <button onClick={()=>{sscm(false);fetch("/api/file-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-file",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📄 {t("scan.select_file")}</button>
-            <button onClick={()=>{sscm(false);fetch("/api/folder-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();});});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📁 {t("scan.select_folder")}</button>
+            <button onClick={()=>{sscm(false);scanningRef.current=true;fetch("/api/file-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-file",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();});}).finally(()=>{scanningRef.current=false;});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📄 {t("scan.select_file")}</button>
+            <button onClick={()=>{sscm(false);scanningRef.current=true;fetch("/api/folder-picker",{method:"POST"}).then(r=>r.json()).then(d=>{if(d.path)fetch("/api/scan-folder",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:d.path})}).then(r=>r.json()).then(d=>{setToast({message:d.message,type:"info"});fa();});}).finally(()=>{scanningRef.current=false;});}} className="text-left px-2 py-1 rounded text-xs" style={{color:S.i}} onMouseEnter={e=>{(e.target as HTMLElement).style.backgroundColor=S.s}} onMouseLeave={e=>{(e.target as HTMLElement).style.backgroundColor="transparent"}}>📁 {t("scan.select_folder")}</button>
           </div>}
           <button onClick={()=>sso(true)} className="w-full text-left px-3 py-1.5 rounded-md text-sm" style={{fontFamily:"'Inter',sans-serif",color:S.m}}>⚙ {t("common.settings")}{missingConfig?<span className="w-2 h-2 rounded-full inline-block ml-1" style={{backgroundColor:"#c64545"}}></span>:null}</button>
         </div>
