@@ -6,11 +6,20 @@ like Qwen 3.5.
 
 import json
 import os
+import re
+import sys
+
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError as e:
+    pass
+
+from PIL import Image
 import base64
 import io
 import re
 import urllib.request
-from PIL import Image
 
 
 class OllamaAdapter:

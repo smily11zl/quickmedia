@@ -2,6 +2,12 @@
 
 import os
 
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
+
 _whisper_model_cache = None
 from fastapi import FastAPI, Request, Query, HTTPException, Body, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware

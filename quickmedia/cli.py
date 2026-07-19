@@ -2,6 +2,13 @@
 
 import sys
 import os
+
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
+
 from quickmedia.config import Config
 from quickmedia.database import Database
 from quickmedia.scanner import Scanner

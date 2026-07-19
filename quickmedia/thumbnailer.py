@@ -5,6 +5,13 @@ Uses a SQLite-backed queue for async processing.
 """
 
 import os
+
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
+
 from PIL import Image, UnidentifiedImageError
 from quickmedia.database import Database
 
