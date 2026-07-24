@@ -8,6 +8,7 @@ try:
 except ImportError:
     pass
 
+from quickmedia.i18n import server_msg as _sm
 _whisper_model_cache = None
 from fastapi import FastAPI, Request, Query, HTTPException, Body, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -291,7 +292,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
     @app.get("/api/thumbnails/{asset_id}")
     def get_thumbnail(asset_id: int, quality: str = Query("")):
         if quality == "full":
-            thumb_path = os.path.join(thumb_dir, f"{asset_id}_full.jpg")
+            thumb_path = os.path.join(thumb_dir, f"{asset_id}_full.png")
             if not os.path.isfile(thumb_path):
                 # Generate from original file
                 _db = _get_db(app)
@@ -306,9 +307,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                     import PIL.Image
                     img = PIL.Image.open(file_path)
                     img.thumbnail((800, 800), PIL.Image.LANCZOS)
-                    if img.mode not in ("RGB", "L"):
-                        img = img.convert("RGB")
-                    img.save(thumb_path, "JPEG", quality=85)
+                    img.save(thumb_path, "PNG")
                 elif asset_type == "video":
                     import subprocess, tempfile
                     tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
@@ -321,12 +320,12 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                         os.rename(tmp.name, thumb_path)
                 else:
                     # For other types, fall back to regular thumbnail
-                    thumb_path = os.path.join(thumb_dir, f"{asset_id}.jpg")
-            return FileResponse(thumb_path, media_type="image/jpeg")
-        thumb_path = os.path.join(thumb_dir, f"{asset_id}.jpg")
+                    thumb_path = os.path.join(thumb_dir, f"{asset_id}.png")
+            return FileResponse(thumb_path, media_type="image/png")
+        thumb_path = os.path.join(thumb_dir, f"{asset_id}.png")
         if not os.path.isfile(thumb_path):
             raise HTTPException(status_code=404, detail="No thumbnail")
-        return FileResponse(thumb_path, media_type="image/jpeg")
+        return FileResponse(thumb_path, media_type="image/png")
 
 
     @app.get("/api/search")
@@ -499,7 +498,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 # Semantic search failure should not break the request
                 print(f"Semantic search error: {e}", flush=True)
                 provider = binding.get("provider", "ollama") if binding else "ollama"
-                warning = f"语义搜索失败（{provider}: {e}）"
+                warning = _sm("semantic_failed", provider, str(e))
 
         return {"items": items, "counts": _count_by_type(items), "warning": warning if warning else None}
 
@@ -601,7 +600,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 return {"path": path}
             return {"error": "no_folder_selected", "path": None}
         except FileNotFoundError:
-            return {"error": "仅支持 macOS", "path": None}
+            return {"error": _sm("macos_only"), "path": None}
         except Exception as e:
             return {"error": str(e), "path": None}
 
@@ -619,7 +618,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 return {"path": path}
             return {"error": "no_file_selected", "path": None}
         except FileNotFoundError:
-            return {"error": "仅支持 macOS", "path": None}
+            return {"error": _sm("macos_only"), "path": None}
         except Exception as e:
             return {"error": str(e), "path": None}
 
@@ -629,13 +628,13 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         from quickmedia.scanner import Scanner
         path = body.get("path", "")
         if not path or not os.path.isfile(path):
-            raise HTTPException(status_code=400, detail=f"文件不存在: {path}")
+            raise HTTPException(status_code=400, detail=_sm("file_not_found", path))
         db = _get_db(app)
         cfg = Config(config_dir=app.extra["config_dir"])
         scanner = Scanner(db=db, config=cfg)
         aid = scanner.scan_file(path)
         if aid:
-            return {"ok": True, "asset_id": aid, "message": f"已添加 {os.path.basename(path)}"}
+            return {"ok": True, "asset_id": aid, "message": _sm("add_asset", os.path.basename(path))}
         return {"ok": False, "error": "add_failed"}
 
     @app.post("/api/scan-folder")
@@ -644,12 +643,12 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         from quickmedia.scanner import Scanner
         path = body.get("path", "")
         if not path or not os.path.isdir(path):
-            raise HTTPException(status_code=400, detail=f"文件夹不存在: {path}")
+            raise HTTPException(status_code=400, detail=_sm("dir_not_found", path))
         db = _get_db(app)
         cfg = Config(config_dir=app.extra["config_dir"])
         scanner = Scanner(db=db, config=cfg)
         result = scanner.scan_directory(path, recursive=True, max_depth=3)
-        return {"ok": True, "message": f"已扫描 {path}", "result": result}
+        return {"ok": True, "message": _sm("scan_dir", path, result.get("new", 0)), "result": result}
 
     @app.get("/api/task-models")
     def get_task_models():
@@ -677,7 +676,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 scanner.reload_watch_paths()
         except Exception:
             pass
-        return {"ok": True, "message": f"已保存 {len(paths)} 条路径"}
+        return {"ok": True, "message": _sm("save_paths", len(paths))}
 
     @app.get("/api/formats")
     def get_formats():
@@ -713,7 +712,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
         _db.conn.commit()
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="No failed AI tasks found")
-        return {"ok": True, "message": "已重置待重试"}
+        return {"ok": True, "message": _sm("reset_retry")}
 
     @app.post("/api/assets/{asset_id}/reanalyze")
     def reanalyze_asset(asset_id: int):
@@ -758,7 +757,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
             _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'transcribe')", (asset_id,))
         elif asset_type == "document":
             _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'text')", (asset_id,))
-        return {"ok": True, "message": "已重新入队分析任务"}
+        return {"ok": True, "message": _sm("reenqueue")}
 
     @app.post("/api/assets/batch-reanalyze")
     def batch_reanalyze(body: dict):
@@ -797,7 +796,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'transcribe')", (aid,))
             elif asset_type == "document":
                 _db.execute("INSERT INTO ai_queue (asset_id, task_type) VALUES (?, 'text')", (aid,))
-        return {"ok": True, "message": f"已重新入队 {len(asset_ids)} 个素材"}
+        return {"ok": True, "message": _sm("reenqueue_batch", len(asset_ids))}
 
     @app.post("/api/assets/batch-delete")
     def batch_delete(body: dict):
@@ -1175,7 +1174,7 @@ def create_app(db: Database, cfg: Config, thumb_dir: str) -> FastAPI:
                 )
                 total_new += result["new"]
         _db.close()
-        return {"ok": True, "new": total_new, "message": f"新增 {total_new} 个素材"}
+        return {"ok": True, "new": total_new, "message": _sm("scan_new", total_new)}
 
     # ── Frontend SPA ─────────────────────────────────────────────
 

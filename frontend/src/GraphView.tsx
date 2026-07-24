@@ -101,6 +101,7 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
   // Preload thumbnails — canvas refresh only, no React render
   useEffect(() => {
     const tc = thumbCache.current;
+    console.log("[GraphView:thumbnails] unassigned:", graphData.unassigned?.length, "edges:", graphData.edges?.length);
     const allAssets = [
       ...graphData.unassigned,
       ...graphData.edges.map((e) => ({id: e.asset_id, asset_type: e.asset_type, thumbnail_status: e.thumbnail_status})),
@@ -118,6 +119,7 @@ function GraphView({ graphData, onSelectNode, onSelectAsset, searchResults: _sr,
 
   // Sync graph incrementally
   useEffect(() => {
+    console.log("[GraphView:sync] nodes:", graphData.nodes?.length, "unassigned:", graphData.unassigned?.length);
     const nm = nodeMap.current;
     const lm = linkMap.current;
     const nlm = nodeLinkMap.current;

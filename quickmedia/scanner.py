@@ -105,13 +105,15 @@ class Scanner:
         tags = []
 
         # Video length bucket
-        if asset_type == "video" and duration > 0:
-            if duration < 300:
-                tags.append("短片(<5min)")
-            elif duration < 1800:
-                tags.append("中片(5-30min)")
-            else:
-                tags.append("长片(>30min)")
+        # Duration-based tags removed — too granular and not i18n-friendly
+        # if asset_type == "video" and duration > 0:
+        #     if duration < 300:
+        #         tags.append("短片(<5min)")
+        #     elif duration < 1800:
+        #         tags.append("中片(5-30min)")
+        #     else:
+        #         tags.append("长片(>30min)")
+        #
 
         return tags
 

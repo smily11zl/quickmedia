@@ -34,7 +34,7 @@ DEFAULT_CONFIG = {
     },
     "watch_paths": [],
     "formats": {
-        "image": ["jpg", "jpeg", "png", "gif", "webp", "heic", "svg"],
+        "image": ["jpg", "jpeg", "png", "gif", "webp", "heic", "svg", "avif", "bmp", "tiff", "tif", "ico"],
         "video": ["mp4", "mov", "avi"],
         "audio": ["mp3", "wav", "m4a"],
         "document": ["pdf", "txt", "md", "csv", "json", "xlsx", "docx"],

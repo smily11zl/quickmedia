@@ -81,14 +81,13 @@ class Thumbnailer:
         return count
 
     def _thumb_path(self, asset_id: int) -> str:
-        return os.path.join(self.thumb_dir, f"{asset_id}.jpg")
+        return os.path.join(self.thumb_dir, f"{asset_id}.png")
 
     # ── internals ─────────────────────────────────────────────────
 
     def _make_thumbnail(self, asset_id: int, filepath: str) -> None:
         """Create a thumbnail file from an image."""
         with Image.open(filepath) as img:
-            img = img.convert("RGB")
             w, h = img.size
             scale = self.max_size / max(w, h)
             if scale < 1.0:
@@ -96,7 +95,7 @@ class Thumbnailer:
                 new_h = int(h * scale)
                 img = img.resize((new_w, new_h), Image.LANCZOS)
             out_path = self._thumb_path(asset_id)
-            img.save(out_path, "JPEG", quality=85)
+            img.save(out_path, "PNG")
 
     def _make_video_thumbnail(self, asset_id: int, filepath: str) -> None:
         """Create a thumbnail from a video's first frame."""
@@ -109,7 +108,6 @@ class Thumbnailer:
         )
         if os.path.isfile(frame_path):
             with Image.open(frame_path) as img:
-                img = img.convert("RGB")
                 w, h = img.size
                 scale = self.max_size / max(w, h)
                 if scale < 1.0:
@@ -117,4 +115,4 @@ class Thumbnailer:
                         (int(w * scale), int(h * scale)), Image.LANCZOS
                     )
                 out_path = self._thumb_path(asset_id)
-                img.save(out_path, "JPEG", quality=85)
+                img.save(out_path, "PNG")
