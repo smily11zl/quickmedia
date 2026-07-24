@@ -4,6 +4,10 @@
 
 把杂乱的媒体文件夹变成智能知识库。用本地 AI 搜索、整理和理解你的文件。
 
+<p align="center">
+  <img src="docs/assets/screenshot.png" alt="QuickMedia 截图" width="800"/>
+</p>
+
 [English](README.md) | 中文
 
 本地素材管理工具 — 扫描、标签、AI 分析、语义搜索、素材群组。

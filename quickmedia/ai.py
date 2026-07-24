@@ -86,7 +86,7 @@ class VisionAnalyzer:
 
     def _prepare_image(self, image_path: str) -> Image.Image:
         """Load and optionally resize an image for the model."""
-        img = Image.open(image_path).convert("RGB")
+        img = Image.open(image_path)
         w, h = img.size
         if max(w, h) > self.max_dimension:
             scale = self.max_dimension / max(w, h)
@@ -97,8 +97,8 @@ class VisionAnalyzer:
     def _encode_image(self, img: Image.Image) -> str:
         """Encode PIL Image to base64 string."""
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=85)
-        return base64.b64encode(buf.getvalue()).decode("utf-8")
+        img.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode("ascii")
 
     def _build_prompt(self) -> str:
         if self._prompt_config:

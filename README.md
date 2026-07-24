@@ -17,6 +17,10 @@ Transform your messy media folders into an intelligent knowledge base. Search, o
 
 Scan, tag, AI-analyze, semantically search, and aggregate your local assets.
 
+<p align="center">
+  <img src="docs/assets/screenshot.png" alt="QuickMedia Screenshot" width="800"/>
+</p>
+
 ## ✨ Core Features
 
 ### 🧠 AI-Powered Media Understanding
